@@ -29,11 +29,32 @@ npm run dev
 
 ## Deploy on Vercel
 
+1. Import the GitHub repo in [Vercel](https://vercel.com/new)
+2. **Production branch:** `main`
+3. **Root directory:** leave empty (repo root)
+4. **Framework preset:** Next.js (auto-detected)
+5. **Output directory:** leave empty — do **not** set `out` or `dist`
+6. **Build command:** `npm run build` (default)
+7. After deploy, open the **Production** URL (e.g. `your-project.vercel.app`)
+
+No database env vars are required.
+
+### If you see `404: NOT_FOUND`
+
+This usually means Vercel has no successful production deployment on that URL yet:
+
+1. In Vercel → **Deployments**, confirm the latest `main` build is **Ready** (green)
+2. Click **Redeploy** on the latest successful deployment
+3. Under **Settings → General**, verify **Root Directory** is blank
+4. Under **Settings → General**, verify **Output Directory** is blank (Next.js default)
+5. Visit `/api/health` — you should see `{"ok":true,...}` when the app is live
+6. If **Deployment Protection** is on, disable it under **Settings → Deployment Protection** for a public personal app
+
+### Verify locally
+
 ```bash
 npm run build
 ```
-
-Push to GitHub and import the repo in Vercel. No database env vars required — only optional API usage for the Yahoo Finance proxy route.
 
 ## Architecture
 
