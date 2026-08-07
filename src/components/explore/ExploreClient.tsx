@@ -8,7 +8,10 @@ import { PriceChart } from "@/components/chart/PriceChart";
 import { runBacktest } from "@/lib/engine/backtest";
 import { computeIndicators } from "@/lib/engine/indicators";
 import { runUniverseScanInWorker } from "@/lib/engine/scan-worker-client";
-import { DEFAULT_PATTERNS, EMA_CROSS_PATTERN } from "@/lib/patterns/defaults";
+import { EMA_CROSS_PATTERN } from "@/lib/patterns/defaults";
+import type { StrategyPreset } from "@/lib/patterns/strategies";
+import { STRATEGY_PRESETS } from "@/lib/patterns/strategies";
+import { StrategyPicker } from "@/components/explore/StrategyPicker";
 import { savePattern, saveScanRun } from "@/lib/storage/patterns";
 import { getPriceBars, listSymbols } from "@/lib/storage/prices";
 import type { BacktestResult, PatternDefinition, ScanRun } from "@/lib/types";
@@ -16,6 +19,7 @@ import { DEFAULT_WATCHLIST } from "@/lib/data/default-universe";
 
 export function ExploreClient() {
   const router = useRouter();
+  const [selectedId, setSelectedId] = useState("ema-cross");
   const [pattern, setPattern] = useState<PatternDefinition>(EMA_CROSS_PATTERN);
   const [minWinRate, setMinWinRate] = useState(70);
   const [minTrades, setMinTrades] = useState(5);
@@ -26,8 +30,13 @@ export function ExploreClient() {
   const [previewSymbol, setPreviewSymbol] = useState("AAPL");
   const [preview, setPreview] = useState<BacktestResult | null>(null);
   const [storedSymbols, setStoredSymbols] = useState<string[]>([]);
-  const [fastPeriod, setFastPeriod] = useState(3);
-  const [slowPeriod, setSlowPeriod] = useState(50);
+
+  const selectStrategy = useCallback((preset: StrategyPreset) => {
+    setSelectedId(preset.id);
+    setPattern(preset.pattern);
+  }, []);
+
+  const buildPattern = useCallback((): PatternDefinition => pattern, [pattern]);
 
   useEffect(() => {
     let cancelled = false;
@@ -39,50 +48,12 @@ export function ExploreClient() {
     };
   }, []);
 
-  const buildPattern = useCallback((): PatternDefinition => {
-    if (pattern.name.includes("RSI")) {
-      return { ...pattern };
-    }
-    return {
-      ...pattern,
-      name: `EMA ${fastPeriod} / ${slowPeriod} Cross`,
-      indicators: [
-        {
-          alias: "ema_fast",
-          type: "ema",
-          params: { length: fastPeriod, source: "close" },
-          timeframe: "1D",
-        },
-        {
-          alias: "ema_slow",
-          type: "ema",
-          params: { length: slowPeriod, source: "close" },
-          timeframe: "1D",
-        },
-      ],
-      entry: {
-        op: "crosses_above",
-        left: { ref: "ema_fast" },
-        right: { ref: "ema_slow" },
-      },
-      exit: {
-        op: "crosses_below",
-        left: { ref: "ema_fast" },
-        right: { ref: "ema_slow" },
-      },
-      backtest: {
-        entryOn: "close",
-        exitOn: "opposite_signal",
-        minTrades,
-      },
-    };
-  }, [pattern, fastPeriod, slowPeriod, minTrades]);
+  const selectedPreset = STRATEGY_PRESETS.find((s) => s.id === selectedId);
 
   const runPreview = useCallback(async () => {
     const bars = await getPriceBars(previewSymbol);
     if (bars.length === 0) return;
-    const p = buildPattern();
-    setPreview(runBacktest(previewSymbol, bars, p));
+    setPreview(runBacktest(previewSymbol, bars, buildPattern()));
   }, [previewSymbol, buildPattern]);
 
   const runScan = useCallback(async () => {
@@ -156,39 +127,13 @@ export function ExploreClient() {
             {activePattern.name}
           </h2>
           <p className="mt-2 text-sm text-muted">
-            Adjust parameters, backtest on one symbol, then scan your stored
-            universe in a background worker so the tab stays responsive.
+            {selectedPreset?.entryLogic ?? activePattern.description}
           </p>
-
-          {!pattern.name.includes("RSI") && (
-            <div className="mt-6 grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-xs uppercase tracking-[0.2em] text-muted">
-                  Fast EMA
-                </label>
-                <input
-                  type="number"
-                  min={1}
-                  max={100}
-                  value={fastPeriod}
-                  onChange={(e) => setFastPeriod(Number(e.target.value))}
-                  className="mt-2 w-full rounded-2xl border border-border bg-bg px-4 py-3 text-sm font-semibold"
-                />
-              </div>
-              <div>
-                <label className="text-xs uppercase tracking-[0.2em] text-muted">
-                  Slow EMA
-                </label>
-                <input
-                  type="number"
-                  min={2}
-                  max={500}
-                  value={slowPeriod}
-                  onChange={(e) => setSlowPeriod(Number(e.target.value))}
-                  className="mt-2 w-full rounded-2xl border border-border bg-bg px-4 py-3 text-sm font-semibold"
-                />
-              </div>
-            </div>
+          {selectedPreset && (
+            <p className="mt-1 text-xs text-muted">
+              Params: {selectedPreset.defaultParams} · Exit:{" "}
+              {selectedPreset.exitLogic}
+            </p>
           )}
 
           <div className="mt-6 grid grid-cols-2 gap-4">
@@ -264,23 +209,7 @@ export function ExploreClient() {
             )}
           </p>
 
-          <div className="mt-6">
-            <label className="text-xs uppercase tracking-[0.2em] text-muted">
-              Preset patterns
-            </label>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {DEFAULT_PATTERNS.map((p) => (
-                <button
-                  key={p.name}
-                  type="button"
-                  onClick={() => setPattern(p)}
-                  className="rounded-full border border-border px-3 py-1 text-xs text-muted hover:text-ink"
-                >
-                  {p.name}
-                </button>
-              ))}
-            </div>
-          </div>
+          <StrategyPicker selectedId={selectedId} onSelect={selectStrategy} />
         </div>
 
         <div className="rounded-3xl border border-border bg-surface p-8">
