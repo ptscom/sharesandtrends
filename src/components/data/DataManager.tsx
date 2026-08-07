@@ -1,0 +1,163 @@
+"use client";
+
+import { useCallback, useState } from "react";
+import { DEFAULT_WATCHLIST } from "@/lib/data/default-universe";
+import { mergePriceBars } from "@/lib/storage/prices";
+import type { OhlcvBar } from "@/lib/types";
+
+interface FetchResult {
+  symbol: string;
+  count: number;
+  error?: string;
+}
+
+export function DataManager() {
+  const [symbols, setSymbols] = useState(DEFAULT_WATCHLIST.join(", "));
+  const [loading, setLoading] = useState(false);
+  const [progress, setProgress] = useState({ done: 0, total: 0 });
+  const [results, setResults] = useState<FetchResult[]>([]);
+  const [customSymbol, setCustomSymbol] = useState("");
+
+  const fetchSymbol = useCallback(async (symbol: string): Promise<FetchResult> => {
+    try {
+      const res = await fetch(`/api/prices/${symbol}?range=10y`);
+      const data = await res.json();
+      if (!res.ok) {
+        return { symbol, count: 0, error: data.error ?? "Failed" };
+      }
+      await mergePriceBars(symbol, data.bars as OhlcvBar[]);
+      return { symbol, count: data.count as number };
+    } catch (e) {
+      return {
+        symbol,
+        count: 0,
+        error: e instanceof Error ? e.message : "Failed",
+      };
+    }
+  }, []);
+
+  const runFetch = useCallback(
+    async (list: string[]) => {
+      setLoading(true);
+      setResults([]);
+      setProgress({ done: 0, total: list.length });
+      const out: FetchResult[] = [];
+
+      for (let i = 0; i < list.length; i++) {
+        const symbol = list[i]!.trim().toUpperCase();
+        if (!symbol) continue;
+        const result = await fetchSymbol(symbol);
+        out.push(result);
+        setResults([...out]);
+        setProgress({ done: i + 1, total: list.length });
+        await new Promise((r) => setTimeout(r, 300));
+      }
+
+      setLoading(false);
+    },
+    [fetchSymbol],
+  );
+
+  return (
+    <div className="space-y-8">
+      <section className="rounded-3xl border border-border bg-surface p-8">
+        <h2 className="text-2xl font-semibold text-ink">Download price data</h2>
+        <p className="mt-2 text-sm text-muted">
+          Data is fetched via Yahoo Finance and stored in your browser
+          (IndexedDB). No server database.
+        </p>
+
+        <div className="mt-6">
+          <label className="text-xs uppercase tracking-[0.2em] text-muted">
+            Symbols (comma-separated)
+          </label>
+          <textarea
+            value={symbols}
+            onChange={(e) => setSymbols(e.target.value)}
+            rows={4}
+            className="mt-2 w-full rounded-2xl border border-border bg-bg px-4 py-3 font-mono text-sm text-ink"
+          />
+        </div>
+
+        <div className="mt-4 flex flex-wrap gap-3">
+          <button
+            type="button"
+            disabled={loading}
+            onClick={() =>
+              runFetch(symbols.split(",").map((s) => s.trim()).filter(Boolean))
+            }
+            className="rounded-full bg-brand px-6 py-3 text-sm font-semibold text-bg disabled:opacity-50"
+          >
+            {loading ? "Downloading…" : "Download to browser"}
+          </button>
+          <button
+            type="button"
+            disabled={loading}
+            onClick={() => runFetch(DEFAULT_WATCHLIST)}
+            className="rounded-full border border-border px-6 py-3 text-sm text-muted hover:text-ink disabled:opacity-50"
+          >
+            Quick: default watchlist ({DEFAULT_WATCHLIST.length})
+          </button>
+        </div>
+
+        {loading && (
+          <p className="mt-4 text-sm text-muted">
+            Progress: {progress.done} / {progress.total}
+          </p>
+        )}
+      </section>
+
+      <section className="rounded-3xl border border-border bg-surface p-8">
+        <h2 className="text-xl font-semibold text-ink">Add single symbol</h2>
+        <div className="mt-4 flex gap-3">
+          <input
+            value={customSymbol}
+            onChange={(e) => setCustomSymbol(e.target.value.toUpperCase())}
+            placeholder="AAPL"
+            className="rounded-2xl border border-border bg-bg px-4 py-3 text-sm font-semibold text-ink"
+          />
+          <button
+            type="button"
+            disabled={loading || !customSymbol}
+            onClick={() => runFetch([customSymbol])}
+            className="rounded-full bg-ink px-5 py-3 text-xs font-semibold uppercase tracking-[0.15em] text-bg disabled:opacity-50"
+          >
+            Fetch
+          </button>
+        </div>
+      </section>
+
+      {results.length > 0 && (
+        <section className="rounded-3xl border border-border bg-surface p-8">
+          <h2 className="text-xl font-semibold text-ink">Results</h2>
+          <div className="mt-4 max-h-80 overflow-auto">
+            <table className="w-full text-left text-sm">
+              <thead>
+                <tr className="border-b border-border text-muted">
+                  <th className="py-2 pr-4">Symbol</th>
+                  <th className="py-2 pr-4">Bars</th>
+                  <th className="py-2">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {results.map((r) => (
+                  <tr key={r.symbol} className="border-b border-border/50">
+                    <td className="py-2 pr-4 font-mono font-semibold">{r.symbol}</td>
+                    <td className="py-2 pr-4">{r.count || "—"}</td>
+                    <td className="py-2 text-muted">
+                      {r.error ? (
+                        <span className="text-danger">{r.error}</span>
+                      ) : (
+                        <span className="text-brand">Stored in browser</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      )}
+    </div>
+  );
+}
