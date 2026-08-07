@@ -1,11 +1,13 @@
 "use client";
 
+import { formatShareCaption, ShareCaption } from "@/components/share/ShareCaption";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { PriceChart } from "@/components/chart/PriceChart";
 import { runBacktest } from "@/lib/engine/backtest";
 import { computeIndicators } from "@/lib/engine/indicators";
-import { runUniverseScan } from "@/lib/engine/scanner";
+import { runUniverseScanInWorker } from "@/lib/engine/scan-worker-client";
 import { DEFAULT_PATTERNS, EMA_CROSS_PATTERN } from "@/lib/patterns/defaults";
 import { savePattern, saveScanRun } from "@/lib/storage/patterns";
 import { getPriceBars, listSymbols } from "@/lib/storage/prices";
@@ -13,9 +15,11 @@ import type { BacktestResult, PatternDefinition, ScanRun } from "@/lib/types";
 import { DEFAULT_WATCHLIST } from "@/lib/data/default-universe";
 
 export function ExploreClient() {
+  const router = useRouter();
   const [pattern, setPattern] = useState<PatternDefinition>(EMA_CROSS_PATTERN);
-  const [minWinRate, setMinWinRate] = useState(50);
+  const [minWinRate, setMinWinRate] = useState(70);
   const [minTrades, setMinTrades] = useState(5);
+  const [signalTodayOnly, setSignalTodayOnly] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [scanProgress, setScanProgress] = useState({ done: 0, total: 0 });
   const [scan, setScan] = useState<ScanRun | null>(null);
@@ -36,6 +40,9 @@ export function ExploreClient() {
   }, []);
 
   const buildPattern = useCallback((): PatternDefinition => {
+    if (pattern.name.includes("RSI")) {
+      return { ...pattern };
+    }
     return {
       ...pattern,
       name: `EMA ${fastPeriod} / ${slowPeriod} Cross`,
@@ -87,21 +94,35 @@ export function ExploreClient() {
     }
 
     setScanning(true);
-    const p = buildPattern();
-    const saved = await savePattern(p);
-    const result = await runUniverseScan({
-      universe,
-      pattern: saved,
-      minWinRate,
-      minTrades,
-      onProgress: (done, total) => setScanProgress({ done, total }),
-    });
-    await saveScanRun(result);
-    setScan(result);
-    const list = await listSymbols();
-    setStoredSymbols(list.map((s) => s.symbol));
-    setScanning(false);
-  }, [storedSymbols, buildPattern, minWinRate, minTrades]);
+    setScanProgress({ done: 0, total: universe.length });
+
+    try {
+      const p = buildPattern();
+      const saved = await savePattern(p);
+      const result = await runUniverseScanInWorker({
+        universe,
+        pattern: saved,
+        minWinRate,
+        minTrades,
+        signalTodayOnly,
+        onProgress: (done, total) => setScanProgress({ done, total }),
+      });
+      await saveScanRun(result);
+      setScan(result);
+      router.push(`/scans/${result.id}`);
+    } catch (error) {
+      alert(error instanceof Error ? error.message : "Scan failed");
+    } finally {
+      setScanning(false);
+    }
+  }, [
+    storedSymbols,
+    buildPattern,
+    minWinRate,
+    minTrades,
+    signalTodayOnly,
+    router,
+  ]);
 
   const [chartBars, setChartBars] = useState<
     import("@/lib/types").OhlcvBar[]
@@ -120,7 +141,9 @@ export function ExploreClient() {
         setEmaSlow(ctx.series.ema_slow ?? []);
       }
     })();
-  }, [previewSymbol, buildPattern, preview]);
+  }, [previewSymbol, buildPattern]);
+
+  const activePattern = buildPattern();
 
   return (
     <div className="space-y-8">
@@ -130,40 +153,45 @@ export function ExploreClient() {
             Pattern builder
           </p>
           <h2 className="mt-2 text-2xl font-semibold text-ink">
-            EMA crossover
+            {activePattern.name}
           </h2>
           <p className="mt-2 text-sm text-muted">
-            Adjust periods, backtest on one symbol, then scan your stored
-            universe. All computation runs in the browser.
+            Adjust parameters, backtest on one symbol, then scan your stored
+            universe in a background worker so the tab stays responsive.
           </p>
 
+          {!pattern.name.includes("RSI") && (
+            <div className="mt-6 grid grid-cols-2 gap-4">
+              <div>
+                <label className="text-xs uppercase tracking-[0.2em] text-muted">
+                  Fast EMA
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={100}
+                  value={fastPeriod}
+                  onChange={(e) => setFastPeriod(Number(e.target.value))}
+                  className="mt-2 w-full rounded-2xl border border-border bg-bg px-4 py-3 text-sm font-semibold"
+                />
+              </div>
+              <div>
+                <label className="text-xs uppercase tracking-[0.2em] text-muted">
+                  Slow EMA
+                </label>
+                <input
+                  type="number"
+                  min={2}
+                  max={500}
+                  value={slowPeriod}
+                  onChange={(e) => setSlowPeriod(Number(e.target.value))}
+                  className="mt-2 w-full rounded-2xl border border-border bg-bg px-4 py-3 text-sm font-semibold"
+                />
+              </div>
+            </div>
+          )}
+
           <div className="mt-6 grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-xs uppercase tracking-[0.2em] text-muted">
-                Fast EMA
-              </label>
-              <input
-                type="number"
-                min={1}
-                max={100}
-                value={fastPeriod}
-                onChange={(e) => setFastPeriod(Number(e.target.value))}
-                className="mt-2 w-full rounded-2xl border border-border bg-bg px-4 py-3 text-sm font-semibold"
-              />
-            </div>
-            <div>
-              <label className="text-xs uppercase tracking-[0.2em] text-muted">
-                Slow EMA
-              </label>
-              <input
-                type="number"
-                min={2}
-                max={500}
-                value={slowPeriod}
-                onChange={(e) => setSlowPeriod(Number(e.target.value))}
-                className="mt-2 w-full rounded-2xl border border-border bg-bg px-4 py-3 text-sm font-semibold"
-              />
-            </div>
             <div>
               <label className="text-xs uppercase tracking-[0.2em] text-muted">
                 Min win rate %
@@ -192,6 +220,16 @@ export function ExploreClient() {
             </div>
           </div>
 
+          <label className="mt-4 flex items-center gap-3 text-sm text-muted">
+            <input
+              type="checkbox"
+              checked={signalTodayOnly}
+              onChange={(e) => setSignalTodayOnly(e.target.checked)}
+              className="h-4 w-4 rounded border-border"
+            />
+            Only show symbols with a signal today
+          </label>
+
           <div className="mt-6 flex flex-wrap gap-3">
             <button
               type="button"
@@ -200,7 +238,7 @@ export function ExploreClient() {
               className="rounded-full bg-brand px-6 py-3 text-sm font-semibold text-bg disabled:opacity-50"
             >
               {scanning
-                ? `Scanning ${scanProgress.done}/${scanProgress.total}…`
+                ? `Loading & scanning ${scanProgress.done}/${scanProgress.total}…`
                 : "Scan universe"}
             </button>
             <button
@@ -297,19 +335,22 @@ export function ExploreClient() {
 
       {scan && (
         <section className="rounded-3xl border border-border bg-surface p-8">
-          <div className="flex items-start justify-between gap-4">
+          <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <p className="text-xs uppercase tracking-[0.3em] text-muted">
-                Scan results
+                Latest scan
               </p>
               <h2 className="mt-2 text-2xl font-semibold text-ink">
                 {scan.patternName}
               </h2>
               <p className="mt-1 text-sm text-muted">
-                {scan.results.length} matches · min win rate {minWinRate}% · min{" "}
-                {minTrades} trades
+                {scan.results.length} matches ·{" "}
+                <Link href={`/scans/${scan.id}`} className="text-brand underline">
+                  Open full results
+                </Link>
               </p>
             </div>
+            <ShareCaption scan={scan} />
           </div>
 
           <div className="mt-6 overflow-x-auto">
@@ -321,11 +362,11 @@ export function ExploreClient() {
                   <th className="py-3 pr-4">Win rate</th>
                   <th className="py-3 pr-4">Trades</th>
                   <th className="py-3 pr-4">Avg return</th>
-                  <th className="py-3">Last</th>
+                  <th className="py-3">Caption</th>
                 </tr>
               </thead>
               <tbody>
-                {scan.results.map((row) => (
+                {scan.results.slice(0, 10).map((row) => (
                   <tr
                     key={row.symbol}
                     className="border-b border-border/50 hover:bg-bg/50"
@@ -354,16 +395,15 @@ export function ExploreClient() {
                     <td className="py-3 pr-4">
                       {row.stats.avgReturnPct.toFixed(2)}%
                     </td>
-                    <td className="py-3">${row.lastClose.toFixed(2)}</td>
+                    <td className="py-3">
+                      <CopyButton
+                        text={formatShareCaption(scan.patternName, row)}
+                      />
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
-            {scan.results.length === 0 && (
-              <p className="py-8 text-center text-muted">
-                No symbols matched your filters.
-              </p>
-            )}
           </div>
         </section>
       )}
@@ -377,5 +417,23 @@ function Stat({ label, value }: { label: string; value: string }) {
       <div className="text-xs uppercase tracking-[0.2em] text-muted">{label}</div>
       <div className="mt-1 text-lg font-semibold text-ink">{value}</div>
     </div>
+  );
+}
+
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        void navigator.clipboard.writeText(text).then(() => {
+          setCopied(true);
+          setTimeout(() => setCopied(false), 2000);
+        });
+      }}
+      className="text-xs text-brand underline"
+    >
+      {copied ? "Copied!" : "Copy"}
+    </button>
   );
 }

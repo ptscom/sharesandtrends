@@ -120,6 +120,7 @@ export interface ScanRun {
   filters: {
     minWinRate?: number;
     minTrades?: number;
+    signalTodayOnly?: boolean;
   };
 }
 
