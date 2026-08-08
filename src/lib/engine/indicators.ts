@@ -1,10 +1,20 @@
 import {
+  ADX,
   ATR,
   BollingerBands,
+  CCI,
   EMA,
+  KeltnerChannels,
   MACD,
+  MFI,
+  OBV,
+  PSAR,
+  ROC,
   RSI,
   SMA,
+  Stochastic,
+  TRIX,
+  WilliamsR,
 } from "technicalindicators";
 import type { IndicatorDef, IndicatorSeries, OhlcvBar } from "@/lib/types";
 import { alignHigherTimeframe, barsToSource, resampleBars } from "./resample";
@@ -16,6 +26,20 @@ function padStart(values: number[], total: number): (number | null)[] {
   return [...Array(pad).fill(null), ...values];
 }
 
+function priorRolling(
+  bars: OhlcvBar[],
+  period: number,
+  field: "high" | "low",
+): (number | null)[] {
+  return bars.map((_, i) => {
+    if (i < period) return null;
+    const slice = bars.slice(i - period, i);
+    return field === "high"
+      ? Math.max(...slice.map((b) => b.high))
+      : Math.min(...slice.map((b) => b.low));
+  });
+}
+
 function computeOnBars(
   bars: OhlcvBar[],
   def: IndicatorDef,
@@ -24,6 +48,10 @@ function computeOnBars(
   const params = def.params;
   const source = (params.source as string) ?? def.source ?? "close";
   const input = barsToSource(bars, source as "close");
+  const closes = bars.map((b) => b.close);
+  const highs = bars.map((b) => b.high);
+  const lows = bars.map((b) => b.low);
+  const volumes = bars.map((b) => b.volume);
 
   const result: IndicatorSeries = {};
 
@@ -91,21 +119,218 @@ function computeOnBars(
       });
       const pad = bars.length - bb.length;
       const nulls = Array(pad).fill(null);
-      result[`${def.alias}_upper`] = [...nulls, ...bb.map((b) => b.upper)];
-      result[`${def.alias}_middle`] = [...nulls, ...bb.map((b) => b.middle)];
-      result[`${def.alias}_lower`] = [...nulls, ...bb.map((b) => b.lower)];
-      result[def.alias] = result[`${def.alias}_middle`];
+      const upper = [...nulls, ...bb.map((b) => b.upper)];
+      const middle = [...nulls, ...bb.map((b) => b.middle)];
+      const lower = [...nulls, ...bb.map((b) => b.lower)];
+      result[`${def.alias}_upper`] = upper;
+      result[`${def.alias}_middle`] = middle;
+      result[`${def.alias}_lower`] = lower;
+      result[`${def.alias}_percent_b`] = closes.map((c, i) => {
+        const u = upper[i];
+        const l = lower[i];
+        if (u == null || l == null || u === l) return null;
+        return (c - l) / (u - l);
+      });
+      result[def.alias] = middle;
       break;
     }
     case "atr": {
       const length = Number(params.length ?? 14);
       const atr = ATR.calculate({
-        high: bars.map((b) => b.high),
-        low: bars.map((b) => b.low),
-        close: bars.map((b) => b.close),
+        high: highs,
+        low: lows,
+        close: closes,
         period: length,
       });
       result[def.alias] = padStart(atr, bars.length);
+      break;
+    }
+    case "adx": {
+      const period = Number(params.length ?? 14);
+      const adx = ADX.calculate({
+        high: highs,
+        low: lows,
+        close: closes,
+        period,
+      });
+      const pad = bars.length - adx.length;
+      const nulls = Array(pad).fill(null);
+      result[`${def.alias}_adx`] = [...nulls, ...adx.map((a) => a.adx ?? null)];
+      result[`${def.alias}_pdi`] = [...nulls, ...adx.map((a) => a.pdi ?? null)];
+      result[`${def.alias}_mdi`] = [...nulls, ...adx.map((a) => a.mdi ?? null)];
+      result[def.alias] = result[`${def.alias}_adx`];
+      break;
+    }
+    case "stochastic": {
+      const period = Number(params.period ?? 14);
+      const signal = Number(params.signal ?? 3);
+      const stoch = Stochastic.calculate({
+        high: highs,
+        low: lows,
+        close: closes,
+        period,
+        signalPeriod: signal,
+      });
+      const pad = bars.length - stoch.length;
+      const nulls = Array(pad).fill(null);
+      result[`${def.alias}_k`] = [...nulls, ...stoch.map((s) => s.k)];
+      result[`${def.alias}_d`] = [...nulls, ...stoch.map((s) => s.d)];
+      result[def.alias] = result[`${def.alias}_k`];
+      break;
+    }
+    case "williamsr": {
+      const length = Number(params.length ?? 14);
+      const wr = WilliamsR.calculate({
+        high: highs,
+        low: lows,
+        close: closes,
+        period: length,
+      });
+      result[def.alias] = padStart(wr, bars.length);
+      break;
+    }
+    case "cci": {
+      const length = Number(params.length ?? 20);
+      const cci = CCI.calculate({
+        high: highs,
+        low: lows,
+        close: closes,
+        period: length,
+      });
+      result[def.alias] = padStart(cci, bars.length);
+      break;
+    }
+    case "roc": {
+      const length = Number(params.length ?? 20);
+      const roc = ROC.calculate({ period: length, values: closes });
+      result[def.alias] = padStart(roc, bars.length);
+      break;
+    }
+    case "mfi": {
+      const length = Number(params.length ?? 14);
+      const mfi = MFI.calculate({
+        high: highs,
+        low: lows,
+        close: closes,
+        volume: volumes,
+        period: length,
+      });
+      result[def.alias] = padStart(mfi, bars.length);
+      break;
+    }
+    case "obv": {
+      const obv = OBV.calculate({ close: closes, volume: volumes });
+      result[def.alias] = padStart(obv, bars.length);
+      break;
+    }
+    case "psar": {
+      const step = Number(params.step ?? 0.02);
+      const max = Number(params.max ?? 0.2);
+      const psar = PSAR.calculate({
+        high: highs,
+        low: lows,
+        step,
+        max,
+      });
+      result[def.alias] = padStart(psar, bars.length);
+      break;
+    }
+    case "trix": {
+      const length = Number(params.length ?? 15);
+      const signalPeriod = Number(params.signal ?? 9);
+      const trix = TRIX.calculate({ period: length, values: closes });
+      const padded = padStart(trix, bars.length) as number[];
+      const signal = padStart(
+        SMA.calculate({
+          period: signalPeriod,
+          values: padded.filter((v): v is number => v != null),
+        }),
+        bars.length,
+      );
+      result[def.alias] = padded;
+      result[`${def.alias}_signal`] = signal;
+      break;
+    }
+    case "keltner": {
+      const maPeriod = Number(params.maPeriod ?? 20);
+      const atrPeriod = Number(params.atrPeriod ?? 20);
+      const multiplier = Number(params.multiplier ?? 2);
+      const kc = KeltnerChannels.calculate({
+        maPeriod,
+        atrPeriod,
+        useSMA: false,
+        multiplier,
+        high: highs,
+        low: lows,
+        close: closes,
+      });
+      const pad = bars.length - kc.length;
+      const nulls = Array(pad).fill(null);
+      result[`${def.alias}_upper`] = [...nulls, ...kc.map((k) => k.upper)];
+      result[`${def.alias}_middle`] = [...nulls, ...kc.map((k) => k.middle)];
+      result[`${def.alias}_lower`] = [...nulls, ...kc.map((k) => k.lower)];
+      result[def.alias] = result[`${def.alias}_middle`];
+      break;
+    }
+    case "rolling_high": {
+      const length = Number(params.length ?? 20);
+      result[def.alias] = priorRolling(bars, length, "high");
+      break;
+    }
+    case "rolling_low": {
+      const length = Number(params.length ?? 20);
+      result[def.alias] = priorRolling(bars, length, "low");
+      break;
+    }
+    case "momentum": {
+      const length = Number(params.length ?? 126);
+      result[def.alias] = closes.map((c, i) => {
+        if (i < length) return null;
+        const prev = closes[i - length];
+        return prev ? ((c / prev - 1) * 100) : null;
+      });
+      break;
+    }
+    case "zscore": {
+      const length = Number(params.length ?? 20);
+      const sma = SMA.calculate({ period: length, values: closes });
+      const pad = bars.length - sma.length;
+      const nulls = Array(pad).fill(null);
+      const means = [...nulls, ...sma];
+      result[def.alias] = closes.map((c, i) => {
+        const mean = means[i];
+        if (mean == null || i < length - 1) return null;
+        const slice = closes.slice(i - length + 1, i + 1);
+        const variance =
+          slice.reduce((sum, v) => sum + (v - mean) ** 2, 0) / length;
+        const std = Math.sqrt(variance);
+        return std > 0 ? (c - mean) / std : 0;
+      });
+      break;
+    }
+    case "envelope": {
+      const length = Number(params.length ?? 20);
+      const pct = Number(params.pct ?? 3);
+      const sma = padStart(
+        SMA.calculate({ period: length, values: closes }),
+        bars.length,
+      );
+      result[`${def.alias}_middle`] = sma;
+      result[`${def.alias}_upper`] = sma.map((v) =>
+        v == null ? null : v * (1 + pct / 100),
+      );
+      result[`${def.alias}_lower`] = sma.map((v) =>
+        v == null ? null : v * (1 - pct / 100),
+      );
+      result[def.alias] = sma;
+      break;
+    }
+    case "volume_sma": {
+      const length = Number(params.length ?? 20);
+      result[def.alias] = padStart(
+        SMA.calculate({ period: length, values: volumes }),
+        bars.length,
+      );
       break;
     }
     default:
