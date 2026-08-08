@@ -10,7 +10,6 @@ import { StrategyPicker } from "@/components/explore/StrategyPicker";
 import { runBacktest } from "@/lib/engine/backtest";
 import { computeIndicators } from "@/lib/engine/indicators";
 import { runUniverseScanInWorker } from "@/lib/engine/scan-worker-client";
-<<<<<<< HEAD
 import { patternToPreset } from "@/lib/patterns/custom";
 import { EMA_CROSS_PATTERN } from "@/lib/patterns/defaults";
 import { chartOverlays } from "@/lib/patterns/optimization";
@@ -22,23 +21,13 @@ import {
   savePattern,
   saveScanRun,
 } from "@/lib/storage/patterns";
-=======
-import { EMA_CROSS_PATTERN } from "@/lib/patterns/defaults";
-import type { StrategyPreset } from "@/lib/patterns/strategies";
-import { STRATEGY_PRESETS } from "@/lib/patterns/strategies";
-import { StrategyPicker } from "@/components/explore/StrategyPicker";
-import { savePattern, saveScanRun } from "@/lib/storage/patterns";
->>>>>>> origin/cursor/strategy-library-115b
 import { getPriceBars, listSymbols } from "@/lib/storage/prices";
 import type { BacktestResult, PatternDefinition, ScanRun } from "@/lib/types";
 import { DEFAULT_WATCHLIST } from "@/lib/data/default-universe";
 
 export function ExploreClient() {
   const router = useRouter();
-<<<<<<< HEAD
   const searchParams = useSearchParams();
-=======
->>>>>>> origin/cursor/strategy-library-115b
   const [selectedId, setSelectedId] = useState("ema-cross");
   const [pattern, setPattern] = useState<PatternDefinition>(EMA_CROSS_PATTERN);
   const [customStrategies, setCustomStrategies] = useState<StrategyPreset[]>([]);
@@ -51,7 +40,6 @@ export function ExploreClient() {
   const [previewSymbol, setPreviewSymbol] = useState("AAPL");
   const [preview, setPreview] = useState<BacktestResult | null>(null);
   const [storedSymbols, setStoredSymbols] = useState<string[]>([]);
-<<<<<<< HEAD
   const [overlayFast, setOverlayFast] = useState<(number | null)[]>([]);
   const [overlaySlow, setOverlaySlow] = useState<(number | null)[]>([]);
   const [chartBars, setChartBars] = useState<
@@ -61,12 +49,6 @@ export function ExploreClient() {
   const selectStrategy = useCallback((preset: StrategyPreset) => {
     setSelectedId(preset.id);
     setPattern(structuredClone(preset.pattern));
-=======
-
-  const selectStrategy = useCallback((preset: StrategyPreset) => {
-    setSelectedId(preset.id);
-    setPattern(preset.pattern);
->>>>>>> origin/cursor/strategy-library-115b
   }, []);
 
   const buildPattern = useCallback((): PatternDefinition => pattern, [pattern]);
@@ -81,7 +63,6 @@ export function ExploreClient() {
     };
   }, []);
 
-<<<<<<< HEAD
   useEffect(() => {
     let cancelled = false;
     void (async () => {
@@ -117,9 +98,6 @@ export function ExploreClient() {
   const selectedPreset =
     STRATEGY_PRESETS.find((s) => s.id === selectedId) ??
     customStrategies.find((s) => s.id === selectedId);
-=======
-  const selectedPreset = STRATEGY_PRESETS.find((s) => s.id === selectedId);
->>>>>>> origin/cursor/strategy-library-115b
 
   const runPreview = useCallback(async () => {
     const bars = await getPriceBars(previewSymbol);
@@ -192,7 +170,6 @@ export function ExploreClient() {
     <div className="space-y-8">
       <section className="grid gap-8 lg:grid-cols-[1fr_1.2fr]">
         <div className="rounded-3xl border border-border bg-surface p-8">
-<<<<<<< HEAD
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <p className="text-xs uppercase tracking-[0.3em] text-muted">
@@ -231,23 +208,6 @@ export function ExploreClient() {
               <OptimizationPanel pattern={pattern} onChange={setPattern} />
             </div>
           </div>
-=======
-          <p className="text-xs uppercase tracking-[0.3em] text-muted">
-            Pattern builder
-          </p>
-          <h2 className="mt-2 text-2xl font-semibold text-ink">
-            {activePattern.name}
-          </h2>
-          <p className="mt-2 text-sm text-muted">
-            {selectedPreset?.entryLogic ?? activePattern.description}
-          </p>
-          {selectedPreset && (
-            <p className="mt-1 text-xs text-muted">
-              Params: {selectedPreset.defaultParams} · Exit:{" "}
-              {selectedPreset.exitLogic}
-            </p>
-          )}
->>>>>>> origin/cursor/strategy-library-115b
 
           <div className="mt-6 grid grid-cols-2 gap-4">
             <div>
@@ -322,15 +282,11 @@ export function ExploreClient() {
             )}
           </p>
 
-<<<<<<< HEAD
           <StrategyPicker
             selectedId={selectedId}
             customStrategies={customStrategies}
             onSelect={selectStrategy}
           />
-=======
-          <StrategyPicker selectedId={selectedId} onSelect={selectStrategy} />
->>>>>>> origin/cursor/strategy-library-115b
         </div>
 
         <div className="rounded-3xl border border-border bg-surface p-8">
@@ -423,7 +379,7 @@ export function ExploreClient() {
                   >
                     <td className="py-3 pr-4">
                       <Link
-                        href={`/symbol/${row.symbol}`}
+                        href={`/symbol/${row.symbol}?scanId=${scan.id}`}
                         className="font-mono font-semibold text-brand"
                       >
                         {row.symbol}
