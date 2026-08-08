@@ -2,21 +2,35 @@
 
 import { formatShareCaption, ShareCaption } from "@/components/share/ShareCaption";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { PriceChart } from "@/components/chart/PriceChart";
+import { OptimizationPanel } from "@/components/explore/OptimizationPanel";
+import { StrategyPicker } from "@/components/explore/StrategyPicker";
 import { runBacktest } from "@/lib/engine/backtest";
 import { computeIndicators } from "@/lib/engine/indicators";
 import { runUniverseScanInWorker } from "@/lib/engine/scan-worker-client";
-import { DEFAULT_PATTERNS, EMA_CROSS_PATTERN } from "@/lib/patterns/defaults";
-import { savePattern, saveScanRun } from "@/lib/storage/patterns";
+import { patternToPreset } from "@/lib/patterns/custom";
+import { EMA_CROSS_PATTERN } from "@/lib/patterns/defaults";
+import { chartOverlays } from "@/lib/patterns/optimization";
+import type { StrategyPreset } from "@/lib/patterns/strategies";
+import { STRATEGY_PRESETS } from "@/lib/patterns/strategies";
+import {
+  getPattern,
+  listPatterns,
+  savePattern,
+  saveScanRun,
+} from "@/lib/storage/patterns";
 import { getPriceBars, listSymbols } from "@/lib/storage/prices";
 import type { BacktestResult, PatternDefinition, ScanRun } from "@/lib/types";
 import { DEFAULT_WATCHLIST } from "@/lib/data/default-universe";
 
 export function ExploreClient() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const [selectedId, setSelectedId] = useState("ema-cross");
   const [pattern, setPattern] = useState<PatternDefinition>(EMA_CROSS_PATTERN);
+  const [customStrategies, setCustomStrategies] = useState<StrategyPreset[]>([]);
   const [minWinRate, setMinWinRate] = useState(70);
   const [minTrades, setMinTrades] = useState(5);
   const [signalTodayOnly, setSignalTodayOnly] = useState(false);
@@ -26,8 +40,18 @@ export function ExploreClient() {
   const [previewSymbol, setPreviewSymbol] = useState("AAPL");
   const [preview, setPreview] = useState<BacktestResult | null>(null);
   const [storedSymbols, setStoredSymbols] = useState<string[]>([]);
-  const [fastPeriod, setFastPeriod] = useState(3);
-  const [slowPeriod, setSlowPeriod] = useState(50);
+  const [overlayFast, setOverlayFast] = useState<(number | null)[]>([]);
+  const [overlaySlow, setOverlaySlow] = useState<(number | null)[]>([]);
+  const [chartBars, setChartBars] = useState<
+    import("@/lib/types").OhlcvBar[]
+  >([]);
+
+  const selectStrategy = useCallback((preset: StrategyPreset) => {
+    setSelectedId(preset.id);
+    setPattern(structuredClone(preset.pattern));
+  }, []);
+
+  const buildPattern = useCallback((): PatternDefinition => pattern, [pattern]);
 
   useEffect(() => {
     let cancelled = false;
@@ -39,50 +63,46 @@ export function ExploreClient() {
     };
   }, []);
 
-  const buildPattern = useCallback((): PatternDefinition => {
-    if (pattern.name.includes("RSI")) {
-      return { ...pattern };
-    }
-    return {
-      ...pattern,
-      name: `EMA ${fastPeriod} / ${slowPeriod} Cross`,
-      indicators: [
-        {
-          alias: "ema_fast",
-          type: "ema",
-          params: { length: fastPeriod, source: "close" },
-          timeframe: "1D",
-        },
-        {
-          alias: "ema_slow",
-          type: "ema",
-          params: { length: slowPeriod, source: "close" },
-          timeframe: "1D",
-        },
-      ],
-      entry: {
-        op: "crosses_above",
-        left: { ref: "ema_fast" },
-        right: { ref: "ema_slow" },
-      },
-      exit: {
-        op: "crosses_below",
-        left: { ref: "ema_fast" },
-        right: { ref: "ema_slow" },
-      },
-      backtest: {
-        entryOn: "close",
-        exitOn: "opposite_signal",
-        minTrades,
-      },
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const list = await listPatterns();
+      const presetIds = new Set(STRATEGY_PRESETS.map((s) => s.id));
+      const custom = list
+        .filter((p) => p.id && !presetIds.has(p.id))
+        .map(patternToPreset);
+      if (!cancelled) setCustomStrategies(custom);
+    })();
+    return () => {
+      cancelled = true;
     };
-  }, [pattern, fastPeriod, slowPeriod, minTrades]);
+  }, []);
+
+  useEffect(() => {
+    const patternId = searchParams.get("patternId");
+    if (!patternId) return;
+
+    void (async () => {
+      const preset = STRATEGY_PRESETS.find((s) => s.id === patternId);
+      if (preset) {
+        selectStrategy(preset);
+        return;
+      }
+      const stored = await getPattern(patternId);
+      if (stored) {
+        selectStrategy(patternToPreset(stored));
+      }
+    })();
+  }, [searchParams, selectStrategy]);
+
+  const selectedPreset =
+    STRATEGY_PRESETS.find((s) => s.id === selectedId) ??
+    customStrategies.find((s) => s.id === selectedId);
 
   const runPreview = useCallback(async () => {
     const bars = await getPriceBars(previewSymbol);
     if (bars.length === 0) return;
-    const p = buildPattern();
-    setPreview(runBacktest(previewSymbol, bars, p));
+    setPreview(runBacktest(previewSymbol, bars, buildPattern()));
   }, [previewSymbol, buildPattern]);
 
   const runScan = useCallback(async () => {
@@ -98,7 +118,7 @@ export function ExploreClient() {
 
     try {
       const p = buildPattern();
-      const saved = await savePattern(p);
+      const saved = await savePattern({ ...p, id: p.id ?? selectedId });
       const result = await runUniverseScanInWorker({
         universe,
         pattern: saved,
@@ -122,13 +142,8 @@ export function ExploreClient() {
     minTrades,
     signalTodayOnly,
     router,
+    selectedId,
   ]);
-
-  const [chartBars, setChartBars] = useState<
-    import("@/lib/types").OhlcvBar[]
-  >([]);
-  const [emaFast, setEmaFast] = useState<(number | null)[]>([]);
-  const [emaSlow, setEmaSlow] = useState<(number | null)[]>([]);
 
   useEffect(() => {
     void (async () => {
@@ -137,8 +152,14 @@ export function ExploreClient() {
       if (bars.length > 0) {
         const p = buildPattern();
         const ctx = computeIndicators(bars, p.indicators);
-        setEmaFast(ctx.series.ema_fast ?? []);
-        setEmaSlow(ctx.series.ema_slow ?? []);
+        const overlays = chartOverlays(p, ctx.series);
+        setOverlayFast(overlays.fast ?? []);
+        setOverlaySlow(overlays.slow ?? []);
+        setPreview(runBacktest(previewSymbol, bars, p));
+      } else {
+        setOverlayFast([]);
+        setOverlaySlow([]);
+        setPreview(null);
       }
     })();
   }, [previewSymbol, buildPattern]);
@@ -149,47 +170,44 @@ export function ExploreClient() {
     <div className="space-y-8">
       <section className="grid gap-8 lg:grid-cols-[1fr_1.2fr]">
         <div className="rounded-3xl border border-border bg-surface p-8">
-          <p className="text-xs uppercase tracking-[0.3em] text-muted">
-            Pattern builder
-          </p>
-          <h2 className="mt-2 text-2xl font-semibold text-ink">
-            {activePattern.name}
-          </h2>
-          <p className="mt-2 text-sm text-muted">
-            Adjust parameters, backtest on one symbol, then scan your stored
-            universe in a background worker so the tab stays responsive.
-          </p>
-
-          {!pattern.name.includes("RSI") && (
-            <div className="mt-6 grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-xs uppercase tracking-[0.2em] text-muted">
-                  Fast EMA
-                </label>
-                <input
-                  type="number"
-                  min={1}
-                  max={100}
-                  value={fastPeriod}
-                  onChange={(e) => setFastPeriod(Number(e.target.value))}
-                  className="mt-2 w-full rounded-2xl border border-border bg-bg px-4 py-3 text-sm font-semibold"
-                />
-              </div>
-              <div>
-                <label className="text-xs uppercase tracking-[0.2em] text-muted">
-                  Slow EMA
-                </label>
-                <input
-                  type="number"
-                  min={2}
-                  max={500}
-                  value={slowPeriod}
-                  onChange={(e) => setSlowPeriod(Number(e.target.value))}
-                  className="mt-2 w-full rounded-2xl border border-border bg-bg px-4 py-3 text-sm font-semibold"
-                />
-              </div>
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <p className="text-xs uppercase tracking-[0.3em] text-muted">
+                Pattern builder
+              </p>
+              <h2 className="mt-2 text-2xl font-semibold text-ink">
+                {activePattern.name}
+              </h2>
+              <p className="mt-2 text-sm text-muted">
+                {selectedPreset?.entryLogic ?? activePattern.description}
+              </p>
+              {selectedPreset && (
+                <p className="mt-1 text-xs text-muted">
+                  Params: {selectedPreset.defaultParams} · Exit:{" "}
+                  {selectedPreset.exitLogic}
+                </p>
+              )}
             </div>
-          )}
+            <Link
+              href="/strategies"
+              className="rounded-full border border-border px-4 py-2 text-xs text-brand hover:bg-brand/5"
+            >
+              Open strategy builder
+            </Link>
+          </div>
+
+          <div className="mt-6 rounded-2xl border border-border bg-bg p-5">
+            <h3 className="text-sm font-semibold text-ink">
+              Optimization variables
+            </h3>
+            <p className="mt-1 text-xs text-muted">
+              Adjust indicator periods, thresholds, and backtest settings before
+              scanning.
+            </p>
+            <div className="mt-4">
+              <OptimizationPanel pattern={pattern} onChange={setPattern} />
+            </div>
+          </div>
 
           <div className="mt-6 grid grid-cols-2 gap-4">
             <div>
@@ -246,7 +264,7 @@ export function ExploreClient() {
               onClick={() => void runPreview()}
               className="rounded-full border border-border px-6 py-3 text-sm text-muted hover:text-ink"
             >
-              Backtest preview
+              Refresh preview
             </button>
           </div>
 
@@ -264,23 +282,11 @@ export function ExploreClient() {
             )}
           </p>
 
-          <div className="mt-6">
-            <label className="text-xs uppercase tracking-[0.2em] text-muted">
-              Preset patterns
-            </label>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {DEFAULT_PATTERNS.map((p) => (
-                <button
-                  key={p.name}
-                  type="button"
-                  onClick={() => setPattern(p)}
-                  className="rounded-full border border-border px-3 py-1 text-xs text-muted hover:text-ink"
-                >
-                  {p.name}
-                </button>
-              ))}
-            </div>
-          </div>
+          <StrategyPicker
+            selectedId={selectedId}
+            customStrategies={customStrategies}
+            onSelect={selectStrategy}
+          />
         </div>
 
         <div className="rounded-3xl border border-border bg-surface p-8">
@@ -297,8 +303,8 @@ export function ExploreClient() {
               <PriceChart
                 bars={chartBars}
                 signals={preview?.signals ?? []}
-                emaFast={emaFast.slice(-252)}
-                emaSlow={emaSlow.slice(-252)}
+                emaFast={overlayFast.slice(-252)}
+                emaSlow={overlaySlow.slice(-252)}
               />
             ) : (
               <p className="py-20 text-center text-sm text-muted">
