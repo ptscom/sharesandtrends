@@ -39,6 +39,7 @@ export function StrategyBuilder() {
   const router = useRouter();
   const [pattern, setPattern] = useState<PatternDefinition>(EMA_CROSS_PATTERN);
   const [selectedSource, setSelectedSource] = useState("ema-cross");
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [savedPatterns, setSavedPatterns] = useState<PatternDefinition[]>([]);
   const [useFilter, setUseFilter] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
@@ -74,18 +75,32 @@ export function StrategyBuilder() {
     setUseFilter(Boolean(pattern.filters));
   }, [pattern.filters]);
 
+  const isPresetId = useCallback(
+    (id: string) => STRATEGY_PRESETS.some((s) => s.id === id),
+    [],
+  );
+
   const loadPreset = (id: string) => {
     const preset = STRATEGY_PRESETS.find((s) => s.id === id);
     if (preset) {
       setSelectedSource(id);
-      setPattern(structuredClone(preset.pattern));
+      setEditingId(null);
+      const { id: _omit, ...patternWithoutId } = structuredClone(preset.pattern);
+      setPattern(patternWithoutId);
       return;
     }
     const custom = savedPatterns.find((p) => p.id === id);
     if (custom) {
       setSelectedSource(id);
+      setEditingId(custom.id!);
       setPattern(structuredClone(custom));
     }
+  };
+
+  const loadBlank = () => {
+    setSelectedSource("__blank");
+    setEditingId(null);
+    setPattern(blankPattern());
   };
 
   const updateIndicators = (indicators: IndicatorDef[]) => {
@@ -106,19 +121,22 @@ export function StrategyBuilder() {
     setSaving(true);
     setError(null);
     try {
-      const isBuiltIn = STRATEGY_PRESETS.some((s) => s.id === selectedSource);
-      const id = isBuiltIn
-        ? uuidv4()
-        : (pattern.id ?? selectedSource ?? uuidv4());
+      const isUpdate = editingId != null;
+      const id = editingId ?? uuidv4();
       const saved = await savePattern({
         ...pattern,
         id,
         name: pattern.name.trim() || "Untitled strategy",
       });
       setPattern(saved);
+      setEditingId(saved.id!);
       setSelectedSource(saved.id!);
       await refreshSaved();
-      setStatus(`Saved "${saved.name}" to your browser.`);
+      setStatus(
+        isUpdate
+          ? `Updated "${saved.name}".`
+          : `Saved "${saved.name}" as a new custom strategy.`,
+      );
       setTimeout(() => setStatus(null), 4000);
       return saved;
     } catch (err) {
@@ -141,6 +159,7 @@ export function StrategyBuilder() {
         name: `${pattern.name.trim() || "Strategy"} (copy)`,
       });
       setPattern(saved);
+      setEditingId(saved.id!);
       setSelectedSource(saved.id!);
       await refreshSaved();
       setStatus(`Saved "${saved.name}" as a new custom strategy.`);
@@ -155,14 +174,15 @@ export function StrategyBuilder() {
   };
 
   const handleDelete = async () => {
-    if (!pattern.id) return;
+    if (!editingId) return;
     setSaving(true);
     setError(null);
     try {
-      if (!STRATEGY_PRESETS.some((s) => s.id === pattern.id)) {
-        await deletePattern(pattern.id);
+      if (!isPresetId(editingId)) {
+        await deletePattern(editingId);
         await refreshSaved();
       }
+      setEditingId(null);
       setPattern(EMA_CROSS_PATTERN);
       setSelectedSource("ema-cross");
       setStatus("Custom strategy deleted.");
@@ -177,9 +197,9 @@ export function StrategyBuilder() {
   };
 
   const isCustomSaved =
-    pattern.id != null &&
-    !STRATEGY_PRESETS.some((s) => s.id === pattern.id) &&
-    savedPatterns.some((p) => p.id === pattern.id);
+    editingId != null &&
+    !isPresetId(editingId) &&
+    savedPatterns.some((p) => p.id === editingId);
 
   return (
     <div className="space-y-8">
@@ -214,8 +234,7 @@ export function StrategyBuilder() {
               value={selectedSource}
               onChange={(e) => {
                 if (e.target.value === "__blank") {
-                  setSelectedSource("__blank");
-                  setPattern(blankPattern());
+                  loadBlank();
                   return;
                 }
                 loadPreset(e.target.value);
@@ -240,6 +259,13 @@ export function StrategyBuilder() {
               )}
               <option value="__blank">Blank EMA crossover template</option>
             </select>
+            <p className="mt-2 text-xs text-muted">
+              {editingId
+                ? "Editing a saved custom strategy — Save updates this version."
+                : isPresetId(selectedSource)
+                  ? "Editing a built-in preset — first Save creates a custom copy; further saves update that copy."
+                  : "Unsaved draft — Save creates a new custom strategy."}
+            </p>
 
             <div className="mt-6 space-y-4">
               <label className="block text-sm">
@@ -424,7 +450,11 @@ export function StrategyBuilder() {
                 disabled={saving}
                 className="rounded-full bg-brand px-6 py-3 text-sm font-semibold text-bg disabled:opacity-50"
               >
-                {saving ? "Saving…" : "Save strategy"}
+                {saving
+                  ? "Saving…"
+                  : editingId
+                    ? "Save changes"
+                    : "Save strategy"}
               </button>
               <button
                 type="button"
