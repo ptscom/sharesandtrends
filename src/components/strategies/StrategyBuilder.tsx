@@ -23,6 +23,7 @@ import {
   savePattern,
 } from "@/lib/storage/patterns";
 import type { IndicatorDef, PatternDefinition } from "@/lib/types";
+import { v4 as uuidv4 } from "uuid";
 import { OptimizationPanel } from "@/components/explore/OptimizationPanel";
 
 const RULE_OPS: { value: RuleOp; label: string }[] = [
@@ -41,6 +42,8 @@ export function StrategyBuilder() {
   const [savedPatterns, setSavedPatterns] = useState<PatternDefinition[]>([]);
   const [useFilter, setUseFilter] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
 
   const entryRule = useMemo(
     () => parseSimpleRule(pattern.entry) ?? defaultRule("crosses_above"),
@@ -100,46 +103,77 @@ export function StrategyBuilder() {
   };
 
   const handleSave = async (): Promise<PatternDefinition> => {
-    const isBuiltIn = STRATEGY_PRESETS.some((s) => s.id === selectedSource);
-    const id = isBuiltIn
-      ? crypto.randomUUID()
-      : (pattern.id ?? selectedSource ?? crypto.randomUUID());
-    const saved = await savePattern({
-      ...pattern,
-      id,
-      name: pattern.name.trim() || "Untitled strategy",
-    });
-    setPattern(saved);
-    setSelectedSource(saved.id!);
-    await refreshSaved();
-    setStatus("Strategy saved to your browser.");
-    setTimeout(() => setStatus(null), 3000);
-    return saved;
+    setSaving(true);
+    setError(null);
+    try {
+      const isBuiltIn = STRATEGY_PRESETS.some((s) => s.id === selectedSource);
+      const id = isBuiltIn
+        ? uuidv4()
+        : (pattern.id ?? selectedSource ?? uuidv4());
+      const saved = await savePattern({
+        ...pattern,
+        id,
+        name: pattern.name.trim() || "Untitled strategy",
+      });
+      setPattern(saved);
+      setSelectedSource(saved.id!);
+      await refreshSaved();
+      setStatus(`Saved "${saved.name}" to your browser.`);
+      setTimeout(() => setStatus(null), 4000);
+      return saved;
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Failed to save strategy";
+      setError(message);
+      throw err;
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleSaveAsNew = async () => {
-    const saved = await savePattern({
-      ...pattern,
-      id: crypto.randomUUID(),
-      name: `${pattern.name.trim() || "Strategy"} (copy)`,
-    });
-    setPattern(saved);
-    setSelectedSource(saved.id!);
-    await refreshSaved();
-    setStatus("Saved as a new custom strategy.");
-    setTimeout(() => setStatus(null), 3000);
+    setSaving(true);
+    setError(null);
+    try {
+      const saved = await savePattern({
+        ...pattern,
+        id: uuidv4(),
+        name: `${pattern.name.trim() || "Strategy"} (copy)`,
+      });
+      setPattern(saved);
+      setSelectedSource(saved.id!);
+      await refreshSaved();
+      setStatus(`Saved "${saved.name}" as a new custom strategy.`);
+      setTimeout(() => setStatus(null), 4000);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Failed to save strategy";
+      setError(message);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleDelete = async () => {
     if (!pattern.id) return;
-    if (!STRATEGY_PRESETS.some((s) => s.id === pattern.id)) {
-      await deletePattern(pattern.id);
-      await refreshSaved();
+    setSaving(true);
+    setError(null);
+    try {
+      if (!STRATEGY_PRESETS.some((s) => s.id === pattern.id)) {
+        await deletePattern(pattern.id);
+        await refreshSaved();
+      }
+      setPattern(EMA_CROSS_PATTERN);
+      setSelectedSource("ema-cross");
+      setStatus("Custom strategy deleted.");
+      setTimeout(() => setStatus(null), 4000);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Failed to delete strategy";
+      setError(message);
+    } finally {
+      setSaving(false);
     }
-    setPattern(EMA_CROSS_PATTERN);
-    setSelectedSource("ema-cross");
-    setStatus("Custom strategy deleted.");
-    setTimeout(() => setStatus(null), 3000);
   };
 
   const isCustomSaved =
@@ -387,27 +421,34 @@ export function StrategyBuilder() {
               <button
                 type="button"
                 onClick={() => void handleSave()}
-                className="rounded-full bg-brand px-6 py-3 text-sm font-semibold text-bg"
+                disabled={saving}
+                className="rounded-full bg-brand px-6 py-3 text-sm font-semibold text-bg disabled:opacity-50"
               >
-                Save strategy
+                {saving ? "Saving…" : "Save strategy"}
               </button>
               <button
                 type="button"
                 onClick={() => void handleSaveAsNew()}
-                className="rounded-full border border-border px-6 py-3 text-sm text-muted hover:text-ink"
+                disabled={saving}
+                className="rounded-full border border-border px-6 py-3 text-sm text-muted hover:text-ink disabled:opacity-50"
               >
                 Save as new
               </button>
               <button
                 type="button"
+                disabled={saving}
                 onClick={() => {
-                  void handleSave().then((saved) => {
-                    router.push(
-                      `/explore?patternId=${encodeURIComponent(saved.id!)}`,
-                    );
-                  });
+                  void handleSave()
+                    .then((saved) => {
+                      router.push(
+                        `/explore?patternId=${encodeURIComponent(saved.id!)}`,
+                      );
+                    })
+                    .catch(() => {
+                      // Error shown via setError in handleSave
+                    });
                 }}
-                className="rounded-full border border-border px-6 py-3 text-sm text-muted hover:text-ink"
+                className="rounded-full border border-border px-6 py-3 text-sm text-muted hover:text-ink disabled:opacity-50"
               >
                 Save & scan in Explore
               </button>
@@ -421,7 +462,16 @@ export function StrategyBuilder() {
                 </button>
               )}
             </div>
-            {status && <p className="mt-4 text-sm text-brand">{status}</p>}
+            {status && (
+              <p className="mt-4 rounded-xl bg-brand/10 px-4 py-3 text-sm text-brand">
+                {status}
+              </p>
+            )}
+            {error && (
+              <p className="mt-4 rounded-xl bg-danger/10 px-4 py-3 text-sm text-danger">
+                {error}
+              </p>
+            )}
           </div>
         </div>
       </section>
