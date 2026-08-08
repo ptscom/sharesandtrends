@@ -5,29 +5,84 @@ import { useEffect, useState } from "react";
 import { PriceChart } from "@/components/chart/PriceChart";
 import { runBacktest } from "@/lib/engine/backtest";
 import { computeIndicators } from "@/lib/engine/indicators";
-import { EMA_CROSS_PATTERN } from "@/lib/patterns/defaults";
+import { resolveSymbolPattern } from "@/lib/storage/patterns";
 import { getPriceBars } from "@/lib/storage/prices";
-import type { BacktestResult, OhlcvBar } from "@/lib/types";
+import type {
+  BacktestResult,
+  OhlcvBar,
+  PatternDefinition,
+  ScanRun,
+} from "@/lib/types";
 
-export function SymbolDetail({ symbol }: { symbol: string }) {
+const OVERLAY_TYPES = new Set([
+  "sma",
+  "ema",
+  "bb_upper",
+  "bb_lower",
+  "bb_mid",
+  "keltner_upper",
+  "keltner_lower",
+  "keltner_mid",
+  "psar",
+  "ma_envelope_upper",
+  "ma_envelope_lower",
+]);
+
+function chartOverlays(
+  pattern: PatternDefinition,
+  series: Record<string, (number | null)[]>,
+): { fast?: (number | null)[]; slow?: (number | null)[] } {
+  const aliases = pattern.indicators
+    .filter((ind) => OVERLAY_TYPES.has(ind.type))
+    .map((ind) => ind.alias);
+
+  return {
+    fast: aliases[0] ? series[aliases[0]] : undefined,
+    slow: aliases[1] ? series[aliases[1]] : undefined,
+  };
+}
+
+export function SymbolDetail({
+  symbol,
+  scanId,
+  patternId,
+}: {
+  symbol: string;
+  scanId?: string;
+  patternId?: string;
+}) {
   const [bars, setBars] = useState<OhlcvBar[]>([]);
   const [result, setResult] = useState<BacktestResult | null>(null);
-  const [emaFast, setEmaFast] = useState<(number | null)[]>([]);
-  const [emaSlow, setEmaSlow] = useState<(number | null)[]>([]);
+  const [pattern, setPattern] = useState<PatternDefinition | null>(null);
+  const [scan, setScan] = useState<ScanRun | null>(null);
+  const [overlayFast, setOverlayFast] = useState<(number | null)[]>([]);
+  const [overlaySlow, setOverlaySlow] = useState<(number | null)[]>([]);
 
   useEffect(() => {
     void (async () => {
-      const data = await getPriceBars(symbol);
+      const [{ pattern: resolved, scan: resolvedScan }, data] = await Promise.all([
+        resolveSymbolPattern({ scanId, patternId }),
+        getPriceBars(symbol),
+      ]);
+
+      setPattern(resolved);
+      setScan(resolvedScan);
       setBars(data);
+
       if (data.length > 0) {
-        const bt = runBacktest(symbol, data, EMA_CROSS_PATTERN);
+        const bt = runBacktest(symbol, data, resolved);
         setResult(bt);
-        const ctx = computeIndicators(data, EMA_CROSS_PATTERN.indicators);
-        setEmaFast(ctx.series.ema_fast ?? []);
-        setEmaSlow(ctx.series.ema_slow ?? []);
+        const ctx = computeIndicators(data, resolved.indicators);
+        const overlays = chartOverlays(resolved, ctx.series);
+        setOverlayFast(overlays.fast ?? []);
+        setOverlaySlow(overlays.slow ?? []);
+      } else {
+        setResult(null);
+        setOverlayFast([]);
+        setOverlaySlow([]);
       }
     })();
-  }, [symbol]);
+  }, [symbol, scanId, patternId]);
 
   if (bars.length === 0) {
     return (
@@ -45,12 +100,27 @@ export function SymbolDetail({ symbol }: { symbol: string }) {
   return (
     <div className="space-y-8">
       <section className="rounded-3xl border border-border bg-surface p-8">
-        <p className="text-xs uppercase tracking-[0.3em] text-muted">Symbol</p>
-        <h1 className="mt-2 text-4xl font-semibold text-ink">{symbol}</h1>
-        <p className="mt-2 text-muted">
-          Last close ${last.close.toFixed(2)} · {bars.length} daily bars stored
-          locally
-        </p>
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-xs uppercase tracking-[0.3em] text-muted">Symbol</p>
+            <h1 className="mt-2 text-4xl font-semibold text-ink">{symbol}</h1>
+            <p className="mt-2 text-muted">
+              Last close ${last.close.toFixed(2)} · {bars.length} daily bars stored
+              locally
+            </p>
+            {pattern && (
+              <p className="mt-1 text-sm text-brand">{pattern.name}</p>
+            )}
+          </div>
+          {scan && (
+            <Link
+              href={`/scans/${scan.id}`}
+              className="text-sm text-brand underline"
+            >
+              ← Back to scan
+            </Link>
+          )}
+        </div>
       </section>
 
       <section className="rounded-3xl border border-border bg-surface p-8">
@@ -59,17 +129,20 @@ export function SymbolDetail({ symbol }: { symbol: string }) {
           <PriceChart
             bars={bars.slice(-252)}
             signals={result?.signals ?? []}
-            emaFast={emaFast.slice(-252)}
-            emaSlow={emaSlow.slice(-252)}
+            emaFast={overlayFast.slice(-252)}
+            emaSlow={overlaySlow.slice(-252)}
           />
         </div>
       </section>
 
-      {result && (
+      {result && pattern && (
         <section className="rounded-3xl border border-border bg-surface p-8">
           <h2 className="text-xl font-semibold text-ink">
-            EMA 3/50 backtest (default pattern)
+            {pattern.name} backtest
           </h2>
+          {pattern.description && (
+            <p className="mt-1 text-sm text-muted">{pattern.description}</p>
+          )}
           <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <Metric label="Trades" value={String(result.stats.trades)} />
             <Metric

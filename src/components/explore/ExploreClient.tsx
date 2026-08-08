@@ -69,7 +69,7 @@ export function ExploreClient() {
 
     try {
       const p = buildPattern();
-      const saved = await savePattern(p);
+      const saved = await savePattern({ ...p, id: p.id ?? selectedId });
       const result = await runUniverseScanInWorker({
         universe,
         pattern: saved,
@@ -302,7 +302,7 @@ export function ExploreClient() {
                   >
                     <td className="py-3 pr-4">
                       <Link
-                        href={`/symbol/${row.symbol}`}
+                        href={`/symbol/${row.symbol}?scanId=${scan.id}`}
                         className="font-mono font-semibold text-brand"
                       >
                         {row.symbol}
