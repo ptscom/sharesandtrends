@@ -133,10 +133,6 @@ export function ExploreClient() {
     })();
   }, [searchParams]);
 
-  const selectedPreset =
-    STRATEGY_PRESETS.find((s) => s.id === selectedId) ??
-    customStrategies.find((s) => s.id === selectedId);
-
   const runPreview = useCallback(async () => {
     const bars = await getPriceBars(previewSymbol);
     if (bars.length === 0) return;
@@ -225,39 +221,12 @@ export function ExploreClient() {
       <section className="grid gap-6 lg:grid-cols-3 lg:items-stretch">
         {/* Column 1: select strategy */}
         <div className="flex min-h-[24rem] flex-col rounded-2xl border border-border bg-surface p-6 shadow-sm">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <p className="text-xs font-medium uppercase tracking-[0.2em] text-muted">
-                1. Select strategy
-              </p>
-              <h2 className="mt-2 text-lg font-semibold text-ink">
-                {activePattern.name}
-              </h2>
-              <p className="mt-1 text-sm text-muted">
-                {selectedPreset?.entryLogic ?? activePattern.description}
-              </p>
-              {selectedPreset && (
-                <p className="mt-1 text-xs text-muted">
-                  {selectedPreset.defaultParams} · {selectedPreset.exitLogic}
-                </p>
-              )}
-            </div>
-            <Link
-              href="/strategies"
-              className="shrink-0 rounded-full border border-border bg-bg px-3 py-1.5 text-xs text-brand-dark hover:bg-brand/10"
-            >
-              Strategy builder
-            </Link>
-          </div>
-
-          <div className="mt-4 min-h-0 flex-1 overflow-y-auto">
-            <StrategyPicker
-              selectedId={selectedId}
-              customStrategies={customStrategies}
-              modifiedPresetIds={modifiedPresetIds}
-              onSelect={(preset) => void selectStrategy(preset)}
-            />
-          </div>
+          <StrategyPicker
+            selectedId={selectedId}
+            customStrategies={customStrategies}
+            modifiedPresetIds={modifiedPresetIds}
+            onSelect={(preset) => void selectStrategy(preset)}
+          />
         </div>
 
         {/* Column 2: optimization variables */}
