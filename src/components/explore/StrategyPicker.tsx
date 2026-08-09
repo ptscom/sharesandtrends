@@ -62,7 +62,7 @@ export function StrategyPicker({
         className="mt-2 w-full rounded-2xl border border-border bg-bg px-4 py-2 text-sm"
       />
 
-      <div className="mt-4 max-h-72 space-y-4 overflow-y-auto pr-1">
+      <div className="mt-4 space-y-4 pr-1">
         {Object.entries(filtered).map(([category, items]) => (
           <div key={category}>
             <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-muted">

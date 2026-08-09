@@ -206,16 +206,16 @@ export function ExploreClient() {
   const activePattern = buildPattern();
 
   return (
-    <div className="space-y-8">
-      <section className="grid gap-6 lg:grid-cols-2 lg:grid-rows-[auto_1fr]">
-        {/* Top left: strategy list */}
-        <div className="rounded-3xl border border-border bg-surface p-6 lg:row-start-1 lg:col-start-1">
+    <div className="space-y-6">
+      <section className="grid gap-6 lg:grid-cols-3 lg:items-stretch">
+        {/* Column 1: strategy list */}
+        <div className="flex min-h-[28rem] flex-col rounded-3xl border border-border bg-surface p-6">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <p className="text-xs uppercase tracking-[0.3em] text-muted">
                 Pattern builder
               </p>
-              <h2 className="mt-2 text-xl font-semibold text-ink">
+              <h2 className="mt-2 text-lg font-semibold text-ink">
                 {activePattern.name}
               </h2>
               <p className="mt-1 text-sm text-muted">
@@ -230,13 +230,13 @@ export function ExploreClient() {
             </div>
             <Link
               href="/strategies"
-              className="shrink-0 rounded-full border border-border px-4 py-2 text-xs text-brand hover:bg-brand/5"
+              className="shrink-0 rounded-full border border-border px-3 py-1.5 text-xs text-brand hover:bg-brand/5"
             >
-              Open strategy builder
+              Strategy builder
             </Link>
           </div>
 
-          <div className="mt-5">
+          <div className="mt-4 min-h-0 flex-1 overflow-y-auto">
             <StrategyPicker
               selectedId={selectedId}
               customStrategies={customStrategies}
@@ -246,8 +246,8 @@ export function ExploreClient() {
           </div>
         </div>
 
-        {/* Top right: optimization variables */}
-        <div className="rounded-3xl border border-border bg-surface p-6 lg:row-start-1 lg:col-start-2">
+        {/* Column 2: optimization variables */}
+        <div className="flex min-h-[28rem] flex-col rounded-3xl border border-border bg-surface p-6">
           <h3 className="text-sm font-semibold text-ink">
             Optimization variables
           </h3>
@@ -255,143 +255,144 @@ export function ExploreClient() {
             Adjust indicator periods, thresholds, and backtest settings before
             scanning.
           </p>
-          <div className="mt-4 max-h-[28rem] overflow-y-auto pr-1">
+          <div className="mt-4 min-h-0 flex-1 overflow-y-auto pr-1">
             <OptimizationPanel pattern={pattern} onChange={setPattern} />
           </div>
         </div>
 
-        {/* Bottom left: backtest results + scan controls */}
-        <div className="rounded-3xl border border-border bg-surface p-6 lg:row-start-2 lg:col-start-1">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <h2 className="text-xl font-semibold text-ink">Backtest results</h2>
+        {/* Column 3: backtest results + scan controls */}
+        <div className="flex min-h-[28rem] flex-col rounded-3xl border border-border bg-surface p-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-lg font-semibold text-ink">Backtest results</h2>
             <input
               value={previewSymbol}
               onChange={(e) => setPreviewSymbol(e.target.value.toUpperCase())}
-              className="rounded-full border border-border bg-bg px-4 py-2 font-mono text-sm"
+              className="rounded-full border border-border bg-bg px-3 py-1.5 font-mono text-sm"
             />
           </div>
 
-          {preview ? (
-            <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
-              <Stat label="Trades" value={String(preview.stats.trades)} />
-              <Stat
-                label="Win rate"
-                value={`${preview.stats.winRate.toFixed(1)}%`}
-              />
-              <Stat
-                label="Avg return"
-                value={`${preview.stats.avgReturnPct.toFixed(2)}%`}
-              />
-              <Stat
-                label="Sharpe"
-                value={
-                  preview.stats.sharpe != null
-                    ? preview.stats.sharpe.toFixed(2)
-                    : "—"
-                }
-              />
-            </div>
-          ) : (
-            <p className="mt-4 text-sm text-muted">
-              Select a strategy to see backtest metrics for {previewSymbol}.
-            </p>
-          )}
-
-          <div className="mt-6 grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-xs uppercase tracking-[0.2em] text-muted">
-                Min win rate %
-              </label>
-              <input
-                type="number"
-                min={0}
-                max={100}
-                value={minWinRate}
-                onChange={(e) => setMinWinRate(Number(e.target.value))}
-                className="mt-2 w-full rounded-2xl border border-border bg-bg px-4 py-3 text-sm font-semibold"
-              />
-            </div>
-            <div>
-              <label className="text-xs uppercase tracking-[0.2em] text-muted">
-                Min trades
-              </label>
-              <input
-                type="number"
-                min={1}
-                max={500}
-                value={minTrades}
-                onChange={(e) => setMinTrades(Number(e.target.value))}
-                className="mt-2 w-full rounded-2xl border border-border bg-bg px-4 py-3 text-sm font-semibold"
-              />
-            </div>
-          </div>
-
-          <label className="mt-4 flex items-center gap-3 text-sm text-muted">
-            <input
-              type="checkbox"
-              checked={signalTodayOnly}
-              onChange={(e) => setSignalTodayOnly(e.target.checked)}
-              className="h-4 w-4 rounded border-border"
-            />
-            Only show symbols with a signal today
-          </label>
-
-          <div className="mt-6 flex flex-wrap gap-3">
-            <button
-              type="button"
-              onClick={() => void runScan()}
-              disabled={scanning}
-              className="rounded-full bg-brand px-6 py-3 text-sm font-semibold text-bg disabled:opacity-50"
-            >
-              {scanning
-                ? `Loading & scanning ${scanProgress.done}/${scanProgress.total}…`
-                : "Scan universe"}
-            </button>
-            <button
-              type="button"
-              onClick={() => void runPreview()}
-              className="rounded-full border border-border px-6 py-3 text-sm text-muted hover:text-ink"
-            >
-              Refresh preview
-            </button>
-          </div>
-
-          <p className="mt-4 text-xs text-muted">
-            {storedSymbols.length} symbols stored locally
-            {storedSymbols.length === 0 && (
-              <>
-                {" "}
-                —{" "}
-                <Link href="/data" className="text-brand underline">
-                  download data
-                </Link>{" "}
-                first
-              </>
-            )}
-          </p>
-        </div>
-
-        {/* Bottom right: chart */}
-        <div className="rounded-3xl border border-border bg-surface p-6 lg:row-start-2 lg:col-start-2">
-          <h2 className="text-xl font-semibold text-ink">Chart preview</h2>
-          <div className="mt-4">
-            {chartBars.length > 0 ? (
-              <PriceChart
-                bars={chartBars}
-                signals={preview?.signals ?? []}
-                emaFast={overlayFast.slice(-252)}
-                emaSlow={overlaySlow.slice(-252)}
-                patternMarkers={patternMarkers}
-              />
+          <div className="mt-4 min-h-0 flex-1 overflow-y-auto">
+            {preview ? (
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <Stat label="Trades" value={String(preview.stats.trades)} />
+                <Stat
+                  label="Win rate"
+                  value={`${preview.stats.winRate.toFixed(1)}%`}
+                />
+                <Stat
+                  label="Avg return"
+                  value={`${preview.stats.avgReturnPct.toFixed(2)}%`}
+                />
+                <Stat
+                  label="Sharpe"
+                  value={
+                    preview.stats.sharpe != null
+                      ? preview.stats.sharpe.toFixed(2)
+                      : "—"
+                  }
+                />
+              </div>
             ) : (
-              <p className="py-20 text-center text-sm text-muted">
-                No local data for {previewSymbol}.{" "}
-                <Link href="/data" className="text-brand underline">
-                  Fetch it
-                </Link>
+              <p className="text-sm text-muted">
+                Select a strategy to see backtest metrics for {previewSymbol}.
               </p>
             )}
+
+            <div className="mt-6 grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs uppercase tracking-[0.2em] text-muted">
+                  Min win rate %
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={minWinRate}
+                  onChange={(e) => setMinWinRate(Number(e.target.value))}
+                  className="mt-2 w-full rounded-2xl border border-border bg-bg px-3 py-2 text-sm font-semibold"
+                />
+              </div>
+              <div>
+                <label className="text-xs uppercase tracking-[0.2em] text-muted">
+                  Min trades
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={500}
+                  value={minTrades}
+                  onChange={(e) => setMinTrades(Number(e.target.value))}
+                  className="mt-2 w-full rounded-2xl border border-border bg-bg px-3 py-2 text-sm font-semibold"
+                />
+              </div>
+            </div>
+
+            <label className="mt-4 flex items-center gap-3 text-sm text-muted">
+              <input
+                type="checkbox"
+                checked={signalTodayOnly}
+                onChange={(e) => setSignalTodayOnly(e.target.checked)}
+                className="h-4 w-4 rounded border-border"
+              />
+              Only show symbols with a signal today
+            </label>
+
+            <div className="mt-5 flex flex-wrap gap-2">
+              <button
+                type="button"
+                onClick={() => void runScan()}
+                disabled={scanning}
+                className="rounded-full bg-brand px-5 py-2.5 text-sm font-semibold text-bg disabled:opacity-50"
+              >
+                {scanning
+                  ? `Scanning ${scanProgress.done}/${scanProgress.total}…`
+                  : "Scan universe"}
+              </button>
+              <button
+                type="button"
+                onClick={() => void runPreview()}
+                className="rounded-full border border-border px-5 py-2.5 text-sm text-muted hover:text-ink"
+              >
+                Refresh preview
+              </button>
+            </div>
+
+            <p className="mt-4 text-xs text-muted">
+              {storedSymbols.length} symbols stored locally
+              {storedSymbols.length === 0 && (
+                <>
+                  {" "}
+                  —{" "}
+                  <Link href="/data" className="text-brand underline">
+                    download data
+                  </Link>{" "}
+                  first
+                </>
+              )}
+            </p>
           </div>
+        </div>
+      </section>
+
+      <section className="rounded-3xl border border-border bg-surface p-6">
+        <h2 className="text-xl font-semibold text-ink">Chart preview</h2>
+        <div className="mt-4">
+          {chartBars.length > 0 ? (
+            <PriceChart
+              bars={chartBars}
+              signals={preview?.signals ?? []}
+              emaFast={overlayFast.slice(-252)}
+              emaSlow={overlaySlow.slice(-252)}
+              patternMarkers={patternMarkers}
+            />
+          ) : (
+            <p className="py-20 text-center text-sm text-muted">
+              No local data for {previewSymbol}.{" "}
+              <Link href="/data" className="text-brand underline">
+                Fetch it
+              </Link>
+            </p>
+          )}
         </div>
       </section>
 
