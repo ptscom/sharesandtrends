@@ -1,3 +1,5 @@
+import { getImplementedPatternIds } from "@/lib/patterns/candle-catalog";
+
 export interface IndicatorParamSchema {
   type: "int" | "float" | "enum";
   default: number | string;
@@ -259,27 +261,7 @@ export const INDICATOR_REGISTRY: IndicatorDefinition[] = [
       pattern: {
         type: "enum",
         default: "doji",
-        options: [
-          "doji",
-          "hammer",
-          "inverted_hammer",
-          "shooting_star",
-          "hanging_man",
-          "bullish_engulfing",
-          "bearish_engulfing",
-          "bullish_marubozu",
-          "bearish_marubozu",
-          "piercing_line",
-          "dark_cloud_cover",
-          "morning_star",
-          "evening_star",
-          "three_white_soldiers",
-          "three_black_crows",
-          "tweezer_top",
-          "tweezer_bottom",
-          "gap_up",
-          "gap_down",
-        ],
+        options: getImplementedPatternIds(),
         label: "Pattern",
       },
       bodyRatio: {
