@@ -11,12 +11,14 @@ import {
 interface StrategyPickerProps {
   selectedId: string;
   customStrategies?: StrategyPreset[];
+  modifiedPresetIds?: string[];
   onSelect: (preset: StrategyPreset) => void;
 }
 
 export function StrategyPicker({
   selectedId,
   customStrategies = [],
+  modifiedPresetIds = [],
   onSelect,
 }: StrategyPickerProps) {
   const [query, setQuery] = useState("");
@@ -78,7 +80,10 @@ export function StrategyPicker({
                       : "border-border text-muted hover:border-brand/40 hover:text-ink"
                   }`}
                 >
-                  <span className="font-semibold">{preset.pattern.name}</span>
+                  <span className="font-semibold">
+                    {preset.pattern.name}
+                    {modifiedPresetIds.includes(preset.id) ? " *" : ""}
+                  </span>
                   <span className="mt-0.5 block text-xs opacity-80">
                     {preset.entryLogic}
                   </span>

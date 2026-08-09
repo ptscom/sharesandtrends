@@ -6,6 +6,12 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { INDICATOR_REGISTRY } from "@/lib/engine/registry";
 import { summarizeIndicatorParams } from "@/lib/patterns/optimization";
 import {
+  getEffectivePreset,
+  isBuiltInPresetId,
+  listModifiedPresetIds,
+  revertPresetToDefault,
+} from "@/lib/patterns/preset-store";
+import {
   blankPattern,
   buildExpression,
   defaultIndicator,
@@ -19,6 +25,7 @@ import { EMA_CROSS_PATTERN } from "@/lib/patterns/defaults";
 import { STRATEGY_PRESETS } from "@/lib/patterns/strategies";
 import {
   deletePattern,
+  getPattern,
   listPatterns,
   savePattern,
 } from "@/lib/storage/patterns";
@@ -39,7 +46,9 @@ export function StrategyBuilder() {
   const router = useRouter();
   const [pattern, setPattern] = useState<PatternDefinition>(EMA_CROSS_PATTERN);
   const [selectedSource, setSelectedSource] = useState("ema-cross");
-  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editingId, setEditingId] = useState<string | null>("ema-cross");
+  const [isModified, setIsModified] = useState(false);
+  const [modifiedPresetIds, setModifiedPresetIds] = useState<string[]>([]);
   const [savedPatterns, setSavedPatterns] = useState<PatternDefinition[]>([]);
   const [useFilter, setUseFilter] = useState(false);
   const [status, setStatus] = useState<string | null>(null);
@@ -62,9 +71,13 @@ export function StrategyBuilder() {
   const seriesRefs = useMemo(() => listSeriesRefs(pattern), [pattern]);
 
   const refreshSaved = useCallback(async () => {
-    const list = await listPatterns();
+    const [list, modified] = await Promise.all([
+      listPatterns(),
+      listModifiedPresetIds(),
+    ]);
     const presetIds = new Set(STRATEGY_PRESETS.map((s) => s.id));
     setSavedPatterns(list.filter((p) => p.id && !presetIds.has(p.id)));
+    setModifiedPresetIds(modified);
   }, []);
 
   useEffect(() => {
@@ -72,34 +85,50 @@ export function StrategyBuilder() {
   }, [refreshSaved]);
 
   useEffect(() => {
+    void getEffectivePreset("ema-cross").then(({ pattern, isModified }) => {
+      setPattern(structuredClone(pattern));
+      setIsModified(isModified);
+    });
+  }, []);
+
+  useEffect(() => {
     setUseFilter(Boolean(pattern.filters));
   }, [pattern.filters]);
 
   const isPresetId = useCallback(
-    (id: string) => STRATEGY_PRESETS.some((s) => s.id === id),
+    (id: string) => isBuiltInPresetId(id),
     [],
   );
 
-  const loadPreset = (id: string) => {
-    const preset = STRATEGY_PRESETS.find((s) => s.id === id);
-    if (preset) {
-      setSelectedSource(id);
-      setEditingId(null);
-      const { id: _omit, ...patternWithoutId } = structuredClone(preset.pattern);
-      setPattern(patternWithoutId);
+  const loadPreset = async (id: string) => {
+    if (id === "__blank") {
+      loadBlank();
       return;
     }
-    const custom = savedPatterns.find((p) => p.id === id);
-    if (custom) {
+
+    if (isBuiltInPresetId(id)) {
+      const { pattern, isModified: modified } = await getEffectivePreset(id);
       setSelectedSource(id);
-      setEditingId(custom.id!);
-      setPattern(structuredClone(custom));
+      setEditingId(id);
+      setIsModified(modified);
+      setPattern(structuredClone(pattern));
+      return;
+    }
+
+    const stored =
+      savedPatterns.find((p) => p.id === id) ?? (await getPattern(id));
+    if (stored) {
+      setSelectedSource(id);
+      setEditingId(stored.id!);
+      setIsModified(false);
+      setPattern(structuredClone(stored));
     }
   };
 
   const loadBlank = () => {
     setSelectedSource("__blank");
     setEditingId(null);
+    setIsModified(false);
     setPattern(blankPattern());
   };
 
@@ -121,8 +150,12 @@ export function StrategyBuilder() {
     setSaving(true);
     setError(null);
     try {
-      const isUpdate = editingId != null;
-      const id = editingId ?? uuidv4();
+      const id =
+        editingId ??
+        (isPresetId(selectedSource) ? selectedSource : uuidv4());
+      const savingPreset = isPresetId(id);
+      const isUpdate = savingPreset ? isModified || (await getPattern(id)) != null : editingId != null;
+
       const saved = await savePattern({
         ...pattern,
         id,
@@ -131,11 +164,14 @@ export function StrategyBuilder() {
       setPattern(saved);
       setEditingId(saved.id!);
       setSelectedSource(saved.id!);
+      if (savingPreset) setIsModified(true);
       await refreshSaved();
       setStatus(
-        isUpdate
-          ? `Updated "${saved.name}".`
-          : `Saved "${saved.name}" as a new custom strategy.`,
+        savingPreset
+          ? `Saved your changes to "${saved.name}".`
+          : isUpdate
+            ? `Updated "${saved.name}".`
+            : `Saved "${saved.name}" as a new custom strategy.`,
       );
       setTimeout(() => setStatus(null), 4000);
       return saved;
@@ -161,12 +197,38 @@ export function StrategyBuilder() {
       setPattern(saved);
       setEditingId(saved.id!);
       setSelectedSource(saved.id!);
+      setIsModified(false);
       await refreshSaved();
       setStatus(`Saved "${saved.name}" as a new custom strategy.`);
       setTimeout(() => setStatus(null), 4000);
     } catch (err) {
       const message =
         err instanceof Error ? err.message : "Failed to save strategy";
+      setError(message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleRevert = async () => {
+    const presetId = editingId ?? (isPresetId(selectedSource) ? selectedSource : null);
+    if (!presetId || !isPresetId(presetId)) return;
+
+    setSaving(true);
+    setError(null);
+    try {
+      await revertPresetToDefault(presetId);
+      const { pattern: defaults } = await getEffectivePreset(presetId);
+      setPattern(structuredClone(defaults));
+      setEditingId(presetId);
+      setSelectedSource(presetId);
+      setIsModified(false);
+      await refreshSaved();
+      setStatus(`Reverted "${defaults.name}" to factory defaults.`);
+      setTimeout(() => setStatus(null), 4000);
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Failed to revert strategy";
       setError(message);
     } finally {
       setSaving(false);
@@ -201,6 +263,9 @@ export function StrategyBuilder() {
     !isPresetId(editingId) &&
     savedPatterns.some((p) => p.id === editingId);
 
+  const canRevertPreset =
+    isPresetId(editingId ?? selectedSource) && isModified;
+
   return (
     <div className="space-y-8">
       <section className="rounded-3xl border border-border bg-surface p-8">
@@ -213,8 +278,8 @@ export function StrategyBuilder() {
               Create & edit strategies
             </h1>
             <p className="mt-2 text-sm text-muted">
-              Modify built-in presets or save your own. Custom strategies appear
-              in Explore and run with the same scan engine.
+              Built-in presets can be customized and saved in your browser.
+              Revert to defaults restores the original factory settings.
             </p>
           </div>
           <Link
@@ -233,11 +298,7 @@ export function StrategyBuilder() {
             <select
               value={selectedSource}
               onChange={(e) => {
-                if (e.target.value === "__blank") {
-                  loadBlank();
-                  return;
-                }
-                loadPreset(e.target.value);
+                void loadPreset(e.target.value);
               }}
               className="mt-3 w-full rounded-2xl border border-border bg-bg px-4 py-3 text-sm"
             >
@@ -245,6 +306,7 @@ export function StrategyBuilder() {
                 {STRATEGY_PRESETS.map((s) => (
                   <option key={s.id} value={s.id}>
                     {s.pattern.name}
+                    {modifiedPresetIds.includes(s.id) ? " (customized)" : ""}
                   </option>
                 ))}
               </optgroup>
@@ -260,10 +322,12 @@ export function StrategyBuilder() {
               <option value="__blank">Blank EMA crossover template</option>
             </select>
             <p className="mt-2 text-xs text-muted">
-              {editingId
-                ? "Editing a saved custom strategy — Save updates this version."
-                : isPresetId(selectedSource)
-                  ? "Editing a built-in preset — first Save creates a custom copy; further saves update that copy."
+              {isPresetId(editingId ?? selectedSource)
+                ? isModified
+                  ? "This preset has customized settings saved in your browser."
+                  : "Using factory defaults — save to keep any changes you make."
+                : editingId
+                  ? "Editing a saved custom strategy — Save updates this version."
                   : "Unsaved draft — Save creates a new custom strategy."}
             </p>
 
@@ -482,6 +546,16 @@ export function StrategyBuilder() {
               >
                 Save & scan in Explore
               </button>
+              {canRevertPreset && (
+                <button
+                  type="button"
+                  onClick={() => void handleRevert()}
+                  disabled={saving}
+                  className="rounded-full border border-border px-6 py-3 text-sm text-muted hover:text-ink disabled:opacity-50"
+                >
+                  Revert to defaults
+                </button>
+              )}
               {isCustomSaved && (
                 <button
                   type="button"

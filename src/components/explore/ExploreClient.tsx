@@ -13,6 +13,11 @@ import { runUniverseScanInWorker } from "@/lib/engine/scan-worker-client";
 import { patternToPreset } from "@/lib/patterns/custom";
 import { EMA_CROSS_PATTERN } from "@/lib/patterns/defaults";
 import { chartOverlays } from "@/lib/patterns/optimization";
+import {
+  getEffectivePreset,
+  isBuiltInPresetId,
+  listModifiedPresetIds,
+} from "@/lib/patterns/preset-store";
 import type { StrategyPreset } from "@/lib/patterns/strategies";
 import { STRATEGY_PRESETS } from "@/lib/patterns/strategies";
 import {
@@ -31,6 +36,7 @@ export function ExploreClient() {
   const [selectedId, setSelectedId] = useState("ema-cross");
   const [pattern, setPattern] = useState<PatternDefinition>(EMA_CROSS_PATTERN);
   const [customStrategies, setCustomStrategies] = useState<StrategyPreset[]>([]);
+  const [modifiedPresetIds, setModifiedPresetIds] = useState<string[]>([]);
   const [minWinRate, setMinWinRate] = useState(70);
   const [minTrades, setMinTrades] = useState(5);
   const [signalTodayOnly, setSignalTodayOnly] = useState(false);
@@ -46,9 +52,14 @@ export function ExploreClient() {
     import("@/lib/types").OhlcvBar[]
   >([]);
 
-  const selectStrategy = useCallback((preset: StrategyPreset) => {
+  const selectStrategy = useCallback(async (preset: StrategyPreset) => {
     setSelectedId(preset.id);
-    setPattern(structuredClone(preset.pattern));
+    if (isBuiltInPresetId(preset.id)) {
+      const { pattern } = await getEffectivePreset(preset.id);
+      setPattern(structuredClone(pattern));
+    } else {
+      setPattern(structuredClone(preset.pattern));
+    }
   }, []);
 
   const buildPattern = useCallback((): PatternDefinition => pattern, [pattern]);
@@ -66,17 +77,30 @@ export function ExploreClient() {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const list = await listPatterns();
+      const [list, modified] = await Promise.all([
+        listPatterns(),
+        listModifiedPresetIds(),
+      ]);
       const presetIds = new Set(STRATEGY_PRESETS.map((s) => s.id));
       const custom = list
         .filter((p) => p.id && !presetIds.has(p.id))
         .map(patternToPreset);
-      if (!cancelled) setCustomStrategies(custom);
+      if (!cancelled) {
+        setCustomStrategies(custom);
+        setModifiedPresetIds(modified);
+      }
     })();
     return () => {
       cancelled = true;
     };
   }, []);
+
+  useEffect(() => {
+    if (searchParams.get("patternId")) return;
+    void getEffectivePreset("ema-cross").then(({ pattern }) => {
+      setPattern(structuredClone(pattern));
+    });
+  }, [searchParams]);
 
   useEffect(() => {
     const patternId = searchParams.get("patternId");
@@ -85,15 +109,18 @@ export function ExploreClient() {
     void (async () => {
       const preset = STRATEGY_PRESETS.find((s) => s.id === patternId);
       if (preset) {
-        selectStrategy(preset);
+        const { pattern } = await getEffectivePreset(patternId);
+        setSelectedId(patternId);
+        setPattern(structuredClone(pattern));
         return;
       }
       const stored = await getPattern(patternId);
       if (stored) {
-        selectStrategy(patternToPreset(stored));
+        setSelectedId(patternId);
+        setPattern(structuredClone(stored));
       }
     })();
-  }, [searchParams, selectStrategy]);
+  }, [searchParams]);
 
   const selectedPreset =
     STRATEGY_PRESETS.find((s) => s.id === selectedId) ??
@@ -285,7 +312,8 @@ export function ExploreClient() {
           <StrategyPicker
             selectedId={selectedId}
             customStrategies={customStrategies}
-            onSelect={selectStrategy}
+            modifiedPresetIds={modifiedPresetIds}
+            onSelect={(preset) => void selectStrategy(preset)}
           />
         </div>
 
