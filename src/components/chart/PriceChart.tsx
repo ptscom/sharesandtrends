@@ -42,25 +42,25 @@ export function PriceChart({
     const chart = createChart(containerRef.current, {
       height,
       layout: {
-        background: { type: ColorType.Solid, color: "#0f1419" },
-        textColor: "#9aa4b2",
+        background: { type: ColorType.Solid, color: "#ffffff" },
+        textColor: "#6b7280",
       },
       grid: {
-        vertLines: { color: "#1e2732" },
-        horzLines: { color: "#1e2732" },
+        vertLines: { color: "#f0ebe3" },
+        horzLines: { color: "#f0ebe3" },
       },
-      rightPriceScale: { borderColor: "#2a3544" },
-      timeScale: { borderColor: "#2a3544" },
+      rightPriceScale: { borderColor: "#e8e4dd" },
+      timeScale: { borderColor: "#e8e4dd" },
     });
 
     const candleSeries = chart.addSeries(CandlestickSeries, {
-      upColor: "#0f6a4a",
-      downColor: "#df6b4c",
+      upColor: "#16a34a",
+      downColor: "#dc4c3f",
       borderVisible: true,
-      borderUpColor: "#0f6a4a",
-      borderDownColor: "#df6b4c",
-      wickUpColor: "#0f6a4a",
-      wickDownColor: "#df6b4c",
+      borderUpColor: "#16a34a",
+      borderDownColor: "#dc4c3f",
+      wickUpColor: "#16a34a",
+      wickDownColor: "#dc4c3f",
     });
 
     candleSeries.setData(
@@ -75,7 +75,7 @@ export function PriceChart({
 
     if (emaFast?.length) {
       const line = chart.addSeries(LineSeries, {
-        color: "#5b9bd5",
+        color: "#3b82f6",
         lineWidth: 2,
       });
       line.setData(
@@ -91,7 +91,7 @@ export function PriceChart({
 
     if (emaSlow?.length) {
       const line = chart.addSeries(LineSeries, {
-        color: "#e8b84a",
+        color: "#e8a317",
         lineWidth: 2,
       });
       line.setData(
@@ -112,7 +112,7 @@ export function PriceChart({
           s.type === "entry"
             ? ("belowBar" as const)
             : ("aboveBar" as const),
-        color: s.type === "entry" ? "#0f6a4a" : "#df6b4c",
+        color: s.type === "entry" ? "#16a34a" : "#dc4c3f",
         shape:
           s.type === "entry" ? ("arrowUp" as const) : ("arrowDown" as const),
         text: s.type === "entry" ? "Entry" : "Exit",
@@ -120,7 +120,7 @@ export function PriceChart({
       const candleMarkers = patternMarkers.map((m) => ({
         time: toUtc(m.date),
         position: "aboveBar" as const,
-        color: "#e8b84a",
+        color: "#e8a317",
         shape: "circle" as const,
         text: m.label,
       }));

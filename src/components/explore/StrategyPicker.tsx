@@ -76,8 +76,8 @@ export function StrategyPicker({
                   onClick={() => onSelect(preset)}
                   className={`rounded-xl border px-3 py-2 text-left text-sm transition ${
                     selectedId === preset.id
-                      ? "border-brand bg-brand/10 text-ink"
-                      : "border-border text-muted hover:border-brand/40 hover:text-ink"
+                      ? "border-brand bg-brand/10 text-ink shadow-sm"
+                      : "border-border text-muted hover:border-brand/40 hover:bg-bg hover:text-ink"
                   }`}
                 >
                   <span className="font-semibold">
