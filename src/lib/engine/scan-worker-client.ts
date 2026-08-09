@@ -1,9 +1,11 @@
 import type { OhlcvBar, PatternDefinition, ScanRun } from "@/lib/types";
-import { getPriceBars } from "@/lib/storage/prices";
+import { getPriceBarsBatch } from "@/lib/storage/prices";
 import type {
   ScanWorkerRequest,
   ScanWorkerResponse,
 } from "@/workers/scan.worker";
+
+export type ScanProgressPhase = "loading" | "scanning";
 
 export interface WorkerScanOptions {
   universe: string[];
@@ -11,7 +13,7 @@ export interface WorkerScanOptions {
   minWinRate?: number;
   minTrades?: number;
   signalTodayOnly?: boolean;
-  onProgress?: (done: number, total: number) => void;
+  onProgress?: (done: number, total: number, phase: ScanProgressPhase) => void;
 }
 
 let worker: Worker | null = null;
@@ -38,13 +40,9 @@ export async function runUniverseScanInWorker(
     onProgress,
   } = options;
 
-  const priceData: Record<string, OhlcvBar[]> = {};
-  for (let i = 0; i < universe.length; i++) {
-    const symbol = universe[i]!;
-    onProgress?.(i + 1, universe.length);
-    const bars = await getPriceBars(symbol);
-    if (bars.length > 0) priceData[symbol] = bars;
-  }
+  const priceData = await getPriceBarsBatch(universe, (done, total) => {
+    onProgress?.(done, total, "loading");
+  });
 
   const requestId = crypto.randomUUID();
   const w = getWorker();
@@ -55,7 +53,7 @@ export async function runUniverseScanInWorker(
       if (msg.requestId !== requestId) return;
 
       if (msg.type === "progress") {
-        onProgress?.(msg.done, msg.total);
+        onProgress?.(msg.done, msg.total, "scanning");
         return;
       }
 

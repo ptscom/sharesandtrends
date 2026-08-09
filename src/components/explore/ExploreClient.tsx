@@ -43,6 +43,7 @@ export function ExploreClient() {
   const [minTrades, setMinTrades] = useState(5);
   const [signalTodayOnly, setSignalTodayOnly] = useState(false);
   const [scanning, setScanning] = useState(false);
+  const [scanPhase, setScanPhase] = useState<"loading" | "scanning">("loading");
   const [scanProgress, setScanProgress] = useState({ done: 0, total: 0 });
   const [scan, setScan] = useState<ScanRun | null>(null);
   const [previewSymbol, setPreviewSymbol] = useState("AAPL");
@@ -148,18 +149,27 @@ export function ExploreClient() {
     }
 
     setScanning(true);
+    setScanPhase("loading");
     setScanProgress({ done: 0, total: universe.length });
 
     try {
-      const p = buildPattern();
-      const saved = await savePattern({ ...p, id: p.id ?? selectedId });
+      const built = buildPattern();
+      const p = { ...built, id: built.id ?? selectedId };
+      const needsSave =
+        !isBuiltInPresetId(selectedId) ||
+        modifiedPresetIds.includes(selectedId);
+      const patternForScan = needsSave ? await savePattern(p) : p;
+
       const result = await runUniverseScanInWorker({
         universe,
-        pattern: saved,
+        pattern: patternForScan,
         minWinRate,
         minTrades,
         signalTodayOnly,
-        onProgress: (done, total) => setScanProgress({ done, total }),
+        onProgress: (done, total, phase) => {
+          setScanPhase(phase);
+          setScanProgress({ done, total });
+        },
       });
       await saveScanRun(result);
       setScan(result);
@@ -177,6 +187,7 @@ export function ExploreClient() {
     signalTodayOnly,
     router,
     selectedId,
+    modifiedPresetIds,
   ]);
 
   useEffect(() => {
@@ -197,10 +208,15 @@ export function ExploreClient() {
         setOverlayFast(overlays.fast ?? []);
         setOverlaySlow(overlays.slow ?? []);
         const windowDates = new Set(windowBars.map((b) => b.date));
+        const hasCandlePatterns = p.indicators.some(
+          (ind) => ind.type === "candle_pattern",
+        );
         setPatternMarkers(
-          extractCandlePatternMarkers(bars, ctx.series, p.indicators).filter(
-            (m) => windowDates.has(m.date),
-          ),
+          hasCandlePatterns
+            ? extractCandlePatternMarkers(bars, ctx.series, p.indicators).filter(
+                (m) => windowDates.has(m.date),
+              )
+            : [],
         );
         setPreview(runBacktest(previewSymbol, bars, p));
       } else {
@@ -217,7 +233,7 @@ export function ExploreClient() {
   const activePattern = buildPattern();
 
   return (
-    <div className="mx-auto max-w-7xl space-y-6 px-6 py-8">
+    <div className="space-y-6">
       <section className="grid gap-6 lg:grid-cols-3 lg:items-stretch">
         {/* Column 1: select strategy */}
         <div className="flex min-h-[24rem] flex-col rounded-2xl border border-border bg-surface p-6 shadow-sm">
@@ -302,7 +318,9 @@ export function ExploreClient() {
                 className="w-full rounded-full bg-brand px-5 py-3 text-sm font-semibold text-brand-foreground shadow-sm disabled:opacity-50"
               >
                 {scanning
-                  ? `Scanning ${scanProgress.done}/${scanProgress.total}…`
+                  ? scanPhase === "loading"
+                    ? `Loading prices ${scanProgress.done}/${scanProgress.total}…`
+                    : `Scanning ${scanProgress.done}/${scanProgress.total}…`
                   : "Scan universe"}
               </button>
               <button

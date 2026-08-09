@@ -1,5 +1,6 @@
 "use client";
 
+import { useMemo } from "react";
 import { EquityCurveChart } from "@/components/chart/EquityCurveChart";
 import { MonthlyReturnsHeatmap } from "@/components/chart/MonthlyReturnsHeatmap";
 import { ReturnDistributionChart } from "@/components/chart/ReturnDistributionChart";
@@ -32,16 +33,29 @@ export function BacktestResultsPanel({
   symbolInput,
   onSymbolChange,
 }: BacktestResultsPanelProps) {
-  const extendedStats = preview ? computeExtendedStats(preview) : null;
-  const equityCurves =
-    preview && fullBars.length > 0
-      ? computeEquityCurves(fullBars, preview.trades)
-      : null;
-  const monthlyReturns = preview ? computeMonthlyReturns(preview.trades) : [];
-  const distribution = preview
-    ? computeReturnDistribution(preview.trades)
-    : [];
-  const avgReturn = preview ? meanReturn(preview.trades) : 0;
+  const extendedStats = useMemo(
+    () => (preview ? computeExtendedStats(preview) : null),
+    [preview],
+  );
+  const equityCurves = useMemo(
+    () =>
+      preview && fullBars.length > 0
+        ? computeEquityCurves(fullBars, preview.trades)
+        : null,
+    [preview, fullBars],
+  );
+  const monthlyReturns = useMemo(
+    () => (preview ? computeMonthlyReturns(preview.trades) : []),
+    [preview],
+  );
+  const distribution = useMemo(
+    () => (preview ? computeReturnDistribution(preview.trades) : []),
+    [preview],
+  );
+  const avgReturn = useMemo(
+    () => (preview ? meanReturn(preview.trades) : 0),
+    [preview],
+  );
 
   return (
     <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm">

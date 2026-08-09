@@ -23,6 +23,33 @@ export async function getPriceBars(symbol: string): Promise<OhlcvBar[]> {
   return record?.bars ?? [];
 }
 
+const PRICE_LOAD_BATCH = 24;
+
+/** Load OHLCV for many symbols in parallel batches (faster than sequential). */
+export async function getPriceBarsBatch(
+  symbols: string[],
+  onProgress?: (done: number, total: number) => void,
+): Promise<Record<string, OhlcvBar[]>> {
+  const out: Record<string, OhlcvBar[]> = {};
+  const total = symbols.length;
+
+  for (let i = 0; i < symbols.length; i += PRICE_LOAD_BATCH) {
+    const batch = symbols.slice(i, i + PRICE_LOAD_BATCH);
+    const rows = await Promise.all(
+      batch.map(async (symbol) => ({
+        symbol,
+        bars: await getPriceBars(symbol),
+      })),
+    );
+    for (const { symbol, bars } of rows) {
+      if (bars.length > 0) out[symbol] = bars;
+    }
+    onProgress?.(Math.min(i + batch.length, total), total);
+  }
+
+  return out;
+}
+
 export async function listSymbols(): Promise<SymbolMeta[]> {
   return getDb().symbols.orderBy("symbol").toArray();
 }
