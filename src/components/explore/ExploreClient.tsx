@@ -55,6 +55,9 @@ export function ExploreClient() {
   const [chartBars, setChartBars] = useState<
     import("@/lib/types").OhlcvBar[]
   >([]);
+  const [dataRange, setDataRange] = useState<{ from: string; to: string } | null>(
+    null,
+  );
 
   const selectStrategy = useCallback(async (preset: StrategyPreset) => {
     setSelectedId(preset.id);
@@ -181,6 +184,11 @@ export function ExploreClient() {
       const bars = await getPriceBars(previewSymbol);
       const windowBars = bars.slice(-252);
       setChartBars(windowBars);
+      setDataRange(
+        bars.length > 0
+          ? { from: bars[0]!.date, to: bars[bars.length - 1]!.date }
+          : null,
+      );
       if (bars.length > 0) {
         const p = buildPattern();
         const ctx = computeIndicators(bars, p.indicators);
@@ -199,21 +207,23 @@ export function ExploreClient() {
         setOverlaySlow([]);
         setPatternMarkers([]);
         setPreview(null);
+        setDataRange(null);
       }
     })();
   }, [previewSymbol, buildPattern]);
 
   const activePattern = buildPattern();
+  const extendedStats = preview ? computeExtendedStats(preview) : null;
 
   return (
     <div className="space-y-6">
       <section className="grid gap-6 lg:grid-cols-3 lg:items-stretch">
-        {/* Column 1: strategy list */}
-        <div className="flex min-h-[28rem] flex-col rounded-3xl border border-border bg-surface p-6">
-          <div className="flex flex-wrap items-start justify-between gap-4">
+        {/* Column 1: select strategy */}
+        <div className="flex min-h-[24rem] flex-col rounded-3xl border border-border bg-surface p-6">
+          <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
               <p className="text-xs uppercase tracking-[0.3em] text-muted">
-                Pattern builder
+                Select strategy
               </p>
               <h2 className="mt-2 text-lg font-semibold text-ink">
                 {activePattern.name}
@@ -223,8 +233,7 @@ export function ExploreClient() {
               </p>
               {selectedPreset && (
                 <p className="mt-1 text-xs text-muted">
-                  Params: {selectedPreset.defaultParams} · Exit:{" "}
-                  {selectedPreset.exitLogic}
+                  {selectedPreset.defaultParams} · {selectedPreset.exitLogic}
                 </p>
               )}
             </div>
@@ -246,20 +255,27 @@ export function ExploreClient() {
           </div>
         </div>
 
-        {/* Column 2: optimization variables + scan controls */}
-        <div className="flex min-h-[28rem] flex-col rounded-3xl border border-border bg-surface p-6">
+        {/* Column 2: optimization variables */}
+        <div className="flex min-h-[24rem] flex-col rounded-3xl border border-border bg-surface p-6">
           <h3 className="text-sm font-semibold text-ink">
             Optimization variables
           </h3>
           <p className="mt-1 text-xs text-muted">
-            Adjust indicator periods, thresholds, and backtest settings before
-            scanning.
+            Adjust indicator periods, thresholds, and backtest settings.
           </p>
           <div className="mt-4 min-h-0 flex-1 overflow-y-auto pr-1">
             <OptimizationPanel pattern={pattern} onChange={setPattern} />
           </div>
+        </div>
 
-          <div className="mt-6 shrink-0 border-t border-border pt-6">
+        {/* Column 3: scan universe */}
+        <div className="flex min-h-[24rem] flex-col rounded-3xl border border-border bg-surface p-6">
+          <h3 className="text-sm font-semibold text-ink">Scan universe</h3>
+          <p className="mt-1 text-xs text-muted">
+            Filter symbols and run a universe scan with the current strategy.
+          </p>
+
+          <div className="mt-5 flex-1">
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-xs uppercase tracking-[0.2em] text-muted">
@@ -299,12 +315,12 @@ export function ExploreClient() {
               Only show symbols with a signal today
             </label>
 
-            <div className="mt-5 flex flex-wrap gap-2">
+            <div className="mt-6 flex flex-col gap-2">
               <button
                 type="button"
                 onClick={() => void runScan()}
                 disabled={scanning}
-                className="rounded-full bg-brand px-5 py-2.5 text-sm font-semibold text-bg disabled:opacity-50"
+                className="w-full rounded-full bg-brand px-5 py-3 text-sm font-semibold text-bg disabled:opacity-50"
               >
                 {scanning
                   ? `Scanning ${scanProgress.done}/${scanProgress.total}…`
@@ -313,7 +329,7 @@ export function ExploreClient() {
               <button
                 type="button"
                 onClick={() => void runPreview()}
-                className="rounded-full border border-border px-5 py-2.5 text-sm text-muted hover:text-ink"
+                className="w-full rounded-full border border-border px-5 py-2.5 text-sm text-muted hover:text-ink"
               >
                 Refresh preview
               </button>
@@ -334,46 +350,127 @@ export function ExploreClient() {
             </p>
           </div>
         </div>
+      </section>
 
-        {/* Column 3: backtest results */}
-        <div className="flex min-h-[28rem] flex-col rounded-3xl border border-border bg-surface p-6">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-lg font-semibold text-ink">Backtest results</h2>
-            <input
-              value={previewSymbol}
-              onChange={(e) => setPreviewSymbol(e.target.value.toUpperCase())}
-              className="rounded-full border border-border bg-bg px-3 py-1.5 font-mono text-sm"
-            />
+      {/* Full-width backtest results */}
+      <section className="rounded-3xl border border-border bg-surface p-6">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <h2 className="text-xl font-semibold text-ink">Backtest results</h2>
+            <p className="mt-1 text-sm text-muted">
+              {activePattern.name}
+              {dataRange && (
+                <>
+                  {" "}
+                  · {dataRange.from} → {dataRange.to}
+                </>
+              )}
+            </p>
           </div>
-
-          <div className="mt-4 min-h-0 flex-1 overflow-y-auto">
-            {preview ? (
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <Stat label="Trades" value={String(preview.stats.trades)} />
-                <Stat
-                  label="Win rate"
-                  value={`${preview.stats.winRate.toFixed(1)}%`}
-                />
-                <Stat
-                  label="Avg return"
-                  value={`${preview.stats.avgReturnPct.toFixed(2)}%`}
-                />
-                <Stat
-                  label="Sharpe"
-                  value={
-                    preview.stats.sharpe != null
-                      ? preview.stats.sharpe.toFixed(2)
-                      : "—"
-                  }
-                />
-              </div>
-            ) : (
-              <p className="text-sm text-muted">
-                Select a strategy to see backtest metrics for {previewSymbol}.
-              </p>
-            )}
-          </div>
+          <input
+            value={previewSymbol}
+            onChange={(e) => setPreviewSymbol(e.target.value.toUpperCase())}
+            className="rounded-full border border-border bg-bg px-4 py-2 font-mono text-sm"
+          />
         </div>
+
+        {preview && extendedStats ? (
+          <>
+            <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4 xl:grid-cols-7">
+              <Stat
+                label="Total return"
+                value={`${extendedStats.totalReturnPct >= 0 ? "+" : ""}${extendedStats.totalReturnPct.toFixed(2)}%`}
+                highlight={extendedStats.totalReturnPct >= 0}
+              />
+              <Stat
+                label="Sharpe"
+                value={
+                  preview.stats.sharpe != null
+                    ? preview.stats.sharpe.toFixed(2)
+                    : "—"
+                }
+              />
+              <Stat
+                label="Max drawdown"
+                value={`${extendedStats.maxDrawdownPct.toFixed(2)}%`}
+                negative
+              />
+              <Stat
+                label="Win rate"
+                value={`${preview.stats.winRate.toFixed(1)}%`}
+              />
+              <Stat label="Trades" value={String(preview.stats.trades)} />
+              <Stat
+                label="Profit factor"
+                value={
+                  extendedStats.profitFactor === Infinity
+                    ? "∞"
+                    : extendedStats.profitFactor.toFixed(2)
+                }
+              />
+              <Stat
+                label="Avg return"
+                value={`${preview.stats.avgReturnPct.toFixed(2)}%`}
+              />
+            </div>
+
+            {preview.trades.length > 0 && (
+              <div className="mt-6">
+                <h3 className="text-sm font-semibold text-ink">
+                  Trade log (recent 5)
+                </h3>
+                <div className="mt-3 overflow-x-auto">
+                  <table className="w-full min-w-[640px] text-left text-sm">
+                    <thead>
+                      <tr className="border-b border-border text-xs uppercase tracking-[0.15em] text-muted">
+                        <th className="py-2 pr-4">Entry</th>
+                        <th className="py-2 pr-4">Exit</th>
+                        <th className="py-2 pr-4">Type</th>
+                        <th className="py-2 pr-4">Entry price</th>
+                        <th className="py-2 pr-4">Exit price</th>
+                        <th className="py-2 pr-4">Days held</th>
+                        <th className="py-2">Return</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[...preview.trades].reverse().slice(0, 5).map((t) => (
+                        <tr
+                          key={`${t.entryDate}-${t.exitDate}`}
+                          className="border-b border-border/40"
+                        >
+                          <td className="py-2 pr-4">{t.entryDate}</td>
+                          <td className="py-2 pr-4">{t.exitDate}</td>
+                          <td className="py-2 pr-4">
+                            <span className="rounded-full bg-brand/10 px-2 py-0.5 text-xs font-semibold uppercase text-brand">
+                              {t.side}
+                            </span>
+                          </td>
+                          <td className="py-2 pr-4 font-mono">
+                            ${t.entryPrice.toFixed(2)}
+                          </td>
+                          <td className="py-2 pr-4 font-mono">
+                            ${t.exitPrice.toFixed(2)}
+                          </td>
+                          <td className="py-2 pr-4">{t.holdDays}</td>
+                          <td
+                            className={`py-2 font-semibold ${t.returnPct >= 0 ? "text-brand" : "text-danger"}`}
+                          >
+                            {t.returnPct >= 0 ? "+" : ""}
+                            {t.returnPct.toFixed(2)}%
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+          </>
+        ) : (
+          <p className="mt-5 text-sm text-muted">
+            Select a strategy to see backtest metrics for {previewSymbol}.
+          </p>
+        )}
       </section>
 
       <section className="rounded-3xl border border-border bg-surface p-6">
@@ -476,11 +573,64 @@ export function ExploreClient() {
   );
 }
 
-function Stat({ label, value }: { label: string; value: string }) {
+function computeExtendedStats(preview: BacktestResult) {
+  const { trades } = preview;
+  if (trades.length === 0) {
+    return {
+      totalReturnPct: 0,
+      profitFactor: 0,
+      maxDrawdownPct: 0,
+    };
+  }
+
+  const totalReturnPct =
+    (trades.reduce((acc, t) => acc * (1 + t.returnPct / 100), 1) - 1) * 100;
+
+  const grossProfit = trades
+    .filter((t) => t.returnPct > 0)
+    .reduce((sum, t) => sum + t.returnPct, 0);
+  const grossLoss = Math.abs(
+    trades
+      .filter((t) => t.returnPct < 0)
+      .reduce((sum, t) => sum + t.returnPct, 0),
+  );
+  const profitFactor =
+    grossLoss > 0 ? grossProfit / grossLoss : grossProfit > 0 ? Infinity : 0;
+
+  let peak = 1;
+  let equity = 1;
+  let maxDrawdownPct = 0;
+  for (const trade of trades) {
+    equity *= 1 + trade.returnPct / 100;
+    if (equity > peak) peak = equity;
+    const drawdown = ((equity - peak) / peak) * 100;
+    if (drawdown < maxDrawdownPct) maxDrawdownPct = drawdown;
+  }
+
+  return { totalReturnPct, profitFactor, maxDrawdownPct };
+}
+
+function Stat({
+  label,
+  value,
+  highlight,
+  negative,
+}: {
+  label: string;
+  value: string;
+  highlight?: boolean;
+  negative?: boolean;
+}) {
   return (
     <div className="rounded-2xl border border-border bg-bg p-4">
       <div className="text-xs uppercase tracking-[0.2em] text-muted">{label}</div>
-      <div className="mt-1 text-lg font-semibold text-ink">{value}</div>
+      <div
+        className={`mt-1 text-lg font-semibold ${
+          negative ? "text-danger" : highlight ? "text-brand" : "text-ink"
+        }`}
+      >
+        {value}
+      </div>
     </div>
   );
 }
