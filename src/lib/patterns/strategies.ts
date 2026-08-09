@@ -34,6 +34,37 @@ function gt(left: string, right: string | number): Expression {
     right: typeof right === "number" ? { value: right } : { ref: right },
   };
 }
+
+function candlePreset(
+  id: string,
+  name: string,
+  patternId: string,
+  entryLogic: string,
+  exitLogic = "Pattern signal fades",
+): StrategyPreset {
+  const alias = "candle";
+  return {
+    id,
+    category: "Candlestick",
+    entryLogic,
+    defaultParams: patternId.replaceAll("_", " "),
+    exitLogic,
+    pattern: {
+      name,
+      description: `${name} candlestick formation`,
+      indicators: [
+        {
+          alias,
+          type: "candle_pattern",
+          params: { pattern: patternId, bodyRatio: 0.1, shadowRatio: 2 },
+        },
+      ],
+      entry: cross(alias, 0.5),
+      exit: cross(alias, 0.5, "crosses_below"),
+      backtest: BT,
+    },
+  };
+}
 export const STRATEGY_PRESETS: StrategyPreset[] = [
   // ── Trend ─────────────────────────────────────────────────────────────
   {
@@ -598,6 +629,66 @@ export const STRATEGY_PRESETS: StrategyPreset[] = [
       backtest: BT,
     },
   },
+
+  // ── Candlestick ───────────────────────────────────────────────────────
+  candlePreset("doji", "Doji", "doji", "Doji indecision candle forms"),
+  candlePreset("hammer", "Hammer", "hammer", "Bullish hammer with long lower shadow"),
+  candlePreset(
+    "bullish-engulfing",
+    "Bullish Engulfing",
+    "bullish_engulfing",
+    "Bullish body engulfs prior bearish candle",
+  ),
+  candlePreset(
+    "bearish-engulfing",
+    "Bearish Engulfing",
+    "bearish_engulfing",
+    "Bearish body engulfs prior bullish candle",
+  ),
+  candlePreset(
+    "morning-star",
+    "Morning Star",
+    "morning_star",
+    "Three-bar bullish reversal: down, star, strong up",
+  ),
+  candlePreset(
+    "evening-star",
+    "Evening Star",
+    "evening_star",
+    "Three-bar bearish reversal: up, star, strong down",
+  ),
+  candlePreset(
+    "three-white-soldiers",
+    "Three White Soldiers",
+    "three_white_soldiers",
+    "Three consecutive bullish candles with higher closes",
+  ),
+  candlePreset(
+    "three-black-crows",
+    "Three Black Crows",
+    "three_black_crows",
+    "Three consecutive bearish candles with lower closes",
+  ),
+  candlePreset(
+    "shooting-star",
+    "Shooting Star",
+    "shooting_star",
+    "Bearish shooting star with long upper shadow",
+  ),
+  candlePreset(
+    "piercing-line",
+    "Piercing Line",
+    "piercing_line",
+    "Bullish candle closes above prior bearish midpoint",
+  ),
+  candlePreset(
+    "dark-cloud",
+    "Dark Cloud Cover",
+    "dark_cloud_cover",
+    "Bearish candle closes below prior bullish midpoint",
+  ),
+  candlePreset("gap-up", "Gap Up", "gap_up", "Open gaps above prior high"),
+  candlePreset("gap-down", "Gap Down", "gap_down", "Open gaps below prior low"),
 ];
 
 /** Strategies from the spreadsheet not yet supported (intraday, trailing exits, etc.) */
@@ -611,8 +702,6 @@ export const UNSUPPORTED_STRATEGIES = [
   { name: "Chandelier Trend", reason: "Requires trailing Chandelier exit" },
   { name: "VWAP Reversion / Trend", reason: "Requires intraday session data" },
   { name: "OBV Breakout", reason: "Requires OBV rolling high series" },
-  { name: "Gap-Up / Gap-Down", reason: "Requires gap % bar logic" },
-  { name: "Consecutive Down Days", reason: "Requires bar-pattern counter" },
   { name: "Internal Bar Strength (IBS)", reason: "Requires intraday OHLC" },
   { name: "Linear Regression Channel", reason: "Not in indicator library" },
   { name: "Aroon Trend", reason: "Not in indicator library" },

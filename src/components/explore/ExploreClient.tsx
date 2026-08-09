@@ -8,6 +8,7 @@ import { PriceChart } from "@/components/chart/PriceChart";
 import { OptimizationPanel } from "@/components/explore/OptimizationPanel";
 import { StrategyPicker } from "@/components/explore/StrategyPicker";
 import { runBacktest } from "@/lib/engine/backtest";
+import { extractCandlePatternMarkers } from "@/lib/engine/candle-patterns";
 import { computeIndicators } from "@/lib/engine/indicators";
 import { runUniverseScanInWorker } from "@/lib/engine/scan-worker-client";
 import { patternToPreset } from "@/lib/patterns/custom";
@@ -48,6 +49,9 @@ export function ExploreClient() {
   const [storedSymbols, setStoredSymbols] = useState<string[]>([]);
   const [overlayFast, setOverlayFast] = useState<(number | null)[]>([]);
   const [overlaySlow, setOverlaySlow] = useState<(number | null)[]>([]);
+  const [patternMarkers, setPatternMarkers] = useState<
+    { date: string; label: string }[]
+  >([]);
   const [chartBars, setChartBars] = useState<
     import("@/lib/types").OhlcvBar[]
   >([]);
@@ -175,17 +179,25 @@ export function ExploreClient() {
   useEffect(() => {
     void (async () => {
       const bars = await getPriceBars(previewSymbol);
-      setChartBars(bars.slice(-252));
+      const windowBars = bars.slice(-252);
+      setChartBars(windowBars);
       if (bars.length > 0) {
         const p = buildPattern();
         const ctx = computeIndicators(bars, p.indicators);
         const overlays = chartOverlays(p, ctx.series);
         setOverlayFast(overlays.fast ?? []);
         setOverlaySlow(overlays.slow ?? []);
+        const windowDates = new Set(windowBars.map((b) => b.date));
+        setPatternMarkers(
+          extractCandlePatternMarkers(bars, ctx.series, p.indicators).filter(
+            (m) => windowDates.has(m.date),
+          ),
+        );
         setPreview(runBacktest(previewSymbol, bars, p));
       } else {
         setOverlayFast([]);
         setOverlaySlow([]);
+        setPatternMarkers([]);
         setPreview(null);
       }
     })();
@@ -333,6 +345,7 @@ export function ExploreClient() {
                 signals={preview?.signals ?? []}
                 emaFast={overlayFast.slice(-252)}
                 emaSlow={overlaySlow.slice(-252)}
+                patternMarkers={patternMarkers}
               />
             ) : (
               <p className="py-20 text-center text-sm text-muted">

@@ -17,6 +17,7 @@ interface PriceChartProps {
   signals?: SignalPoint[];
   emaFast?: (number | null)[];
   emaSlow?: (number | null)[];
+  patternMarkers?: { date: string; label: string }[];
   height?: number;
 }
 
@@ -29,6 +30,7 @@ export function PriceChart({
   signals = [],
   emaFast,
   emaSlow,
+  patternMarkers = [],
   height = 420,
 }: PriceChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -54,7 +56,9 @@ export function PriceChart({
     const candleSeries = chart.addSeries(CandlestickSeries, {
       upColor: "#0f6a4a",
       downColor: "#df6b4c",
-      borderVisible: false,
+      borderVisible: true,
+      borderUpColor: "#0f6a4a",
+      borderDownColor: "#df6b4c",
       wickUpColor: "#0f6a4a",
       wickDownColor: "#df6b4c",
     });
@@ -101,8 +105,8 @@ export function PriceChart({
       );
     }
 
-    if (signals.length > 0) {
-      const markers = signals.map((s) => ({
+    if (signals.length > 0 || patternMarkers.length > 0) {
+      const tradeMarkers = signals.map((s) => ({
         time: toUtc(s.date),
         position:
           s.type === "entry"
@@ -113,7 +117,14 @@ export function PriceChart({
           s.type === "entry" ? ("arrowUp" as const) : ("arrowDown" as const),
         text: s.type === "entry" ? "Entry" : "Exit",
       }));
-      createSeriesMarkers(candleSeries, markers);
+      const candleMarkers = patternMarkers.map((m) => ({
+        time: toUtc(m.date),
+        position: "aboveBar" as const,
+        color: "#e8b84a",
+        shape: "circle" as const,
+        text: m.label,
+      }));
+      createSeriesMarkers(candleSeries, [...tradeMarkers, ...candleMarkers]);
     }
 
     chart.timeScale().fitContent();
@@ -131,7 +142,7 @@ export function PriceChart({
       chart.remove();
       chartRef.current = null;
     };
-  }, [bars, signals, emaFast, emaSlow, height]);
+  }, [bars, signals, emaFast, emaSlow, patternMarkers, height]);
 
   return (
     <div

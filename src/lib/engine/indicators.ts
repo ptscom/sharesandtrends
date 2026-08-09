@@ -19,6 +19,7 @@ import {
 import type { IndicatorDef, IndicatorSeries, OhlcvBar } from "@/lib/types";
 import { alignHigherTimeframe, barsToSource, resampleBars } from "./resample";
 import { getIndicatorDefinition } from "./registry";
+import { detectCandlePatternSeries } from "./candle-patterns";
 
 function padStart(values: number[], total: number): (number | null)[] {
   const pad = total - values.length;
@@ -331,6 +332,16 @@ function computeOnBars(
         SMA.calculate({ period: length, values: volumes }),
         bars.length,
       );
+      break;
+    }
+    case "candle_pattern": {
+      const pattern = String(params.pattern ?? "doji");
+      const bodyRatio = Number(params.bodyRatio ?? 0.1);
+      const shadowRatio = Number(params.shadowRatio ?? 2);
+      result[def.alias] = detectCandlePatternSeries(bars, pattern, {
+        bodyRatioMax: bodyRatio,
+        shadowRatioMin: shadowRatio,
+      });
       break;
     }
     default:

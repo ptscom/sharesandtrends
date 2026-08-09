@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 import { PriceChart } from "@/components/chart/PriceChart";
 import { runBacktest } from "@/lib/engine/backtest";
+import { extractCandlePatternMarkers } from "@/lib/engine/candle-patterns";
 import { computeIndicators } from "@/lib/engine/indicators";
 import { chartOverlays } from "@/lib/patterns/optimization";
 import { resolveSymbolPattern } from "@/lib/patterns/preset-store";
@@ -30,6 +31,9 @@ export function SymbolDetail({
   const [scan, setScan] = useState<ScanRun | null>(null);
   const [overlayFast, setOverlayFast] = useState<(number | null)[]>([]);
   const [overlaySlow, setOverlaySlow] = useState<(number | null)[]>([]);
+  const [patternMarkers, setPatternMarkers] = useState<
+    { date: string; label: string }[]
+  >([]);
 
   useEffect(() => {
     void (async () => {
@@ -49,10 +53,18 @@ export function SymbolDetail({
         const overlays = chartOverlays(resolved, ctx.series);
         setOverlayFast(overlays.fast ?? []);
         setOverlaySlow(overlays.slow ?? []);
+        const windowBars = data.slice(-252);
+        const windowDates = new Set(windowBars.map((b) => b.date));
+        setPatternMarkers(
+          extractCandlePatternMarkers(data, ctx.series, resolved.indicators).filter(
+            (m) => windowDates.has(m.date),
+          ),
+        );
       } else {
         setResult(null);
         setOverlayFast([]);
         setOverlaySlow([]);
+        setPatternMarkers([]);
       }
     })();
   }, [symbol, scanId, patternId]);
@@ -104,6 +116,7 @@ export function SymbolDetail({
             signals={result?.signals ?? []}
             emaFast={overlayFast.slice(-252)}
             emaSlow={overlaySlow.slice(-252)}
+            patternMarkers={patternMarkers}
           />
         </div>
       </section>
