@@ -79,7 +79,7 @@ export function ScanDetailClient({ scanId }: { scanId: string }) {
                 >
                   <td className="py-3 pr-4">
                     <Link
-                      href={`/symbol/${row.symbol}`}
+                      href={`/symbol/${row.symbol}?scanId=${scan.id}`}
                       className="font-mono font-semibold text-brand"
                     >
                       {row.symbol}

@@ -1,5 +1,6 @@
-import type { PatternDefinition } from "@/lib/types";
-import { getPattern, deletePattern, listPatterns } from "@/lib/storage/patterns";
+import type { PatternDefinition, ScanRun } from "@/lib/types";
+import { getPattern, deletePattern, listPatterns, getScanRun } from "@/lib/storage/patterns";
+import { EMA_CROSS_PATTERN } from "@/lib/patterns/defaults";
 import {
   STRATEGY_PRESETS,
   type StrategyPreset,
@@ -61,4 +62,57 @@ export async function revertPresetToDefault(presetId: string): Promise<void> {
     throw new Error(`Cannot revert non-preset id: ${presetId}`);
   }
   await deletePattern(presetId);
+}
+
+async function resolvePatternById(
+  patternId: string,
+  patternName?: string,
+): Promise<PatternDefinition | undefined> {
+  if (isBuiltInPresetId(patternId)) {
+    const { pattern } = await getEffectivePreset(patternId);
+    return pattern;
+  }
+
+  const stored = await getPattern(patternId);
+  if (stored) return stored;
+
+  if (patternName) {
+    const byName = STRATEGY_PRESETS.find((s) => s.pattern.name === patternName);
+    if (byName) {
+      const { pattern } = await getEffectivePreset(byName.id);
+      return pattern;
+    }
+  }
+
+  const preset = getBuiltInPreset(patternId);
+  if (preset) {
+    const { pattern } = await getEffectivePreset(patternId);
+    return pattern;
+  }
+
+  return undefined;
+}
+
+/** Resolve which pattern to use on the symbol detail page. */
+export async function resolveSymbolPattern(options: {
+  scanId?: string;
+  patternId?: string;
+}): Promise<{ pattern: PatternDefinition; scan: ScanRun | null }> {
+  const { scanId, patternId } = options;
+
+  if (scanId) {
+    const scan = await getScanRun(scanId);
+    if (scan) {
+      const pattern = await resolvePatternById(scan.patternId, scan.patternName);
+      if (pattern) return { pattern, scan };
+      return { pattern: EMA_CROSS_PATTERN, scan };
+    }
+  }
+
+  if (patternId) {
+    const pattern = await resolvePatternById(patternId);
+    if (pattern) return { pattern, scan: null };
+  }
+
+  return { pattern: EMA_CROSS_PATTERN, scan: null };
 }
