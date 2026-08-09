@@ -246,7 +246,7 @@ export function ExploreClient() {
           </div>
         </div>
 
-        {/* Column 2: optimization variables */}
+        {/* Column 2: optimization variables + scan controls */}
         <div className="flex min-h-[28rem] flex-col rounded-3xl border border-border bg-surface p-6">
           <h3 className="text-sm font-semibold text-ink">
             Optimization variables
@@ -258,47 +258,9 @@ export function ExploreClient() {
           <div className="mt-4 min-h-0 flex-1 overflow-y-auto pr-1">
             <OptimizationPanel pattern={pattern} onChange={setPattern} />
           </div>
-        </div>
 
-        {/* Column 3: backtest results + scan controls */}
-        <div className="flex min-h-[28rem] flex-col rounded-3xl border border-border bg-surface p-6">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-lg font-semibold text-ink">Backtest results</h2>
-            <input
-              value={previewSymbol}
-              onChange={(e) => setPreviewSymbol(e.target.value.toUpperCase())}
-              className="rounded-full border border-border bg-bg px-3 py-1.5 font-mono text-sm"
-            />
-          </div>
-
-          <div className="mt-4 min-h-0 flex-1 overflow-y-auto">
-            {preview ? (
-              <div className="grid grid-cols-2 gap-3 text-sm">
-                <Stat label="Trades" value={String(preview.stats.trades)} />
-                <Stat
-                  label="Win rate"
-                  value={`${preview.stats.winRate.toFixed(1)}%`}
-                />
-                <Stat
-                  label="Avg return"
-                  value={`${preview.stats.avgReturnPct.toFixed(2)}%`}
-                />
-                <Stat
-                  label="Sharpe"
-                  value={
-                    preview.stats.sharpe != null
-                      ? preview.stats.sharpe.toFixed(2)
-                      : "—"
-                  }
-                />
-              </div>
-            ) : (
-              <p className="text-sm text-muted">
-                Select a strategy to see backtest metrics for {previewSymbol}.
-              </p>
-            )}
-
-            <div className="mt-6 grid grid-cols-2 gap-3">
+          <div className="mt-6 shrink-0 border-t border-border pt-6">
+            <div className="grid grid-cols-2 gap-3">
               <div>
                 <label className="text-xs uppercase tracking-[0.2em] text-muted">
                   Min win rate %
@@ -370,6 +332,46 @@ export function ExploreClient() {
                 </>
               )}
             </p>
+          </div>
+        </div>
+
+        {/* Column 3: backtest results */}
+        <div className="flex min-h-[28rem] flex-col rounded-3xl border border-border bg-surface p-6">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-lg font-semibold text-ink">Backtest results</h2>
+            <input
+              value={previewSymbol}
+              onChange={(e) => setPreviewSymbol(e.target.value.toUpperCase())}
+              className="rounded-full border border-border bg-bg px-3 py-1.5 font-mono text-sm"
+            />
+          </div>
+
+          <div className="mt-4 min-h-0 flex-1 overflow-y-auto">
+            {preview ? (
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <Stat label="Trades" value={String(preview.stats.trades)} />
+                <Stat
+                  label="Win rate"
+                  value={`${preview.stats.winRate.toFixed(1)}%`}
+                />
+                <Stat
+                  label="Avg return"
+                  value={`${preview.stats.avgReturnPct.toFixed(2)}%`}
+                />
+                <Stat
+                  label="Sharpe"
+                  value={
+                    preview.stats.sharpe != null
+                      ? preview.stats.sharpe.toFixed(2)
+                      : "—"
+                  }
+                />
+              </div>
+            ) : (
+              <p className="text-sm text-muted">
+                Select a strategy to see backtest metrics for {previewSymbol}.
+              </p>
+            )}
           </div>
         </div>
       </section>
