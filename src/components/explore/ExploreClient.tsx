@@ -207,17 +207,18 @@ export function ExploreClient() {
 
   return (
     <div className="space-y-8">
-      <section className="grid gap-8 lg:grid-cols-[1fr_1.2fr]">
-        <div className="rounded-3xl border border-border bg-surface p-8">
+      <section className="grid gap-6 lg:grid-cols-2 lg:grid-rows-[auto_1fr]">
+        {/* Top left: strategy list */}
+        <div className="rounded-3xl border border-border bg-surface p-6 lg:row-start-1 lg:col-start-1">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <p className="text-xs uppercase tracking-[0.3em] text-muted">
                 Pattern builder
               </p>
-              <h2 className="mt-2 text-2xl font-semibold text-ink">
+              <h2 className="mt-2 text-xl font-semibold text-ink">
                 {activePattern.name}
               </h2>
-              <p className="mt-2 text-sm text-muted">
+              <p className="mt-1 text-sm text-muted">
                 {selectedPreset?.entryLogic ?? activePattern.description}
               </p>
               {selectedPreset && (
@@ -229,24 +230,72 @@ export function ExploreClient() {
             </div>
             <Link
               href="/strategies"
-              className="rounded-full border border-border px-4 py-2 text-xs text-brand hover:bg-brand/5"
+              className="shrink-0 rounded-full border border-border px-4 py-2 text-xs text-brand hover:bg-brand/5"
             >
               Open strategy builder
             </Link>
           </div>
 
-          <div className="mt-6 rounded-2xl border border-border bg-bg p-5">
-            <h3 className="text-sm font-semibold text-ink">
-              Optimization variables
-            </h3>
-            <p className="mt-1 text-xs text-muted">
-              Adjust indicator periods, thresholds, and backtest settings before
-              scanning.
-            </p>
-            <div className="mt-4">
-              <OptimizationPanel pattern={pattern} onChange={setPattern} />
-            </div>
+          <div className="mt-5">
+            <StrategyPicker
+              selectedId={selectedId}
+              customStrategies={customStrategies}
+              modifiedPresetIds={modifiedPresetIds}
+              onSelect={(preset) => void selectStrategy(preset)}
+            />
           </div>
+        </div>
+
+        {/* Top right: optimization variables */}
+        <div className="rounded-3xl border border-border bg-surface p-6 lg:row-start-1 lg:col-start-2">
+          <h3 className="text-sm font-semibold text-ink">
+            Optimization variables
+          </h3>
+          <p className="mt-1 text-xs text-muted">
+            Adjust indicator periods, thresholds, and backtest settings before
+            scanning.
+          </p>
+          <div className="mt-4 max-h-[28rem] overflow-y-auto pr-1">
+            <OptimizationPanel pattern={pattern} onChange={setPattern} />
+          </div>
+        </div>
+
+        {/* Bottom left: backtest results + scan controls */}
+        <div className="rounded-3xl border border-border bg-surface p-6 lg:row-start-2 lg:col-start-1">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <h2 className="text-xl font-semibold text-ink">Backtest results</h2>
+            <input
+              value={previewSymbol}
+              onChange={(e) => setPreviewSymbol(e.target.value.toUpperCase())}
+              className="rounded-full border border-border bg-bg px-4 py-2 font-mono text-sm"
+            />
+          </div>
+
+          {preview ? (
+            <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+              <Stat label="Trades" value={String(preview.stats.trades)} />
+              <Stat
+                label="Win rate"
+                value={`${preview.stats.winRate.toFixed(1)}%`}
+              />
+              <Stat
+                label="Avg return"
+                value={`${preview.stats.avgReturnPct.toFixed(2)}%`}
+              />
+              <Stat
+                label="Sharpe"
+                value={
+                  preview.stats.sharpe != null
+                    ? preview.stats.sharpe.toFixed(2)
+                    : "—"
+                }
+              />
+            </div>
+          ) : (
+            <p className="mt-4 text-sm text-muted">
+              Select a strategy to see backtest metrics for {previewSymbol}.
+            </p>
+          )}
 
           <div className="mt-6 grid grid-cols-2 gap-4">
             <div>
@@ -320,24 +369,11 @@ export function ExploreClient() {
               </>
             )}
           </p>
-
-          <StrategyPicker
-            selectedId={selectedId}
-            customStrategies={customStrategies}
-            modifiedPresetIds={modifiedPresetIds}
-            onSelect={(preset) => void selectStrategy(preset)}
-          />
         </div>
 
-        <div className="rounded-3xl border border-border bg-surface p-8">
-          <div className="flex items-center justify-between gap-4">
-            <h2 className="text-xl font-semibold text-ink">Chart preview</h2>
-            <input
-              value={previewSymbol}
-              onChange={(e) => setPreviewSymbol(e.target.value.toUpperCase())}
-              className="rounded-full border border-border bg-bg px-4 py-2 font-mono text-sm"
-            />
-          </div>
+        {/* Bottom right: chart */}
+        <div className="rounded-3xl border border-border bg-surface p-6 lg:row-start-2 lg:col-start-2">
+          <h2 className="text-xl font-semibold text-ink">Chart preview</h2>
           <div className="mt-4">
             {chartBars.length > 0 ? (
               <PriceChart
@@ -356,27 +392,6 @@ export function ExploreClient() {
               </p>
             )}
           </div>
-          {preview && (
-            <div className="mt-6 grid grid-cols-2 gap-4 text-sm md:grid-cols-4">
-              <Stat label="Trades" value={String(preview.stats.trades)} />
-              <Stat
-                label="Win rate"
-                value={`${preview.stats.winRate.toFixed(1)}%`}
-              />
-              <Stat
-                label="Avg return"
-                value={`${preview.stats.avgReturnPct.toFixed(2)}%`}
-              />
-              <Stat
-                label="Sharpe"
-                value={
-                  preview.stats.sharpe != null
-                    ? preview.stats.sharpe.toFixed(2)
-                    : "—"
-                }
-              />
-            </div>
-          )}
         </div>
       </section>
 

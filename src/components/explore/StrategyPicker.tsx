@@ -51,7 +51,7 @@ export function StrategyPicker({
   }, [byCategory, query]);
 
   return (
-    <div className="mt-6">
+    <div>
       <label className="text-xs uppercase tracking-[0.2em] text-muted">
         Strategy library ({totalCount} available)
       </label>
