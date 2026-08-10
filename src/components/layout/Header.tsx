@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -16,19 +17,16 @@ export function Header() {
 
   return (
     <header className="sticky top-0 z-40 border-b border-border bg-surface/95 backdrop-blur">
-      <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-6 py-4">
-        <Link href="/" className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand text-lg font-bold text-brand-foreground">
-            ST
-          </div>
-          <div>
-            <div className="text-lg font-semibold tracking-tight text-ink">
-              Shares & Trends
-            </div>
-            <div className="text-xs uppercase tracking-[0.2em] text-muted">
-              Explore · Backtest · Share
-            </div>
-          </div>
+      <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-6 py-3">
+        <Link href="/" className="flex shrink-0 items-center">
+          <Image
+            src="/logo.png"
+            alt="Shares and Trends"
+            width={220}
+            height={52}
+            priority
+            className="h-10 w-auto md:h-11"
+          />
         </Link>
         <nav className="flex items-center gap-1 text-sm">
           {links.map((link) => {

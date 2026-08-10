@@ -17,6 +17,10 @@ export const metadata: Metadata = {
   title: "Shares & Trends",
   description:
     "Personal stock exploration, backtesting, and pattern scanning — all in your browser.",
+  icons: {
+    icon: "/logo.png",
+    apple: "/logo.png",
+  },
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
