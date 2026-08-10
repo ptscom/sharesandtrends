@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 import { DEFAULT_WATCHLIST } from "@/lib/data/default-universe";
 import { mergePriceBars } from "@/lib/storage/prices";
 import type { OhlcvBar } from "@/lib/types";
+import { StoredDataInventory } from "./StoredDataInventory";
 
 interface FetchResult {
   symbol: string;
@@ -17,6 +18,11 @@ export function DataManager() {
   const [progress, setProgress] = useState({ done: 0, total: 0 });
   const [results, setResults] = useState<FetchResult[]>([]);
   const [customSymbol, setCustomSymbol] = useState("");
+  const [inventoryRefreshKey, setInventoryRefreshKey] = useState(0);
+
+  const refreshInventory = useCallback(() => {
+    setInventoryRefreshKey((key) => key + 1);
+  }, []);
 
   const fetchSymbol = useCallback(async (symbol: string): Promise<FetchResult> => {
     try {
@@ -54,12 +60,18 @@ export function DataManager() {
       }
 
       setLoading(false);
+      refreshInventory();
     },
-    [fetchSymbol],
+    [fetchSymbol, refreshInventory],
   );
 
   return (
     <div className="space-y-8">
+      <StoredDataInventory
+        refreshKey={inventoryRefreshKey}
+        onChanged={refreshInventory}
+      />
+
       <section className="ui-panel p-8">
         <h2 className="ui-page-title text-2xl">Download price data</h2>
         <p className="ui-helper mt-2">
@@ -127,7 +139,7 @@ export function DataManager() {
 
       {results.length > 0 && (
         <section className="ui-panel p-8">
-          <h2 className="ui-page-title">Results</h2>
+          <h2 className="ui-page-title">Download results</h2>
           <div className="mt-4 max-h-80 overflow-auto">
             <table className="w-full text-left text-sm">
               <thead>

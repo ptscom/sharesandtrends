@@ -64,6 +64,66 @@ export async function deleteSymbol(symbol: string): Promise<void> {
   await getDb().symbols.delete(upper);
 }
 
+export interface SymbolInventoryRow {
+  symbol: string;
+  barCount: number;
+  fromDate: string | null;
+  toDate: string | null;
+  lastUpdated: string | null;
+}
+
+export async function listSymbolInventory(): Promise<SymbolInventoryRow[]> {
+  const metas = await listSymbols();
+  const rows = await Promise.all(
+    metas.map(async (meta) => {
+      const bars = await getPriceBars(meta.symbol);
+      return {
+        symbol: meta.symbol,
+        barCount: bars.length,
+        fromDate: bars[0]?.date ?? null,
+        toDate: bars[bars.length - 1]?.date ?? null,
+        lastUpdated: meta.lastUpdated ?? null,
+      };
+    }),
+  );
+  return rows.sort((a, b) => a.symbol.localeCompare(b.symbol));
+}
+
+/** Remove bars with dates in [fromDate, toDate] inclusive. Returns bars removed. */
+export async function deletePriceBarsInRange(
+  symbol: string,
+  fromDate: string,
+  toDate: string,
+): Promise<number> {
+  if (fromDate > toDate) {
+    throw new Error("Start date must be on or before end date.");
+  }
+
+  const bars = await getPriceBars(symbol);
+  const kept = bars.filter((b) => b.date < fromDate || b.date > toDate);
+  const removed = bars.length - kept.length;
+
+  if (removed === 0) return 0;
+
+  if (kept.length === 0) {
+    await deleteSymbol(symbol);
+  } else {
+    await savePriceBars(symbol, kept);
+  }
+
+  return removed;
+}
+
+export async function countBarsInRange(
+  symbol: string,
+  fromDate: string,
+  toDate: string,
+): Promise<number> {
+  if (fromDate > toDate) return 0;
+  const bars = await getPriceBars(symbol);
+  return bars.filter((b) => b.date >= fromDate && b.date <= toDate).length;
+}
+
 export async function mergePriceBars(
   symbol: string,
   newBars: OhlcvBar[],
