@@ -1,14 +1,9 @@
-import type { StrategyPreset } from "@/lib/patterns/strategies";
-
 export const POPULAR_STRATEGY_IDS = [
   "ema-cross",
   "golden-cross",
   "adx-di-trend",
   "price-above-sma",
 ] as const;
-
-export const RECENT_STRATEGIES_KEY = "st-recent-strategies";
-export const MAX_RECENT_STRATEGIES = 5;
 
 export const LIBRARY_FILTERS = [
   { id: "all", label: "All" },
@@ -49,44 +44,4 @@ export function categoryStyle(category: string) {
 
 export function shortStrategyName(name: string): string {
   return name.length > 14 ? `${name.slice(0, 12)}…` : name;
-}
-
-export function paramTags(preset: StrategyPreset): string[] {
-  const tags = [preset.category];
-  const params = preset.defaultParams
-    .split(/[,·]/)
-    .map((s) => s.trim())
-    .filter(Boolean);
-  return [...tags, ...params.slice(0, 2)];
-}
-
-export function loadRecentStrategyIds(): string[] {
-  if (typeof window === "undefined") return [];
-  try {
-    const raw = localStorage.getItem(RECENT_STRATEGIES_KEY);
-    if (!raw) return [];
-    const parsed = JSON.parse(raw) as unknown;
-    return Array.isArray(parsed)
-      ? parsed.filter((id): id is string => typeof id === "string")
-      : [];
-  } catch {
-    return [];
-  }
-}
-
-export function saveRecentStrategyIds(ids: string[]): void {
-  if (typeof window === "undefined") return;
-  localStorage.setItem(
-    RECENT_STRATEGIES_KEY,
-    JSON.stringify(ids.slice(0, MAX_RECENT_STRATEGIES)),
-  );
-}
-
-export function pushRecentStrategyId(id: string): string[] {
-  const next = [id, ...loadRecentStrategyIds().filter((x) => x !== id)].slice(
-    0,
-    MAX_RECENT_STRATEGIES,
-  );
-  saveRecentStrategyIds(next);
-  return next;
 }

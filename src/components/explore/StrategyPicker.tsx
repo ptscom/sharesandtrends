@@ -1,14 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import {
-  POPULAR_STRATEGY_IDS,
-  categoryStyle,
-  loadRecentStrategyIds,
-  paramTags,
-  pushRecentStrategyId,
-  shortStrategyName,
-} from "@/lib/patterns/strategy-ui";
+import { POPULAR_STRATEGY_IDS } from "@/lib/patterns/strategy-ui";
 import {
   STRATEGY_PRESETS,
   type StrategyPreset,
@@ -22,69 +15,83 @@ interface StrategyPickerProps {
   onSelect: (preset: StrategyPreset) => void;
 }
 
+function matchesQuery(preset: StrategyPreset, q: string): boolean {
+  const needle = q.trim().toLowerCase();
+  if (!needle) return true;
+  return (
+    preset.pattern.name.toLowerCase().includes(needle) ||
+    preset.category.toLowerCase().includes(needle) ||
+    preset.entryLogic.toLowerCase().includes(needle)
+  );
+}
+
 export function StrategyPicker({
   selectedId,
   customStrategies = [],
   modifiedPresetIds = [],
   onSelect,
 }: StrategyPickerProps) {
-  const [recentOpen, setRecentOpen] = useState(false);
+  const [open, setOpen] = useState(false);
   const [libraryOpen, setLibraryOpen] = useState(false);
-  const [recentIds, setRecentIds] = useState<string[]>([]);
-  const recentRef = useRef<HTMLDivElement>(null);
+  const [query, setQuery] = useState("");
+  const rootRef = useRef<HTMLDivElement>(null);
 
   const allPresets = useMemo(
     () => [...STRATEGY_PRESETS, ...customStrategies],
     [customStrategies],
   );
 
-  const presetById = useMemo(
-    () => new Map(allPresets.map((p) => [p.id, p])),
-    [allPresets],
-  );
-
-  const selected = presetById.get(selectedId);
+  const selected = allPresets.find((s) => s.id === selectedId);
 
   const popularPresets = useMemo(
     () =>
-      POPULAR_STRATEGY_IDS.map((id) => presetById.get(id)).filter(
-        (p): p is StrategyPreset => p != null,
-      ),
-    [presetById],
+      POPULAR_STRATEGY_IDS.map((id) =>
+        allPresets.find((p) => p.id === id),
+      ).filter((p): p is StrategyPreset => p != null),
+    [allPresets],
   );
 
-  const recentPresets = useMemo(() => {
-    const ids = [
-      selectedId,
-      ...recentIds.filter((id) => id !== selectedId),
-    ].slice(0, 5);
-    return ids
-      .map((id) => presetById.get(id))
-      .filter((p): p is StrategyPreset => p != null);
-  }, [recentIds, selectedId, presetById]);
+  const searching = query.trim().length > 0;
+
+  const filteredBuiltIn = useMemo(
+    () => STRATEGY_PRESETS.filter((p) => matchesQuery(p, query)),
+    [query],
+  );
+
+  const filteredCustom = useMemo(
+    () => customStrategies.filter((p) => matchesQuery(p, query)),
+    [customStrategies, query],
+  );
+
+  const flatResults = useMemo(
+    () => allPresets.filter((p) => matchesQuery(p, query)),
+    [allPresets, query],
+  );
 
   useEffect(() => {
-    setRecentIds(loadRecentStrategyIds());
-  }, []);
-
-  useEffect(() => {
-    if (!recentOpen) return;
+    if (!open) return;
     const handleClick = (e: MouseEvent) => {
-      if (recentRef.current && !recentRef.current.contains(e.target as Node)) {
-        setRecentOpen(false);
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) {
+        setOpen(false);
+        setQuery("");
       }
     };
     document.addEventListener("mousedown", handleClick);
     return () => document.removeEventListener("mousedown", handleClick);
-  }, [recentOpen]);
+  }, [open]);
 
   const handleSelect = (preset: StrategyPreset) => {
-    setRecentIds(pushRecentStrategyId(preset.id));
     onSelect(preset);
-    setRecentOpen(false);
+    setOpen(false);
+    setQuery("");
   };
 
-  const style = categoryStyle(selected?.category ?? "Trend");
+  const toggleOpen = () => {
+    setOpen((v) => {
+      if (v) setQuery("");
+      return !v;
+    });
+  };
 
   return (
     <div className="flex h-full flex-col">
@@ -95,127 +102,118 @@ export function StrategyPicker({
         </span>
       </div>
 
-      {/* Quick switch dropdown (recents) */}
       <label className="ui-field-label mt-4 block">Strategy</label>
-      <div ref={recentRef} className="relative mt-1.5">
+      <div ref={rootRef} className="relative mt-1.5">
         <button
           type="button"
-          onClick={() => setRecentOpen((v) => !v)}
-          className="ui-input flex items-center gap-3 py-2.5 text-left transition hover:border-brand/50"
+          onClick={toggleOpen}
+          className="ui-input flex items-center justify-between gap-2 py-2.5 text-left transition hover:border-brand/50"
         >
-          {selected ? (
-            <>
-              <StrategyIcon category={selected.category} size="md" />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate font-medium text-ink">
-                  {selected.pattern.name}
-                  {modifiedPresetIds.includes(selected.id) ? " *" : ""}
-                </span>
-              </span>
-            </>
-          ) : (
-            <span className="text-muted">Choose a strategy…</span>
-          )}
-          <ChevronIcon open={recentOpen} />
+          <span className="truncate font-medium text-ink">
+            {selected ? (
+              <>
+                {selected.pattern.name}
+                {modifiedPresetIds.includes(selected.id) ? " *" : ""}
+              </>
+            ) : (
+              <span className="text-muted">Choose a strategy…</span>
+            )}
+          </span>
+          <ChevronIcon open={open} />
         </button>
 
-        {recentOpen && (
+        {open && (
           <div className="absolute left-0 right-0 z-20 mt-1 overflow-hidden rounded-lg border border-border bg-surface">
-            <p className="ui-field-label border-b border-border px-3 py-2">
-              Recent
-            </p>
-            <div className="max-h-48 overflow-y-auto p-1">
-              {recentPresets.map((preset) => (
-                <button
-                  key={preset.id}
-                  type="button"
-                  onClick={() => handleSelect(preset)}
-                  className={`flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left transition ${
-                    preset.id === selectedId
-                      ? "bg-brand/10"
-                      : "hover:bg-bg"
-                  }`}
-                >
-                  <StrategyIcon category={preset.category} size="sm" />
-                  <span className="truncate text-sm font-medium text-ink">
-                    {preset.pattern.name}
-                  </span>
-                </button>
-              ))}
-              {recentPresets.length === 0 && (
-                <p className="px-3 py-4 text-sm text-muted">No recent picks yet</p>
+            <div className="border-b border-border p-2">
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search strategies…"
+                className="ui-input"
+                autoFocus
+              />
+            </div>
+
+            <div className="max-h-[11.5rem] overflow-y-auto p-1">
+              {searching ? (
+                <>
+                  {flatResults.map((preset) => (
+                    <StrategyOption
+                      key={preset.id}
+                      preset={preset}
+                      selected={preset.id === selectedId}
+                      modified={modifiedPresetIds.includes(preset.id)}
+                      onSelect={() => handleSelect(preset)}
+                    />
+                  ))}
+                  {flatResults.length === 0 && (
+                    <p className="px-3 py-4 text-center text-sm text-muted">
+                      No strategies match your search.
+                    </p>
+                  )}
+                </>
+              ) : (
+                <>
+                  {filteredBuiltIn.map((preset) => (
+                    <StrategyOption
+                      key={preset.id}
+                      preset={preset}
+                      selected={preset.id === selectedId}
+                      modified={modifiedPresetIds.includes(preset.id)}
+                      onSelect={() => handleSelect(preset)}
+                    />
+                  ))}
+                  {filteredCustom.length > 0 && (
+                    <>
+                      <p className="ui-field-label sticky top-0 bg-surface px-2 py-1.5">
+                        Custom strategies
+                      </p>
+                      {filteredCustom.map((preset) => (
+                        <StrategyOption
+                          key={preset.id}
+                          preset={preset}
+                          selected={preset.id === selectedId}
+                          modified={modifiedPresetIds.includes(preset.id)}
+                          onSelect={() => handleSelect(preset)}
+                        />
+                      ))}
+                    </>
+                  )}
+                </>
               )}
             </div>
           </div>
         )}
       </div>
 
-      {/* Selected strategy card */}
-      {selected && (
-        <div className="mt-4 rounded-xl border border-brand/30 bg-brand/5 p-4">
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex min-w-0 items-start gap-3">
-              <StrategyIcon category={selected.category} size="lg" />
-              <div className="min-w-0">
-                <p className="font-semibold text-ink">
-                  {selected.pattern.name}
-                  {modifiedPresetIds.includes(selected.id) ? " *" : ""}
-                </p>
-                <p className="mt-0.5 text-sm text-muted">{selected.entryLogic}</p>
-                <div className="mt-2 flex flex-wrap gap-1.5">
-                  {paramTags(selected).map((tag) => (
-                    <span
-                      key={tag}
-                      className="rounded-full border border-border bg-surface px-2 py-0.5 text-[10px] text-muted"
-                    >
-                      {tag}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            </div>
-            <span className="flex shrink-0 items-center gap-1 rounded-full bg-success/15 px-2 py-0.5 text-[10px] font-semibold text-success">
-              <CheckIcon />
-              Selected
-            </span>
-          </div>
-        </div>
-      )}
-
-      {/* Popular strategies */}
-      <div className="mt-5">
-        <p className="ui-field-label">Popular strategies</p>
-        <div className="mt-2 grid grid-cols-2 gap-2">
-          {popularPresets.map((preset) => {
-            const isActive = preset.id === selectedId;
-            return (
+      <div className="mt-4">
+        <p className="ui-field-label">Popular</p>
+        <div className="mt-1.5 flex flex-wrap gap-x-1 gap-y-1 text-xs">
+          {popularPresets.map((preset, index) => (
+            <span key={preset.id} className="inline-flex items-center">
+              {index > 0 && <span className="mr-1 text-muted">·</span>}
               <button
-                key={preset.id}
                 type="button"
                 onClick={() => handleSelect(preset)}
-                className={`flex flex-col items-center gap-2 rounded-xl border p-3 text-center transition ${
-                  isActive
-                    ? "border-brand bg-brand/10"
-                    : "border-border bg-bg hover:border-brand/40"
+                className={`font-medium hover:underline ${
+                  preset.id === selectedId
+                    ? "text-brand-dark"
+                    : "text-muted hover:text-ink"
                 }`}
               >
-                <StrategyIcon category={preset.category} size="md" />
-                <span className="text-xs font-medium leading-tight text-ink">
-                  {shortStrategyName(preset.pattern.name)}
-                </span>
+                {preset.pattern.name}
               </button>
-            );
-          })}
+            </span>
+          ))}
         </div>
       </div>
 
-      {/* Browse all */}
       <button
         type="button"
         onClick={() => setLibraryOpen(true)}
-        className="mt-4 text-left text-sm font-medium text-brand-dark hover:underline"
+        className="mt-3 text-left text-sm font-medium text-brand-dark hover:underline"
       >
-        Browse all strategies →
+        View all strategies →
       </button>
 
       <StrategyLibraryModal
@@ -230,24 +228,32 @@ export function StrategyPicker({
   );
 }
 
-function StrategyIcon({
-  category,
-  size,
+function StrategyOption({
+  preset,
+  selected,
+  modified,
+  onSelect,
 }: {
-  category: string;
-  size: "sm" | "md" | "lg";
+  preset: StrategyPreset;
+  selected: boolean;
+  modified: boolean;
+  onSelect: () => void;
 }) {
-  const style = categoryStyle(category);
-  const dim =
-    size === "sm" ? "h-7 w-7" : size === "md" ? "h-8 w-8" : "h-10 w-10";
-  const dot = size === "sm" ? "h-2 w-2" : "h-2.5 w-2.5";
-
   return (
-    <span
-      className={`flex shrink-0 items-center justify-center rounded-lg ${dim} ${style.bg}`}
+    <button
+      type="button"
+      onClick={onSelect}
+      className={`w-full rounded-lg px-2 py-2 text-left text-sm transition ${
+        selected
+          ? "bg-brand/10 font-medium text-ink"
+          : "text-ink hover:bg-bg"
+      }`}
     >
-      <span className={`rounded-full ${dot} ${style.dot}`} />
-    </span>
+      <span className="block truncate">
+        {preset.pattern.name}
+        {modified ? " *" : ""}
+      </span>
+    </button>
   );
 }
 
@@ -262,18 +268,6 @@ function ChevronIcon({ open }: { open: boolean }) {
       <path
         fillRule="evenodd"
         d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.94a.75.75 0 111.08 1.04l-4.24 4.5a.75.75 0 01-1.08 0l-4.24-4.5a.75.75 0 01.02-1.06z"
-        clipRule="evenodd"
-      />
-    </svg>
-  );
-}
-
-function CheckIcon() {
-  return (
-    <svg className="h-3 w-3" viewBox="0 0 20 20" fill="currentColor" aria-hidden>
-      <path
-        fillRule="evenodd"
-        d="M16.704 5.29a1 1 0 010 1.42l-7.25 7.25a1 1 0 01-1.42 0l-3.25-3.25a1 1 0 111.42-1.42l2.54 2.54 6.54-6.54a1 1 0 011.42 0z"
         clipRule="evenodd"
       />
     </svg>
