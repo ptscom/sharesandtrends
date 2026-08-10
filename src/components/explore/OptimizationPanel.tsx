@@ -45,7 +45,7 @@ export function OptimizationPanel({
         if (items.length === 0) return null;
         return (
           <div key={group}>
-            <p className="text-xs uppercase tracking-[0.2em] text-muted">
+            <p className="ui-field-label">
               {GROUP_LABELS[group]}
             </p>
             <div className="mt-3 grid gap-3 sm:grid-cols-2">
@@ -73,13 +73,12 @@ function VarInput({
   variable: OptimizationVar;
   onChange: (value: number | string) => void;
 }) {
-  const inputClass =
-    "mt-1 w-full rounded-xl border border-border bg-bg px-3 py-2 text-sm font-semibold";
+  const inputClass = "ui-input mt-1";
 
   if (variable.type === "enum" && variable.options) {
     return (
       <label className="block text-sm">
-        <span className="text-muted">{variable.label}</span>
+        <span className="ui-field-label">{variable.label}</span>
         <select
           value={String(variable.value)}
           onChange={(e) => onChange(e.target.value)}
@@ -97,7 +96,7 @@ function VarInput({
 
   return (
     <label className="block text-sm">
-      <span className="text-muted">{variable.label}</span>
+      <span className="ui-field-label">{variable.label}</span>
       <input
         type="number"
         value={Number(variable.value)}

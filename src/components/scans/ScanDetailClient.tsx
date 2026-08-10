@@ -20,7 +20,7 @@ export function ScanDetailClient({ scanId }: { scanId: string }) {
 
   if (missing) {
     return (
-      <div className="rounded-3xl border border-border bg-surface p-12 text-center">
+      <div className="ui-panel p-12 text-center">
         <h2 className="text-xl font-semibold text-ink">Scan not found</h2>
         <p className="mt-2 text-sm text-muted">
           Scan results are stored in your browser. This ID may be from another
@@ -39,7 +39,7 @@ export function ScanDetailClient({ scanId }: { scanId: string }) {
 
   return (
     <div className="space-y-8">
-      <section className="rounded-3xl border border-border bg-surface p-8">
+      <section className="ui-panel p-8">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="text-xs uppercase tracking-[0.3em] text-muted">
@@ -57,7 +57,7 @@ export function ScanDetailClient({ scanId }: { scanId: string }) {
         </div>
       </section>
 
-      <section className="rounded-3xl border border-border bg-surface p-8">
+      <section className="ui-panel p-8">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[720px] text-left text-sm">
             <thead>

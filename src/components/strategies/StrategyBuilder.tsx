@@ -268,7 +268,7 @@ export function StrategyBuilder() {
 
   return (
     <div className="space-y-8">
-      <section className="rounded-3xl border border-border bg-surface p-8">
+      <section className="ui-panel p-8">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="text-xs uppercase tracking-[0.3em] text-muted">
@@ -293,14 +293,14 @@ export function StrategyBuilder() {
 
       <section className="grid gap-8 lg:grid-cols-[1fr_1fr]">
         <div className="space-y-6">
-          <div className="rounded-3xl border border-border bg-surface p-8">
+          <div className="ui-panel p-8">
             <h2 className="text-lg font-semibold text-ink">Start from</h2>
             <select
               value={selectedSource}
               onChange={(e) => {
                 void loadPreset(e.target.value);
               }}
-              className="mt-3 w-full rounded-2xl border border-border bg-bg px-4 py-3 text-sm"
+              className="ui-input mt-3"
             >
               <optgroup label="Built-in presets">
                 {STRATEGY_PRESETS.map((s) => (
@@ -341,7 +341,7 @@ export function StrategyBuilder() {
                   onChange={(e) =>
                     setPattern((p) => ({ ...p, name: e.target.value }))
                   }
-                  className="mt-2 w-full rounded-2xl border border-border bg-bg px-4 py-3 text-sm font-semibold"
+                  className="ui-input mt-2"
                 />
               </label>
               <label className="block text-sm">
@@ -354,13 +354,13 @@ export function StrategyBuilder() {
                     setPattern((p) => ({ ...p, description: e.target.value }))
                   }
                   rows={2}
-                  className="mt-2 w-full rounded-2xl border border-border bg-bg px-4 py-3 text-sm"
+                  className="ui-input mt-2"
                 />
               </label>
             </div>
           </div>
 
-          <div className="rounded-3xl border border-border bg-surface p-8">
+          <div className="ui-panel p-8">
             <div className="flex items-center justify-between gap-4">
               <h2 className="text-lg font-semibold text-ink">Indicators</h2>
               <button
@@ -396,7 +396,7 @@ export function StrategyBuilder() {
                           );
                           updateIndicators(indicators);
                         }}
-                        className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 font-mono text-sm"
+                        className="ui-input mt-1 font-mono"
                       />
                     </label>
                     <label className="text-sm">
@@ -412,7 +412,7 @@ export function StrategyBuilder() {
                           indicators[index]!.alias = ind.alias;
                           updateIndicators(indicators);
                         }}
-                        className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm"
+                        className="ui-input mt-1"
                       >
                         {INDICATOR_REGISTRY.map((def) => (
                           <option key={def.id} value={def.id}>
@@ -445,7 +445,7 @@ export function StrategyBuilder() {
         </div>
 
         <div className="space-y-6">
-          <div className="rounded-3xl border border-border bg-surface p-8">
+          <div className="ui-panel p-8">
             <h2 className="text-lg font-semibold text-ink">Signal rules</h2>
             <p className="mt-1 text-xs text-muted">
               Entry: {describeRule(pattern.entry)} · Exit:{" "}
@@ -493,7 +493,7 @@ export function StrategyBuilder() {
             )}
           </div>
 
-          <div className="rounded-3xl border border-border bg-surface p-8">
+          <div className="ui-panel p-8">
             <h2 className="text-lg font-semibold text-ink">
               Optimization variables
             </h2>
@@ -506,13 +506,13 @@ export function StrategyBuilder() {
             </div>
           </div>
 
-          <div className="rounded-3xl border border-border bg-surface p-8">
+          <div className="ui-panel p-8">
             <div className="flex flex-wrap gap-3">
               <button
                 type="button"
                 onClick={() => void handleSave()}
                 disabled={saving}
-                className="rounded-full bg-brand px-6 py-3 text-sm font-semibold text-bg disabled:opacity-50"
+                className="ui-btn-primary disabled:opacity-50"
               >
                 {saving
                   ? "Saving…"
@@ -614,7 +614,7 @@ function RuleEditor({
             onChange={(e) =>
               onChange({ ...rule, op: e.target.value as RuleOp })
             }
-            className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm"
+            className="ui-input mt-1"
           >
             {RULE_OPS.map((op) => (
               <option key={op.value} value={op.value}>
@@ -628,7 +628,7 @@ function RuleEditor({
           <select
             value={rule.leftRef}
             onChange={(e) => onChange({ ...rule, leftRef: e.target.value })}
-            className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 font-mono text-sm"
+            className="ui-input mt-1 font-mono"
           >
             {seriesRefs.map((ref) => (
               <option key={ref} value={ref}>
@@ -647,7 +647,7 @@ function RuleEditor({
                 rightKind: e.target.value as "ref" | "value",
               })
             }
-            className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm"
+            className="ui-input mt-1"
           >
             <option value="ref">Another series</option>
             <option value="value">Fixed number</option>
@@ -661,7 +661,7 @@ function RuleEditor({
               onChange={(e) =>
                 onChange({ ...rule, rightRef: e.target.value })
               }
-              className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 font-mono text-sm"
+              className="ui-input mt-1 font-mono"
             >
               {seriesRefs.map((ref) => (
                 <option key={ref} value={ref}>
@@ -682,7 +682,7 @@ function RuleEditor({
                   rightValue: Number(e.target.value),
                 })
               }
-              className="mt-1 w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm"
+              className="ui-input mt-1"
             />
           </label>
         )}

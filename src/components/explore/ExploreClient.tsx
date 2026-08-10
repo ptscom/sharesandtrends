@@ -236,7 +236,7 @@ export function ExploreClient() {
     <div className="space-y-6">
       <section className="grid gap-6 lg:grid-cols-3 lg:items-stretch">
         {/* Column 1: select strategy */}
-        <div className="flex min-h-[24rem] flex-col rounded-2xl border border-border bg-surface p-6 shadow-sm">
+        <div className="flex min-h-[24rem] flex-col ui-panel">
           <StrategyPicker
             selectedId={selectedId}
             customStrategies={customStrategies}
@@ -246,16 +246,14 @@ export function ExploreClient() {
         </div>
 
         {/* Column 2: optimization variables */}
-        <div className="flex min-h-[24rem] flex-col rounded-2xl border border-border bg-surface p-6 shadow-sm">
+        <div className="flex min-h-[24rem] flex-col ui-panel">
           <div className="flex items-center gap-2">
-            <h3 className="text-sm font-semibold text-ink">
-              2. Optimization variables
-            </h3>
+            <h3 className="ui-section-title">2. Optimization variables</h3>
             <span className="rounded-full bg-success/15 px-2 py-0.5 text-[10px] font-semibold text-success">
               Optimization: ON
             </span>
           </div>
-          <p className="mt-1 text-xs text-muted">
+          <p className="ui-helper mt-1">
             Adjust indicator periods, thresholds, and backtest settings.
           </p>
           <div className="mt-4 min-h-0 flex-1 overflow-y-auto pr-1">
@@ -264,38 +262,34 @@ export function ExploreClient() {
         </div>
 
         {/* Column 3: scan universe */}
-        <div className="flex min-h-[24rem] flex-col rounded-2xl border border-border bg-surface p-6 shadow-sm">
-          <h3 className="text-sm font-semibold text-ink">3. Scan universe</h3>
-          <p className="mt-1 text-xs text-muted">
+        <div className="flex min-h-[24rem] flex-col ui-panel">
+          <h3 className="ui-section-title">3. Scan universe</h3>
+          <p className="ui-helper mt-1">
             Filter symbols and run a universe scan with the current strategy.
           </p>
 
           <div className="mt-5 flex-1">
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="text-xs uppercase tracking-[0.2em] text-muted">
-                  Min win rate %
-                </label>
+                <label className="ui-field-label">Min win rate %</label>
                 <input
                   type="number"
                   min={0}
                   max={100}
                   value={minWinRate}
                   onChange={(e) => setMinWinRate(Number(e.target.value))}
-                  className="mt-2 w-full rounded-xl border border-border bg-bg px-3 py-2 text-sm font-semibold shadow-sm"
+                  className="ui-input mt-2"
                 />
               </div>
               <div>
-                <label className="text-xs uppercase tracking-[0.2em] text-muted">
-                  Min trades
-                </label>
+                <label className="ui-field-label">Min trades</label>
                 <input
                   type="number"
                   min={1}
                   max={500}
                   value={minTrades}
                   onChange={(e) => setMinTrades(Number(e.target.value))}
-                  className="mt-2 w-full rounded-xl border border-border bg-bg px-3 py-2 text-sm font-semibold shadow-sm"
+                  className="ui-input mt-2"
                 />
               </div>
             </div>
@@ -315,7 +309,7 @@ export function ExploreClient() {
                 type="button"
                 onClick={() => void runScan()}
                 disabled={scanning}
-                className="w-full rounded-full bg-brand px-5 py-3 text-sm font-semibold text-brand-foreground shadow-sm disabled:opacity-50"
+                className="ui-btn-primary w-full py-3"
               >
                 {scanning
                   ? scanPhase === "loading"
@@ -326,13 +320,13 @@ export function ExploreClient() {
               <button
                 type="button"
                 onClick={() => void runPreview()}
-                className="w-full rounded-full border border-border bg-bg px-5 py-2.5 text-sm text-muted shadow-sm hover:text-ink"
+                className="ui-btn-secondary w-full"
               >
                 Refresh preview
               </button>
             </div>
 
-            <p className="mt-4 text-xs text-muted">
+            <p className="ui-helper mt-4">
               {storedSymbols.length} symbols stored locally
               {storedSymbols.length === 0 && (
                 <>
@@ -359,8 +353,8 @@ export function ExploreClient() {
         onSymbolChange={setPreviewSymbol}
       />
 
-      <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
-        <h2 className="text-xl font-semibold text-ink">Chart preview</h2>
+      <section className="ui-panel">
+        <h2 className="ui-page-title">Chart preview</h2>
         <div className="mt-4">
           {chartBars.length > 0 ? (
             <PriceChart
@@ -382,7 +376,7 @@ export function ExploreClient() {
       </section>
 
       {scan && (
-        <section className="rounded-2xl border border-border bg-surface p-8 shadow-sm">
+        <section className="ui-panel p-8">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <p className="text-xs uppercase tracking-[0.3em] text-muted">

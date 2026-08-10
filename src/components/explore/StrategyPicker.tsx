@@ -102,17 +102,15 @@ export function StrategyPicker({
 
   return (
     <div ref={rootRef} className="flex h-full flex-col">
-      <p className="text-xs font-medium uppercase tracking-[0.2em] text-muted">
-        1. Select strategy
-      </p>
+      <h3 className="ui-section-title">1. Select strategy</h3>
 
-      <label className="mt-4 text-xs font-medium text-muted">Strategy</label>
+      <label className="ui-field-label mt-4 block">Strategy</label>
 
       <div className="relative mt-1.5">
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
-          className="flex w-full items-center gap-3 rounded-xl border border-border bg-bg px-3 py-2.5 text-left shadow-sm transition hover:border-brand/40"
+          className="ui-input flex items-center gap-3 py-2.5 text-left transition hover:border-brand/50"
         >
           {selected ? (
             <>
@@ -122,7 +120,7 @@ export function StrategyPicker({
                 <span className={`h-2.5 w-2.5 rounded-full ${style.dot}`} />
               </span>
               <span className="min-w-0 flex-1">
-                <span className="block truncate text-sm font-semibold text-ink">
+                <span className="block truncate font-medium text-ink">
                   {selected.pattern.name}
                   {modifiedPresetIds.includes(selected.id) ? " *" : ""}
                 </span>
@@ -132,28 +130,26 @@ export function StrategyPicker({
               </span>
             </>
           ) : (
-            <span className="text-sm text-muted">Choose a strategy…</span>
+            <span className="text-muted">Choose a strategy…</span>
           )}
           <ChevronIcon open={open} />
         </button>
 
         {open && (
-          <div className="absolute left-0 right-0 z-20 mt-1 max-h-72 overflow-hidden rounded-xl border border-border bg-surface shadow-lg">
+          <div className="absolute left-0 right-0 z-20 mt-1 max-h-72 overflow-hidden rounded-lg border border-border bg-surface">
             <div className="border-b border-border p-2">
               <input
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
                 placeholder="Search strategies…"
-                className="w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm shadow-sm"
+                className="ui-input"
                 autoFocus
               />
             </div>
             <div className="max-h-56 overflow-y-auto p-2">
               {Object.entries(filtered).map(([category, items]) => (
                 <div key={category} className="mb-2 last:mb-0">
-                  <p className="px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.15em] text-muted">
-                    {category}
-                  </p>
+                  <p className="ui-field-label px-2 py-1">{category}</p>
                   {items.map((preset) => {
                     const itemStyle = categoryStyle(preset.category);
                     const isSelected = preset.id === selectedId;
@@ -163,9 +159,7 @@ export function StrategyPicker({
                         type="button"
                         onClick={() => handleSelect(preset)}
                         className={`flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left transition ${
-                          isSelected
-                            ? "bg-brand/10"
-                            : "hover:bg-bg"
+                          isSelected ? "bg-brand/10" : "hover:bg-bg"
                         }`}
                       >
                         <span
@@ -204,7 +198,7 @@ export function StrategyPicker({
           <p className="text-sm leading-relaxed text-ink">
             {selected.entryLogic}
           </p>
-          <p className="mt-2 text-xs text-muted">
+          <p className="ui-helper mt-2">
             Params: {selected.defaultParams} · Exit: {selected.exitLogic}
           </p>
           <Link
@@ -220,17 +214,17 @@ export function StrategyPicker({
       <button
         type="button"
         onClick={() => setShowUnsupported((v) => !v)}
-        className="mt-4 text-left text-xs text-muted underline"
+        className="ui-helper mt-4 text-left underline"
       >
         {showUnsupported ? "Hide" : "Show"} {UNSUPPORTED_STRATEGIES.length}{" "}
         strategies not yet supported
       </button>
 
       {showUnsupported && (
-        <ul className="mt-2 space-y-1 text-xs text-muted">
+        <ul className="ui-helper mt-2 space-y-1">
           {UNSUPPORTED_STRATEGIES.map((s) => (
             <li key={s.name}>
-              <span className="text-ink/70">{s.name}</span> — {s.reason}
+              <span className="text-ink/80">{s.name}</span> — {s.reason}
             </li>
           ))}
         </ul>

@@ -58,11 +58,11 @@ export function BacktestResultsPanel({
   );
 
   return (
-    <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
+    <section className="ui-panel">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h2 className="text-xl font-semibold text-ink">Backtest results</h2>
-          <p className="mt-1 text-sm text-muted">
+          <h2 className="ui-page-title">Backtest results</h2>
+          <p className="ui-helper mt-1">
             {symbol} · {patternName}
             {dataRange && (
               <>
@@ -76,7 +76,7 @@ export function BacktestResultsPanel({
           <input
             value={symbolInput}
             onChange={(e) => onSymbolChange(e.target.value.toUpperCase())}
-            className="rounded-full border border-border bg-bg px-4 py-2 font-mono text-sm shadow-sm"
+            className="ui-input w-auto font-mono"
           />
           {preview && (
             <button
@@ -84,7 +84,7 @@ export function BacktestResultsPanel({
               onClick={() =>
                 exportBacktestCsv(preview, symbol, patternName, dataRange)
               }
-              className="rounded-full border border-border bg-bg px-4 py-2 text-sm text-muted shadow-sm hover:text-ink"
+              className="ui-btn-secondary"
             >
               Export
             </button>
@@ -142,9 +142,9 @@ export function BacktestResultsPanel({
 
           {preview.trades.length > 0 && equityCurves && (
             <div className="mt-6 grid gap-4 lg:grid-cols-12">
-              <div className="rounded-xl border border-border bg-bg/50 p-4 lg:col-span-5">
-                <h3 className="text-sm font-semibold text-ink">Equity curve</h3>
-                <p className="mt-0.5 text-xs text-muted">Cumulative return</p>
+              <div className="rounded-lg border border-border bg-bg p-4 lg:col-span-5">
+                <h3 className="ui-section-title">Equity curve</h3>
+                <p className="ui-helper mt-0.5">Cumulative return</p>
                 <div className="mt-3">
                   <EquityCurveChart
                     strategy={equityCurves.strategy}
@@ -153,18 +153,14 @@ export function BacktestResultsPanel({
                   />
                 </div>
               </div>
-              <div className="rounded-xl border border-border bg-bg/50 p-4 lg:col-span-4">
-                <h3 className="text-sm font-semibold text-ink">
-                  Monthly returns (%)
-                </h3>
+              <div className="rounded-lg border border-border bg-bg p-4 lg:col-span-4">
+                <h3 className="ui-section-title">Monthly returns (%)</h3>
                 <div className="mt-3">
                   <MonthlyReturnsHeatmap data={monthlyReturns} />
                 </div>
               </div>
-              <div className="rounded-xl border border-border bg-bg/50 p-4 lg:col-span-3">
-                <h3 className="text-sm font-semibold text-ink">
-                  Distribution of returns
-                </h3>
+              <div className="rounded-lg border border-border bg-bg p-4 lg:col-span-3">
+                <h3 className="ui-section-title">Distribution of returns</h3>
                 <div className="mt-3">
                   <ReturnDistributionChart bins={distribution} mean={avgReturn} />
                 </div>
@@ -174,13 +170,11 @@ export function BacktestResultsPanel({
 
           {preview.trades.length > 0 && (
             <div className="mt-6">
-              <h3 className="text-sm font-semibold text-ink">
-                Trade log (recent 5)
-              </h3>
-              <div className="mt-3 overflow-x-auto rounded-xl border border-border">
+              <h3 className="ui-section-title">Trade log (recent 5)</h3>
+              <div className="mt-3 overflow-x-auto rounded-lg border border-border">
                 <table className="w-full min-w-[640px] text-left text-sm">
                   <thead>
-                    <tr className="border-b border-border bg-bg/60 text-xs uppercase tracking-[0.15em] text-muted">
+                    <tr className="border-b border-border bg-bg text-xs uppercase tracking-[0.15em] text-muted">
                       <th className="px-4 py-3">Entry</th>
                       <th className="px-4 py-3">Exit</th>
                       <th className="px-4 py-3">Type</th>
@@ -233,7 +227,7 @@ export function BacktestResultsPanel({
                   </tbody>
                 </table>
               </div>
-              <p className="mt-3 text-xs text-muted">
+              <p className="ui-helper mt-3">
                 Past performance is not indicative of future results. Backtests
                 do not include transaction costs or slippage.
               </p>
@@ -280,10 +274,8 @@ function Stat({
           : "text-ink";
 
   return (
-    <div className="rounded-xl border border-border bg-bg/60 p-3 shadow-sm">
-      <div className="text-[10px] uppercase tracking-[0.15em] text-muted">
-        {label}
-      </div>
+    <div className="ui-stat">
+      <div className="ui-field-label">{label}</div>
       <div className={`mt-1 text-lg font-semibold ${valueColor}`}>{value}</div>
       {sub && <div className="text-[10px] text-success">{sub}</div>}
     </div>

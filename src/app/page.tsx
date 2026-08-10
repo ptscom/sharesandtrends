@@ -21,13 +21,13 @@ export default function HomePage() {
         <div className="mt-8 flex flex-wrap gap-4">
           <Link
             href="/data"
-            className="rounded-full bg-brand px-6 py-3 text-sm font-semibold text-bg"
+            className="ui-btn-primary"
           >
             1. Download price data
           </Link>
           <Link
             href="/explore"
-            className="rounded-full border border-border px-6 py-3 text-sm text-muted hover:text-ink"
+            className="ui-btn-secondary"
           >
             2. Explore & scan
           </Link>
@@ -50,7 +50,7 @@ export default function HomePage() {
           ].map((card) => (
             <div
               key={card.title}
-              className="rounded-3xl border border-border bg-surface p-6"
+              className="ui-card p-6"
             >
               <h2 className="text-xl font-semibold">{card.title}</h2>
               <p className="mt-3 text-sm text-muted">{card.body}</p>

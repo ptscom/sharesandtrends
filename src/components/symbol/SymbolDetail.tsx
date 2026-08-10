@@ -71,7 +71,7 @@ export function SymbolDetail({
 
   if (bars.length === 0) {
     return (
-      <div className="rounded-3xl border border-border bg-surface p-12 text-center">
+      <div className="ui-panel p-12 text-center">
         <p className="text-muted">No data for {symbol} in your browser.</p>
         <Link href="/data" className="mt-4 inline-block text-brand underline">
           Download prices
@@ -84,7 +84,7 @@ export function SymbolDetail({
 
   return (
     <div className="space-y-8">
-      <section className="rounded-3xl border border-border bg-surface p-8">
+      <section className="ui-panel p-8">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
             <p className="text-xs uppercase tracking-[0.3em] text-muted">Symbol</p>
@@ -108,7 +108,7 @@ export function SymbolDetail({
         </div>
       </section>
 
-      <section className="rounded-3xl border border-border bg-surface p-8">
+      <section className="ui-panel p-8">
         <h2 className="text-xl font-semibold text-ink">Price chart</h2>
         <div className="mt-4">
           <PriceChart
@@ -122,7 +122,7 @@ export function SymbolDetail({
       </section>
 
       {result && pattern && (
-        <section className="rounded-3xl border border-border bg-surface p-8">
+        <section className="ui-panel p-8">
           <h2 className="text-xl font-semibold text-ink">
             {pattern.name} backtest
           </h2>
@@ -182,8 +182,8 @@ export function SymbolDetail({
 
 function Metric({ label, value }: { label: string; value: string }) {
   return (
-    <div className="rounded-2xl border border-border bg-bg p-4">
-      <div className="text-xs uppercase tracking-[0.2em] text-muted">{label}</div>
+    <div className="ui-stat">
+      <div className="ui-field-label">{label}</div>
       <div className="mt-1 text-lg font-semibold">{value}</div>
     </div>
   );

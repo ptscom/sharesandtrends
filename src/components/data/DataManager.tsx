@@ -60,22 +60,20 @@ export function DataManager() {
 
   return (
     <div className="space-y-8">
-      <section className="rounded-3xl border border-border bg-surface p-8">
-        <h2 className="text-2xl font-semibold text-ink">Download price data</h2>
-        <p className="mt-2 text-sm text-muted">
+      <section className="ui-panel p-8">
+        <h2 className="ui-page-title text-2xl">Download price data</h2>
+        <p className="ui-helper mt-2">
           Data is fetched via Yahoo Finance and stored in your browser
           (IndexedDB). No server database.
         </p>
 
         <div className="mt-6">
-          <label className="text-xs uppercase tracking-[0.2em] text-muted">
-            Symbols (comma-separated)
-          </label>
+          <label className="ui-field-label">Symbols (comma-separated)</label>
           <textarea
             value={symbols}
             onChange={(e) => setSymbols(e.target.value)}
             rows={4}
-            className="mt-2 w-full rounded-2xl border border-border bg-bg px-4 py-3 font-mono text-sm text-ink"
+            className="ui-input mt-2 font-mono"
           />
         </div>
 
@@ -86,7 +84,7 @@ export function DataManager() {
             onClick={() =>
               runFetch(symbols.split(",").map((s) => s.trim()).filter(Boolean))
             }
-            className="rounded-full bg-brand px-6 py-3 text-sm font-semibold text-bg disabled:opacity-50"
+            className="ui-btn-primary disabled:opacity-50"
           >
             {loading ? "Downloading…" : "Download to browser"}
           </button>
@@ -94,33 +92,33 @@ export function DataManager() {
             type="button"
             disabled={loading}
             onClick={() => runFetch(DEFAULT_WATCHLIST)}
-            className="rounded-full border border-border px-6 py-3 text-sm text-muted hover:text-ink disabled:opacity-50"
+            className="ui-btn-secondary disabled:opacity-50"
           >
             Quick: default watchlist ({DEFAULT_WATCHLIST.length})
           </button>
         </div>
 
         {loading && (
-          <p className="mt-4 text-sm text-muted">
+          <p className="ui-helper mt-4">
             Progress: {progress.done} / {progress.total}
           </p>
         )}
       </section>
 
-      <section className="rounded-3xl border border-border bg-surface p-8">
-        <h2 className="text-xl font-semibold text-ink">Add single symbol</h2>
+      <section className="ui-panel p-8">
+        <h2 className="ui-page-title">Add single symbol</h2>
         <div className="mt-4 flex gap-3">
           <input
             value={customSymbol}
             onChange={(e) => setCustomSymbol(e.target.value.toUpperCase())}
             placeholder="AAPL"
-            className="rounded-2xl border border-border bg-bg px-4 py-3 text-sm font-semibold text-ink"
+            className="ui-input w-auto min-w-[8rem]"
           />
           <button
             type="button"
             disabled={loading || !customSymbol}
             onClick={() => runFetch([customSymbol])}
-            className="rounded-full bg-ink px-5 py-3 text-xs font-semibold uppercase tracking-[0.15em] text-bg disabled:opacity-50"
+            className="ui-btn-primary disabled:opacity-50"
           >
             Fetch
           </button>
@@ -128,8 +126,8 @@ export function DataManager() {
       </section>
 
       {results.length > 0 && (
-        <section className="rounded-3xl border border-border bg-surface p-8">
-          <h2 className="text-xl font-semibold text-ink">Results</h2>
+        <section className="ui-panel p-8">
+          <h2 className="ui-page-title">Results</h2>
           <div className="mt-4 max-h-80 overflow-auto">
             <table className="w-full text-left text-sm">
               <thead>
@@ -141,14 +139,14 @@ export function DataManager() {
               </thead>
               <tbody>
                 {results.map((r) => (
-                  <tr key={r.symbol} className="border-b border-border/50">
+                  <tr key={r.symbol} className="border-b border-border/40">
                     <td className="py-2 pr-4 font-mono font-semibold">{r.symbol}</td>
-                    <td className="py-2 pr-4">{r.count || "—"}</td>
-                    <td className="py-2 text-muted">
+                    <td className="py-2 pr-4">{r.count}</td>
+                    <td className="py-2">
                       {r.error ? (
                         <span className="text-danger">{r.error}</span>
                       ) : (
-                        <span className="text-brand">Stored in browser</span>
+                        <span className="text-success">OK</span>
                       )}
                     </td>
                   </tr>
