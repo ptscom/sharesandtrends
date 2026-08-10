@@ -3,8 +3,10 @@
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import {
   countBarsInRange,
+  deleteAllPriceData,
   deletePriceBarsInRange,
   deleteSymbol,
+  deleteSymbols,
   listSymbolInventory,
   type SymbolInventoryRow,
 } from "@/lib/storage/prices";
@@ -38,6 +40,7 @@ export function StoredDataInventory({
   const [rangeTo, setRangeTo] = useState("");
   const [rangeCount, setRangeCount] = useState<number | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
 
   const loadInventory = useCallback(async () => {
     setLoading(true);
@@ -45,6 +48,10 @@ export function StoredDataInventory({
     try {
       const inventory = await listSymbolInventory();
       setRows(inventory);
+      setSelected((prev) => {
+        const symbols = new Set(inventory.map((row) => row.symbol));
+        return new Set([...prev].filter((symbol) => symbols.has(symbol)));
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load stored data");
     } finally {
@@ -75,6 +82,84 @@ export function StoredDataInventory({
         toDates.length > 0 ? toDates.reduce((a, b) => (a > b ? a : b)) : null,
     };
   }, [rows]);
+
+  const allSelected = rows.length > 0 && selected.size === rows.length;
+  const someSelected = selected.size > 0 && !allSelected;
+
+  const toggleSymbol = (symbol: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(symbol)) next.delete(symbol);
+      else next.add(symbol);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (allSelected) {
+      setSelected(new Set());
+      return;
+    }
+    setSelected(new Set(rows.map((row) => row.symbol)));
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selected.size === 0) return;
+
+    const symbols = [...selected].sort();
+    const preview =
+      symbols.length <= 5
+        ? symbols.join(", ")
+        : `${symbols.slice(0, 5).join(", ")} and ${symbols.length - 5} more`;
+
+    if (
+      !window.confirm(
+        `Delete stored data for ${selected.size} symbol(s): ${preview}? This cannot be undone.`,
+      )
+    ) {
+      return;
+    }
+
+    setBusy("bulk");
+    setError(null);
+    try {
+      await deleteSymbols(symbols);
+      closeRangeDelete();
+      setSelected(new Set());
+      await loadInventory();
+      onChanged?.();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to delete selected symbols");
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const handleDeleteAll = async () => {
+    if (rows.length === 0) return;
+
+    if (
+      !window.confirm(
+        `Delete all stored price data (${rows.length} symbol(s), ${summary.totalBars.toLocaleString()} bars)? This cannot be undone.`,
+      )
+    ) {
+      return;
+    }
+
+    setBusy("all");
+    setError(null);
+    try {
+      await deleteAllPriceData();
+      closeRangeDelete();
+      setSelected(new Set());
+      await loadInventory();
+      onChanged?.();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to delete all data");
+    } finally {
+      setBusy(null);
+    }
+  };
 
   const openRangeDelete = (row: SymbolInventoryRow) => {
     setRangeTarget(row);
@@ -178,14 +263,36 @@ export function StoredDataInventory({
             remove a symbol entirely.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => void loadInventory()}
-          disabled={loading}
-          className="ui-btn-secondary disabled:opacity-50"
-        >
-          Refresh
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => void loadInventory()}
+            disabled={loading || busy !== null}
+            className="ui-btn-secondary disabled:opacity-50"
+          >
+            Refresh
+          </button>
+          {rows.length > 0 && (
+            <>
+              <button
+                type="button"
+                disabled={selected.size === 0 || busy !== null}
+                onClick={() => void handleDeleteSelected()}
+                className="rounded-full border border-danger/40 px-5 py-2.5 text-sm text-danger disabled:opacity-50"
+              >
+                Delete selected{selected.size > 0 ? ` (${selected.size})` : ""}
+              </button>
+              <button
+                type="button"
+                disabled={busy !== null}
+                onClick={() => void handleDeleteAll()}
+                className="rounded-full border border-danger/40 px-5 py-2.5 text-sm text-danger disabled:opacity-50"
+              >
+                Delete all data
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
       <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -216,6 +323,19 @@ export function StoredDataInventory({
           <table className="w-full min-w-[48rem] text-left text-sm">
             <thead>
               <tr className="border-b border-border text-muted">
+                <th className="w-10 py-2 pr-2">
+                  <input
+                    type="checkbox"
+                    checked={allSelected}
+                    ref={(el) => {
+                      if (el) el.indeterminate = someSelected;
+                    }}
+                    onChange={toggleSelectAll}
+                    disabled={busy !== null}
+                    aria-label="Select all symbols"
+                    className="h-4 w-4 rounded border-border"
+                  />
+                </th>
                 <th className="py-2 pr-4">Symbol</th>
                 <th className="py-2 pr-4">Bars</th>
                 <th className="py-2 pr-4">From</th>
@@ -228,6 +348,16 @@ export function StoredDataInventory({
               {rows.map((row) => (
                 <Fragment key={row.symbol}>
                   <tr className="border-b border-border/40">
+                    <td className="py-3 pr-2">
+                      <input
+                        type="checkbox"
+                        checked={selected.has(row.symbol)}
+                        onChange={() => toggleSymbol(row.symbol)}
+                        disabled={busy !== null}
+                        aria-label={`Select ${row.symbol}`}
+                        className="h-4 w-4 rounded border-border"
+                      />
+                    </td>
                     <td className="py-3 pr-4 font-mono font-semibold">
                       {row.symbol}
                     </td>
@@ -241,7 +371,7 @@ export function StoredDataInventory({
                       <div className="flex flex-wrap gap-2">
                         <button
                           type="button"
-                          disabled={busy === row.symbol}
+                          disabled={busy !== null}
                           onClick={() => openRangeDelete(row)}
                           className="rounded-full border border-border px-3 py-1 text-xs text-muted hover:text-ink disabled:opacity-50"
                         >
@@ -249,7 +379,7 @@ export function StoredDataInventory({
                         </button>
                         <button
                           type="button"
-                          disabled={busy === row.symbol}
+                          disabled={busy !== null}
                           onClick={() => void handleDeleteSymbol(row.symbol)}
                           className="rounded-full border border-danger/40 px-3 py-1 text-xs text-danger disabled:opacity-50"
                         >
@@ -260,7 +390,7 @@ export function StoredDataInventory({
                   </tr>
                   {rangeTarget?.symbol === row.symbol && (
                     <tr className="border-b border-border/40 bg-bg/60">
-                      <td colSpan={6} className="px-2 py-4">
+                      <td colSpan={7} className="px-2 py-4">
                         <div className="rounded-xl border border-border bg-surface p-4">
                           <p className="ui-section-title">
                             Delete date range for {row.symbol}

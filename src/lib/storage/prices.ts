@@ -64,6 +64,19 @@ export async function deleteSymbol(symbol: string): Promise<void> {
   await getDb().symbols.delete(upper);
 }
 
+export async function deleteSymbols(symbols: string[]): Promise<void> {
+  const database = getDb();
+  const upper = symbols.map((symbol) => symbol.toUpperCase());
+  await database.prices.bulkDelete(upper);
+  await database.symbols.bulkDelete(upper);
+}
+
+export async function deleteAllPriceData(): Promise<void> {
+  const database = getDb();
+  await database.prices.clear();
+  await database.symbols.clear();
+}
+
 export interface SymbolInventoryRow {
   symbol: string;
   barCount: number;
