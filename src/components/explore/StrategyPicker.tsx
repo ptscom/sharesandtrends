@@ -187,33 +187,41 @@ export function StrategyPicker({
       </div>
 
       <div className="mt-4">
-        <p className="ui-field-label">Popular</p>
-        <div className="mt-1.5 flex flex-wrap gap-x-1 gap-y-1 text-xs">
-          {popularPresets.map((preset, index) => (
-            <span key={preset.id} className="inline-flex items-center">
-              {index > 0 && <span className="mr-1 text-muted">·</span>}
+        <p className="ui-field-label">Popular strategies</p>
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          {popularPresets.map((preset) => {
+            const isActive = preset.id === selectedId;
+            return (
               <button
+                key={preset.id}
                 type="button"
                 onClick={() => handleSelect(preset)}
-                className={`font-medium hover:underline ${
-                  preset.id === selectedId
-                    ? "text-brand-dark"
-                    : "text-muted hover:text-ink"
+                className={`ui-stat text-left transition ${
+                  isActive
+                    ? "border-brand bg-brand/5"
+                    : "hover:border-brand/40"
                 }`}
               >
-                {preset.pattern.name}
+                <div className="ui-field-label">{preset.category}</div>
+                <div
+                  className={`mt-1 text-sm font-semibold leading-tight ${
+                    isActive ? "text-brand-dark" : "text-ink"
+                  }`}
+                >
+                  {preset.pattern.name}
+                </div>
               </button>
-            </span>
-          ))}
+            );
+          })}
         </div>
       </div>
 
       <button
         type="button"
         onClick={() => setLibraryOpen(true)}
-        className="mt-3 text-left text-sm font-medium text-brand-dark hover:underline"
+        className="ui-btn-primary mt-4 w-full py-3"
       >
-        View all strategies →
+        View all strategies
       </button>
 
       <StrategyLibraryModal
