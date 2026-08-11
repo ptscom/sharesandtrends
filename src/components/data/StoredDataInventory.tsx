@@ -8,6 +8,7 @@ import {
   deleteSymbol,
   deleteSymbols,
   listSymbolInventory,
+  repairSymbolMetadata,
   type SymbolInventoryRow,
 } from "@/lib/storage/prices";
 
@@ -46,6 +47,7 @@ export function StoredDataInventory({
     setLoading(true);
     setError(null);
     try {
+      await repairSymbolMetadata();
       const inventory = await listSymbolInventory();
       setRows(inventory);
       setSelected((prev) => {
@@ -297,13 +299,14 @@ export function StoredDataInventory({
       </div>
 
       <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <SummaryStat label="Symbols" value={summary.symbolCount.toString()} />
+        <SummaryStat label="Symbols" value={summary.symbolCount.toString()} tint="blue" />
         <SummaryStat
           label="Total bars"
           value={summary.totalBars.toLocaleString()}
+          tint="orange"
         />
-        <SummaryStat label="Earliest" value={formatDate(summary.earliest)} />
-        <SummaryStat label="Latest" value={formatDate(summary.latest)} />
+        <SummaryStat label="Earliest" value={formatDate(summary.earliest)} tint="purple" />
+        <SummaryStat label="Latest" value={formatDate(summary.latest)} tint="green" />
       </div>
 
       {error && (
@@ -323,8 +326,8 @@ export function StoredDataInventory({
         <div className="mt-6 overflow-x-auto">
           <table className="ui-table min-w-[48rem]">
             <thead>
-              <tr className="border-b border-border text-muted">
-                <th className="w-10 py-2 pr-2">
+              <tr>
+                <th className="w-10 px-2">
                   <input
                     type="checkbox"
                     checked={allSelected}
@@ -337,19 +340,19 @@ export function StoredDataInventory({
                     className="h-4 w-4 rounded border-border"
                   />
                 </th>
-                <th className="py-2 pr-4">Symbol</th>
-                <th className="py-2 pr-4">Bars</th>
-                <th className="py-2 pr-4">From</th>
-                <th className="py-2 pr-4">To</th>
-                <th className="py-2 pr-4">Last updated</th>
-                <th className="py-2">Actions</th>
+                <th>Symbol</th>
+                <th>Bars</th>
+                <th>From</th>
+                <th>To</th>
+                <th>Last updated</th>
+                <th>Actions</th>
               </tr>
             </thead>
             <tbody>
               {rows.map((row) => (
                 <Fragment key={row.symbol}>
-                  <tr className="border-b border-border/40">
-                    <td className="py-3 pr-2">
+                  <tr>
+                    <td className="px-2">
                       <input
                         type="checkbox"
                         checked={selected.has(row.symbol)}
@@ -359,16 +362,16 @@ export function StoredDataInventory({
                         className="h-4 w-4 rounded border-border"
                       />
                     </td>
-                    <td className="py-3 pr-4 font-mono font-semibold">
+                    <td className="font-mono font-semibold">
                       {row.symbol}
                     </td>
-                    <td className="py-3 pr-4">{row.barCount.toLocaleString()}</td>
-                    <td className="py-3 pr-4">{formatDate(row.fromDate)}</td>
-                    <td className="py-3 pr-4">{formatDate(row.toDate)}</td>
-                    <td className="py-3 pr-4 text-muted">
+                    <td>{row.barCount.toLocaleString()}</td>
+                    <td>{formatDate(row.fromDate)}</td>
+                    <td>{formatDate(row.toDate)}</td>
+                    <td className="text-body">
                       {formatUpdated(row.lastUpdated)}
                     </td>
-                    <td className="py-3">
+                    <td>
                       <div className="flex flex-wrap gap-2">
                         <button
                           type="button"
@@ -466,11 +469,28 @@ export function StoredDataInventory({
   );
 }
 
-function SummaryStat({ label, value }: { label: string; value: string }) {
+function SummaryStat({
+  label,
+  value,
+  tint,
+}: {
+  label: string;
+  value: string;
+  tint: "orange" | "green" | "blue" | "purple";
+}) {
+  const tintClass =
+    tint === "orange"
+      ? "ui-stat-tint-orange"
+      : tint === "green"
+        ? "ui-stat-tint-green"
+        : tint === "blue"
+          ? "ui-stat-tint-blue"
+          : "ui-stat-tint-purple";
+
   return (
-    <div className="ui-stat">
+    <div className={tintClass}>
       <div className="ui-field-label">{label}</div>
-      <div className="mt-1 text-lg font-semibold">{value}</div>
+      <div className="mt-1 text-lg font-semibold text-ink">{value}</div>
     </div>
   );
 }

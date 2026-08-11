@@ -20,7 +20,8 @@ export async function savePriceBars(
 
 export async function getPriceBars(symbol: string): Promise<OhlcvBar[]> {
   const record = await getDb().prices.get(symbol.toUpperCase());
-  return record?.bars ?? [];
+  const bars = record?.bars ?? [];
+  return [...bars].sort((a, b) => a.date.localeCompare(b.date));
 }
 
 const PRICE_LOAD_BATCH = 24;
@@ -86,20 +87,50 @@ export interface SymbolInventoryRow {
 }
 
 export async function listSymbolInventory(): Promise<SymbolInventoryRow[]> {
-  const metas = await listSymbols();
-  const rows = await Promise.all(
-    metas.map(async (meta) => {
-      const bars = await getPriceBars(meta.symbol);
+  const database = getDb();
+  const [priceRecords, symbolMetas] = await Promise.all([
+    database.prices.toArray(),
+    database.symbols.toArray(),
+  ]);
+
+  const metaBySymbol = new Map(symbolMetas.map((meta) => [meta.symbol, meta]));
+
+  const rows = priceRecords
+    .filter((record) => record.bars.length > 0)
+    .map((record) => {
+      const bars = [...record.bars].sort((a, b) => a.date.localeCompare(b.date));
+      const meta = metaBySymbol.get(record.symbol);
       return {
-        symbol: meta.symbol,
+        symbol: record.symbol,
         barCount: bars.length,
         fromDate: bars[0]?.date ?? null,
         toDate: bars[bars.length - 1]?.date ?? null,
-        lastUpdated: meta.lastUpdated ?? null,
+        lastUpdated: meta?.lastUpdated ?? record.updatedAt ?? null,
       };
-    }),
-  );
+    });
+
   return rows.sort((a, b) => a.symbol.localeCompare(b.symbol));
+}
+
+/** Backfill symbols metadata from the prices table (fixes legacy data). */
+export async function repairSymbolMetadata(): Promise<number> {
+  const database = getDb();
+  const priceRecords = await database.prices.toArray();
+  let repaired = 0;
+
+  for (const record of priceRecords) {
+    if (record.bars.length === 0) continue;
+    const existing = await database.symbols.get(record.symbol);
+    if (!existing) {
+      await database.symbols.put({
+        symbol: record.symbol,
+        lastUpdated: record.updatedAt,
+      });
+      repaired += 1;
+    }
+  }
+
+  return repaired;
 }
 
 /** Remove bars with dates in [fromDate, toDate] inclusive. Returns bars removed. */

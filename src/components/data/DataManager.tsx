@@ -142,21 +142,21 @@ export function DataManager() {
       {results.length > 0 && (
         <section className="ui-panel p-6">
           <h2 className="ui-section-title">Download results</h2>
-          <div className="mt-4 max-h-80 overflow-auto">
-            <table className="w-full text-left text-sm">
+          <div className="mt-4 max-h-80 overflow-auto rounded-xl border border-border-subtle">
+            <table className="ui-table">
               <thead>
-                <tr className="border-b border-border text-muted">
-                  <th className="py-2 pr-4">Symbol</th>
-                  <th className="py-2 pr-4">Bars</th>
-                  <th className="py-2">Status</th>
+                <tr>
+                  <th>Symbol</th>
+                  <th>Bars</th>
+                  <th>Status</th>
                 </tr>
               </thead>
               <tbody>
                 {results.map((r) => (
-                  <tr key={r.symbol} className="border-b border-border/40">
-                    <td className="py-2 pr-4 font-mono font-semibold">{r.symbol}</td>
-                    <td className="py-2 pr-4">{r.count}</td>
-                    <td className="py-2">
+                  <tr key={r.symbol}>
+                    <td className="font-mono font-semibold">{r.symbol}</td>
+                    <td>{r.count}</td>
+                    <td>
                       {r.error ? (
                         <span className="text-danger">{r.error}</span>
                       ) : (
