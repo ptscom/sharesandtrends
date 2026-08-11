@@ -20,13 +20,13 @@ export function ScanDetailClient({ scanId }: { scanId: string }) {
 
   if (missing) {
     return (
-      <div className="rounded-3xl border border-border bg-surface p-12 text-center">
-        <h2 className="text-xl font-semibold text-ink">Scan not found</h2>
-        <p className="mt-2 text-sm text-muted">
+      <div className="ui-panel p-12 text-center">
+        <h2 className="ui-section-title text-xl">Scan not found</h2>
+        <p className="ui-helper mt-2">
           Scan results are stored in your browser. This ID may be from another
           device, or the data was cleared.
         </p>
-        <Link href="/explore" className="mt-6 inline-block text-brand underline">
+        <Link href="/explore" className="ui-btn-link mt-6 inline-block">
           Run a new scan
         </Link>
       </div>
@@ -34,21 +34,17 @@ export function ScanDetailClient({ scanId }: { scanId: string }) {
   }
 
   if (!scan) {
-    return <p className="text-muted">Loading scan…</p>;
+    return <p className="text-body">Loading scan…</p>;
   }
 
   return (
-    <div className="space-y-8">
-      <section className="rounded-3xl border border-border bg-surface p-8">
+    <div className="space-y-6">
+      <section className="ui-panel p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="text-xs uppercase tracking-[0.3em] text-muted">
-              Scan results
-            </p>
-            <h1 className="mt-2 text-3xl font-semibold text-ink">
-              {scan.patternName}
-            </h1>
-            <p className="mt-2 text-sm text-muted">
+            <p className="ui-eyebrow">Scan results</p>
+            <h1 className="ui-page-title mt-2">{scan.patternName}</h1>
+            <p className="ui-helper mt-2">
               {scan.results.length} matches · run{" "}
               {new Date(scan.runAt).toLocaleString()} · stored in your browser
             </p>
@@ -57,56 +53,49 @@ export function ScanDetailClient({ scanId }: { scanId: string }) {
         </div>
       </section>
 
-      <section className="rounded-3xl border border-border bg-surface p-8">
+      <section className="ui-panel p-6">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[720px] text-left text-sm">
+          <table className="ui-table min-w-[720px]">
             <thead>
-              <tr className="border-b border-border text-xs uppercase tracking-[0.15em] text-muted">
-                <th className="py-3 pr-4">Symbol</th>
-                <th className="py-3 pr-4">Signal</th>
-                <th className="py-3 pr-4">Win rate</th>
-                <th className="py-3 pr-4">Trades</th>
-                <th className="py-3 pr-4">Avg return</th>
-                <th className="py-3 pr-4">Sharpe</th>
-                <th className="py-3">Share</th>
+              <tr>
+                <th>Symbol</th>
+                <th>Signal</th>
+                <th>Win rate</th>
+                <th>Trades</th>
+                <th>Avg return</th>
+                <th>Sharpe</th>
+                <th>Share</th>
               </tr>
             </thead>
             <tbody>
               {scan.results.map((row) => (
-                <tr
-                  key={row.symbol}
-                  className="border-b border-border/50 hover:bg-bg/50"
-                >
-                  <td className="py-3 pr-4">
+                <tr key={row.symbol}>
+                  <td>
                     <Link
-                      href={`/symbol/${row.symbol}`}
-                      className="font-mono font-semibold text-brand"
+                      href={`/symbol/${row.symbol}?scanId=${scan.id}`}
+                      className="font-mono font-semibold text-brand-text hover:text-brand"
                     >
                       {row.symbol}
                     </Link>
                   </td>
-                  <td className="py-3 pr-4">
+                  <td>
                     {row.signalToday ? (
-                      <span className="rounded-full bg-brand/15 px-2 py-1 text-xs font-semibold text-brand">
+                      <span className="ui-badge bg-brand-light text-brand-text">
                         Today
                       </span>
                     ) : (
                       <span className="text-muted">—</span>
                     )}
                   </td>
-                  <td className="py-3 pr-4">
-                    {row.stats.winRate.toFixed(1)}%
-                  </td>
-                  <td className="py-3 pr-4">{row.stats.trades}</td>
-                  <td className="py-3 pr-4">
-                    {row.stats.avgReturnPct.toFixed(2)}%
-                  </td>
-                  <td className="py-3 pr-4">
+                  <td>{row.stats.winRate.toFixed(1)}%</td>
+                  <td>{row.stats.trades}</td>
+                  <td>{row.stats.avgReturnPct.toFixed(2)}%</td>
+                  <td>
                     {row.stats.sharpe != null
                       ? row.stats.sharpe.toFixed(2)
                       : "—"}
                   </td>
-                  <td className="py-3">
+                  <td>
                     <RowCopy text={formatShareCaption(scan.patternName, row)} />
                   </td>
                 </tr>
@@ -114,7 +103,7 @@ export function ScanDetailClient({ scanId }: { scanId: string }) {
             </tbody>
           </table>
           {scan.results.length === 0 && (
-            <p className="py-8 text-center text-muted">
+            <p className="py-8 text-center text-body">
               No symbols matched your filters.
             </p>
           )}
@@ -135,7 +124,7 @@ function RowCopy({ text }: { text: string }) {
           setTimeout(() => setCopied(false), 2000);
         });
       }}
-      className="text-xs text-brand underline"
+      className="ui-btn-link text-xs"
     >
       {copied ? "Copied!" : "Copy post"}
     </button>

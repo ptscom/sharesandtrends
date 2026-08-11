@@ -17,7 +17,12 @@ export async function savePattern(
 }
 
 export async function listPatterns(): Promise<PatternDefinition[]> {
-  return getDb().patterns.orderBy("updatedAt").reverse().toArray();
+  const rows = await getDb().patterns.toArray();
+  return rows.sort((a, b) => {
+    const aTime = a.updatedAt ?? a.createdAt ?? "";
+    const bTime = b.updatedAt ?? b.createdAt ?? "";
+    return bTime.localeCompare(aTime);
+  });
 }
 
 export async function getPattern(id: string): Promise<PatternDefinition | undefined> {

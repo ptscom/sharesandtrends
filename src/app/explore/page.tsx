@@ -1,9 +1,14 @@
+import { Suspense } from "react";
+import { PageContainer } from "@/components/layout/PageContainer";
 import { ExploreClient } from "@/components/explore/ExploreClient";
+import { ExploreSkeleton } from "@/components/explore/ExploreSkeleton";
 
 export default function ExplorePage() {
   return (
-    <div className="mx-auto w-full max-w-6xl px-6 py-10">
-      <ExploreClient />
-    </div>
+    <PageContainer>
+      <Suspense fallback={<ExploreSkeleton />}>
+        <ExploreClient />
+      </Suspense>
+    </PageContainer>
   );
 }

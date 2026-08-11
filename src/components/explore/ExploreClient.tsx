@@ -2,32 +2,79 @@
 
 import { formatShareCaption, ShareCaption } from "@/components/share/ShareCaption";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 import { PriceChart } from "@/components/chart/PriceChart";
+import { BacktestResultsPanel } from "@/components/explore/BacktestResultsPanel";
+import { OptimizationPanel } from "@/components/explore/OptimizationPanel";
+import { StrategyPicker } from "@/components/explore/StrategyPicker";
 import { runBacktest } from "@/lib/engine/backtest";
+import { extractCandlePatternMarkers } from "@/lib/engine/candle-patterns";
 import { computeIndicators } from "@/lib/engine/indicators";
 import { runUniverseScanInWorker } from "@/lib/engine/scan-worker-client";
-import { DEFAULT_PATTERNS, EMA_CROSS_PATTERN } from "@/lib/patterns/defaults";
-import { savePattern, saveScanRun } from "@/lib/storage/patterns";
+import { patternToPreset } from "@/lib/patterns/custom";
+import { EMA_CROSS_PATTERN } from "@/lib/patterns/defaults";
+import { chartOverlays } from "@/lib/patterns/optimization";
+import {
+  getEffectivePreset,
+  isBuiltInPresetId,
+  listModifiedPresetIds,
+} from "@/lib/patterns/preset-store";
+import type { StrategyPreset } from "@/lib/patterns/strategies";
+import { STRATEGY_PRESETS } from "@/lib/patterns/strategies";
+import {
+  getPattern,
+  listPatterns,
+  savePattern,
+  saveScanRun,
+} from "@/lib/storage/patterns";
 import { getPriceBars, listSymbols } from "@/lib/storage/prices";
 import type { BacktestResult, PatternDefinition, ScanRun } from "@/lib/types";
 import { DEFAULT_WATCHLIST } from "@/lib/data/default-universe";
 
 export function ExploreClient() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const [selectedId, setSelectedId] = useState("ema-cross");
   const [pattern, setPattern] = useState<PatternDefinition>(EMA_CROSS_PATTERN);
+  const [customStrategies, setCustomStrategies] = useState<StrategyPreset[]>([]);
+  const [modifiedPresetIds, setModifiedPresetIds] = useState<string[]>([]);
   const [minWinRate, setMinWinRate] = useState(70);
   const [minTrades, setMinTrades] = useState(5);
   const [signalTodayOnly, setSignalTodayOnly] = useState(false);
   const [scanning, setScanning] = useState(false);
+  const [scanPhase, setScanPhase] = useState<"loading" | "scanning">("loading");
   const [scanProgress, setScanProgress] = useState({ done: 0, total: 0 });
   const [scan, setScan] = useState<ScanRun | null>(null);
   const [previewSymbol, setPreviewSymbol] = useState("AAPL");
   const [preview, setPreview] = useState<BacktestResult | null>(null);
   const [storedSymbols, setStoredSymbols] = useState<string[]>([]);
-  const [fastPeriod, setFastPeriod] = useState(3);
-  const [slowPeriod, setSlowPeriod] = useState(50);
+  const [overlayFast, setOverlayFast] = useState<(number | null)[]>([]);
+  const [overlaySlow, setOverlaySlow] = useState<(number | null)[]>([]);
+  const [patternMarkers, setPatternMarkers] = useState<
+    { date: string; label: string }[]
+  >([]);
+  const [chartBars, setChartBars] = useState<
+    import("@/lib/types").OhlcvBar[]
+  >([]);
+  const [fullBars, setFullBars] = useState<import("@/lib/types").OhlcvBar[]>(
+    [],
+  );
+  const [dataRange, setDataRange] = useState<{ from: string; to: string } | null>(
+    null,
+  );
+
+  const selectStrategy = useCallback(async (preset: StrategyPreset) => {
+    setSelectedId(preset.id);
+    if (isBuiltInPresetId(preset.id)) {
+      const { pattern } = await getEffectivePreset(preset.id);
+      setPattern(structuredClone(pattern));
+    } else {
+      setPattern(structuredClone(preset.pattern));
+    }
+  }, []);
+
+  const buildPattern = useCallback((): PatternDefinition => pattern, [pattern]);
 
   useEffect(() => {
     let cancelled = false;
@@ -39,50 +86,58 @@ export function ExploreClient() {
     };
   }, []);
 
-  const buildPattern = useCallback((): PatternDefinition => {
-    if (pattern.name.includes("RSI")) {
-      return { ...pattern };
-    }
-    return {
-      ...pattern,
-      name: `EMA ${fastPeriod} / ${slowPeriod} Cross`,
-      indicators: [
-        {
-          alias: "ema_fast",
-          type: "ema",
-          params: { length: fastPeriod, source: "close" },
-          timeframe: "1D",
-        },
-        {
-          alias: "ema_slow",
-          type: "ema",
-          params: { length: slowPeriod, source: "close" },
-          timeframe: "1D",
-        },
-      ],
-      entry: {
-        op: "crosses_above",
-        left: { ref: "ema_fast" },
-        right: { ref: "ema_slow" },
-      },
-      exit: {
-        op: "crosses_below",
-        left: { ref: "ema_fast" },
-        right: { ref: "ema_slow" },
-      },
-      backtest: {
-        entryOn: "close",
-        exitOn: "opposite_signal",
-        minTrades,
-      },
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      const [list, modified] = await Promise.all([
+        listPatterns(),
+        listModifiedPresetIds(),
+      ]);
+      const presetIds = new Set(STRATEGY_PRESETS.map((s) => s.id));
+      const custom = list
+        .filter((p) => p.id && !presetIds.has(p.id))
+        .map(patternToPreset);
+      if (!cancelled) {
+        setCustomStrategies(custom);
+        setModifiedPresetIds(modified);
+      }
+    })();
+    return () => {
+      cancelled = true;
     };
-  }, [pattern, fastPeriod, slowPeriod, minTrades]);
+  }, []);
+
+  useEffect(() => {
+    if (searchParams.get("patternId")) return;
+    void getEffectivePreset("ema-cross").then(({ pattern }) => {
+      setPattern(structuredClone(pattern));
+    });
+  }, [searchParams]);
+
+  useEffect(() => {
+    const patternId = searchParams.get("patternId");
+    if (!patternId) return;
+
+    void (async () => {
+      const preset = STRATEGY_PRESETS.find((s) => s.id === patternId);
+      if (preset) {
+        const { pattern } = await getEffectivePreset(patternId);
+        setSelectedId(patternId);
+        setPattern(structuredClone(pattern));
+        return;
+      }
+      const stored = await getPattern(patternId);
+      if (stored) {
+        setSelectedId(patternId);
+        setPattern(structuredClone(stored));
+      }
+    })();
+  }, [searchParams]);
 
   const runPreview = useCallback(async () => {
     const bars = await getPriceBars(previewSymbol);
     if (bars.length === 0) return;
-    const p = buildPattern();
-    setPreview(runBacktest(previewSymbol, bars, p));
+    setPreview(runBacktest(previewSymbol, bars, buildPattern()));
   }, [previewSymbol, buildPattern]);
 
   const runScan = useCallback(async () => {
@@ -94,18 +149,27 @@ export function ExploreClient() {
     }
 
     setScanning(true);
+    setScanPhase("loading");
     setScanProgress({ done: 0, total: universe.length });
 
     try {
-      const p = buildPattern();
-      const saved = await savePattern(p);
+      const built = buildPattern();
+      const p = { ...built, id: built.id ?? selectedId };
+      const needsSave =
+        !isBuiltInPresetId(selectedId) ||
+        modifiedPresetIds.includes(selectedId);
+      const patternForScan = needsSave ? await savePattern(p) : p;
+
       const result = await runUniverseScanInWorker({
         universe,
-        pattern: saved,
+        pattern: patternForScan,
         minWinRate,
         minTrades,
         signalTodayOnly,
-        onProgress: (done, total) => setScanProgress({ done, total }),
+        onProgress: (done, total, phase) => {
+          setScanPhase(phase);
+          setScanProgress({ done, total });
+        },
       });
       await saveScanRun(result);
       setScan(result);
@@ -122,23 +186,46 @@ export function ExploreClient() {
     minTrades,
     signalTodayOnly,
     router,
+    selectedId,
+    modifiedPresetIds,
   ]);
-
-  const [chartBars, setChartBars] = useState<
-    import("@/lib/types").OhlcvBar[]
-  >([]);
-  const [emaFast, setEmaFast] = useState<(number | null)[]>([]);
-  const [emaSlow, setEmaSlow] = useState<(number | null)[]>([]);
 
   useEffect(() => {
     void (async () => {
       const bars = await getPriceBars(previewSymbol);
-      setChartBars(bars.slice(-252));
+      const windowBars = bars.slice(-252);
+      setFullBars(bars);
+      setChartBars(windowBars);
+      setDataRange(
+        bars.length > 0
+          ? { from: bars[0]!.date, to: bars[bars.length - 1]!.date }
+          : null,
+      );
       if (bars.length > 0) {
         const p = buildPattern();
         const ctx = computeIndicators(bars, p.indicators);
-        setEmaFast(ctx.series.ema_fast ?? []);
-        setEmaSlow(ctx.series.ema_slow ?? []);
+        const overlays = chartOverlays(p, ctx.series);
+        setOverlayFast(overlays.fast ?? []);
+        setOverlaySlow(overlays.slow ?? []);
+        const windowDates = new Set(windowBars.map((b) => b.date));
+        const hasCandlePatterns = p.indicators.some(
+          (ind) => ind.type === "candle_pattern",
+        );
+        setPatternMarkers(
+          hasCandlePatterns
+            ? extractCandlePatternMarkers(bars, ctx.series, p.indicators).filter(
+                (m) => windowDates.has(m.date),
+              )
+            : [],
+        );
+        setPreview(runBacktest(previewSymbol, bars, p));
+      } else {
+        setFullBars([]);
+        setOverlayFast([]);
+        setOverlaySlow([]);
+        setPatternMarkers([]);
+        setPreview(null);
+        setDataRange(null);
       }
     })();
   }, [previewSymbol, buildPattern]);
@@ -146,195 +233,152 @@ export function ExploreClient() {
   const activePattern = buildPattern();
 
   return (
-    <div className="space-y-8">
-      <section className="grid gap-8 lg:grid-cols-[1fr_1.2fr]">
-        <div className="rounded-3xl border border-border bg-surface p-8">
-          <p className="text-xs uppercase tracking-[0.3em] text-muted">
-            Pattern builder
-          </p>
-          <h2 className="mt-2 text-2xl font-semibold text-ink">
-            {activePattern.name}
-          </h2>
-          <p className="mt-2 text-sm text-muted">
-            Adjust parameters, backtest on one symbol, then scan your stored
-            universe in a background worker so the tab stays responsive.
-          </p>
+    <div className="space-y-6">
+      <section className="grid gap-6 lg:grid-cols-3 lg:items-stretch">
+        {/* Column 1: select strategy */}
+        <div className="flex min-h-[24rem] flex-col ui-panel p-6">
+          <StrategyPicker
+            selectedId={selectedId}
+            customStrategies={customStrategies}
+            modifiedPresetIds={modifiedPresetIds}
+            onSelect={(preset) => void selectStrategy(preset)}
+          />
+        </div>
 
-          {!pattern.name.includes("RSI") && (
-            <div className="mt-6 grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-xs uppercase tracking-[0.2em] text-muted">
-                  Fast EMA
-                </label>
-                <input
-                  type="number"
-                  min={1}
-                  max={100}
-                  value={fastPeriod}
-                  onChange={(e) => setFastPeriod(Number(e.target.value))}
-                  className="mt-2 w-full rounded-2xl border border-border bg-bg px-4 py-3 text-sm font-semibold"
-                />
-              </div>
-              <div>
-                <label className="text-xs uppercase tracking-[0.2em] text-muted">
-                  Slow EMA
-                </label>
-                <input
-                  type="number"
-                  min={2}
-                  max={500}
-                  value={slowPeriod}
-                  onChange={(e) => setSlowPeriod(Number(e.target.value))}
-                  className="mt-2 w-full rounded-2xl border border-border bg-bg px-4 py-3 text-sm font-semibold"
-                />
-              </div>
-            </div>
-          )}
-
-          <div className="mt-6 grid grid-cols-2 gap-4">
-            <div>
-              <label className="text-xs uppercase tracking-[0.2em] text-muted">
-                Min win rate %
-              </label>
-              <input
-                type="number"
-                min={0}
-                max={100}
-                value={minWinRate}
-                onChange={(e) => setMinWinRate(Number(e.target.value))}
-                className="mt-2 w-full rounded-2xl border border-border bg-bg px-4 py-3 text-sm font-semibold"
-              />
-            </div>
-            <div>
-              <label className="text-xs uppercase tracking-[0.2em] text-muted">
-                Min trades
-              </label>
-              <input
-                type="number"
-                min={1}
-                max={500}
-                value={minTrades}
-                onChange={(e) => setMinTrades(Number(e.target.value))}
-                className="mt-2 w-full rounded-2xl border border-border bg-bg px-4 py-3 text-sm font-semibold"
-              />
-            </div>
+        {/* Column 2: optimization variables */}
+        <div className="flex min-h-[24rem] flex-col ui-panel p-6">
+          <div className="flex items-center gap-2">
+            <p className="ui-eyebrow">Step 2</p>
+            <h3 className="ui-section-title">Optimization variables</h3>
+            <span className="ui-badge bg-success-light text-success">
+              ON
+            </span>
           </div>
-
-          <label className="mt-4 flex items-center gap-3 text-sm text-muted">
-            <input
-              type="checkbox"
-              checked={signalTodayOnly}
-              onChange={(e) => setSignalTodayOnly(e.target.checked)}
-              className="h-4 w-4 rounded border-border"
-            />
-            Only show symbols with a signal today
-          </label>
-
-          <div className="mt-6 flex flex-wrap gap-3">
-            <button
-              type="button"
-              onClick={() => void runScan()}
-              disabled={scanning}
-              className="rounded-full bg-brand px-6 py-3 text-sm font-semibold text-bg disabled:opacity-50"
-            >
-              {scanning
-                ? `Loading & scanning ${scanProgress.done}/${scanProgress.total}…`
-                : "Scan universe"}
-            </button>
-            <button
-              type="button"
-              onClick={() => void runPreview()}
-              className="rounded-full border border-border px-6 py-3 text-sm text-muted hover:text-ink"
-            >
-              Backtest preview
-            </button>
-          </div>
-
-          <p className="mt-4 text-xs text-muted">
-            {storedSymbols.length} symbols stored locally
-            {storedSymbols.length === 0 && (
-              <>
-                {" "}
-                —{" "}
-                <Link href="/data" className="text-brand underline">
-                  download data
-                </Link>{" "}
-                first
-              </>
-            )}
+          <p className="ui-helper mt-1">
+            Adjust indicator periods, thresholds, and backtest settings.
           </p>
-
-          <div className="mt-6">
-            <label className="text-xs uppercase tracking-[0.2em] text-muted">
-              Preset patterns
-            </label>
-            <div className="mt-2 flex flex-wrap gap-2">
-              {DEFAULT_PATTERNS.map((p) => (
-                <button
-                  key={p.name}
-                  type="button"
-                  onClick={() => setPattern(p)}
-                  className="rounded-full border border-border px-3 py-1 text-xs text-muted hover:text-ink"
-                >
-                  {p.name}
-                </button>
-              ))}
-            </div>
+          <div className="mt-4 min-h-0 flex-1 overflow-y-auto pr-1">
+            <OptimizationPanel pattern={pattern} onChange={setPattern} />
           </div>
         </div>
 
-        <div className="rounded-3xl border border-border bg-surface p-8">
-          <div className="flex items-center justify-between gap-4">
-            <h2 className="text-xl font-semibold text-ink">Chart preview</h2>
-            <input
-              value={previewSymbol}
-              onChange={(e) => setPreviewSymbol(e.target.value.toUpperCase())}
-              className="rounded-full border border-border bg-bg px-4 py-2 font-mono text-sm"
-            />
-          </div>
-          <div className="mt-4">
-            {chartBars.length > 0 ? (
-              <PriceChart
-                bars={chartBars}
-                signals={preview?.signals ?? []}
-                emaFast={emaFast.slice(-252)}
-                emaSlow={emaSlow.slice(-252)}
-              />
-            ) : (
-              <p className="py-20 text-center text-sm text-muted">
-                No local data for {previewSymbol}.{" "}
-                <Link href="/data" className="text-brand underline">
-                  Fetch it
-                </Link>
-              </p>
-            )}
-          </div>
-          {preview && (
-            <div className="mt-6 grid grid-cols-2 gap-4 text-sm md:grid-cols-4">
-              <Stat label="Trades" value={String(preview.stats.trades)} />
-              <Stat
-                label="Win rate"
-                value={`${preview.stats.winRate.toFixed(1)}%`}
-              />
-              <Stat
-                label="Avg return"
-                value={`${preview.stats.avgReturnPct.toFixed(2)}%`}
-              />
-              <Stat
-                label="Sharpe"
-                value={
-                  preview.stats.sharpe != null
-                    ? preview.stats.sharpe.toFixed(2)
-                    : "—"
-                }
-              />
+        {/* Column 3: scan universe */}
+        <div className="flex min-h-[24rem] flex-col ui-panel p-6">
+          <p className="ui-eyebrow">Step 3</p>
+          <h3 className="ui-section-title mt-1">Scan universe</h3>
+          <p className="ui-helper mt-1">
+            Filter symbols and run a universe scan with the current strategy.
+          </p>
+
+          <div className="mt-5 flex-1">
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="ui-field-label">Min win rate %</label>
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={minWinRate}
+                  onChange={(e) => setMinWinRate(Number(e.target.value))}
+                  className="ui-input mt-2"
+                />
+              </div>
+              <div>
+                <label className="ui-field-label">Min trades</label>
+                <input
+                  type="number"
+                  min={1}
+                  max={500}
+                  value={minTrades}
+                  onChange={(e) => setMinTrades(Number(e.target.value))}
+                  className="ui-input mt-2"
+                />
+              </div>
             </div>
+
+            <label className="mt-4 flex items-center gap-3 text-sm text-muted">
+              <input
+                type="checkbox"
+                checked={signalTodayOnly}
+                onChange={(e) => setSignalTodayOnly(e.target.checked)}
+                className="h-4 w-4 rounded border-border"
+              />
+              Only show symbols with a signal today
+            </label>
+
+            <div className="mt-6 flex flex-col gap-2">
+              <button
+                type="button"
+                onClick={() => void runScan()}
+                disabled={scanning}
+                className="ui-btn-primary w-full py-3"
+              >
+                {scanning
+                  ? scanPhase === "loading"
+                    ? `Loading prices ${scanProgress.done}/${scanProgress.total}…`
+                    : `Scanning ${scanProgress.done}/${scanProgress.total}…`
+                  : "Scan universe"}
+              </button>
+              <button
+                type="button"
+                onClick={() => void runPreview()}
+                className="ui-btn-secondary w-full"
+              >
+                Refresh preview
+              </button>
+            </div>
+
+            <p className="ui-helper mt-4">
+              {storedSymbols.length} symbols stored locally
+              {storedSymbols.length === 0 && (
+                <>
+                  {" "}
+                  —{" "}
+                  <Link href="/data" className="text-brand underline">
+                    download data
+                  </Link>{" "}
+                  first
+                </>
+              )}
+            </p>
+          </div>
+        </div>
+      </section>
+
+      <BacktestResultsPanel
+        preview={preview}
+        fullBars={fullBars}
+        symbol={previewSymbol}
+        patternName={activePattern.name}
+        dataRange={dataRange}
+        symbolInput={previewSymbol}
+        onSymbolChange={setPreviewSymbol}
+      />
+
+      <section className="ui-panel">
+        <h2 className="ui-page-title">Chart preview</h2>
+        <div className="mt-4">
+          {chartBars.length > 0 ? (
+            <PriceChart
+              bars={chartBars}
+              signals={preview?.signals ?? []}
+              emaFast={overlayFast.slice(-252)}
+              emaSlow={overlaySlow.slice(-252)}
+              patternMarkers={patternMarkers}
+            />
+          ) : (
+            <p className="py-20 text-center text-sm text-muted">
+              No local data for {previewSymbol}.{" "}
+              <Link href="/data" className="text-brand underline">
+                Fetch it
+              </Link>
+            </p>
           )}
         </div>
       </section>
 
       {scan && (
-        <section className="rounded-3xl border border-border bg-surface p-8">
+        <section className="ui-panel p-8">
           <div className="flex flex-wrap items-start justify-between gap-4">
             <div>
               <p className="text-xs uppercase tracking-[0.3em] text-muted">
@@ -373,7 +417,7 @@ export function ExploreClient() {
                   >
                     <td className="py-3 pr-4">
                       <Link
-                        href={`/symbol/${row.symbol}`}
+                        href={`/symbol/${row.symbol}?scanId=${scan.id}`}
                         className="font-mono font-semibold text-brand"
                       >
                         {row.symbol}
@@ -407,15 +451,6 @@ export function ExploreClient() {
           </div>
         </section>
       )}
-    </div>
-  );
-}
-
-function Stat({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-2xl border border-border bg-bg p-4">
-      <div className="text-xs uppercase tracking-[0.2em] text-muted">{label}</div>
-      <div className="mt-1 text-lg font-semibold text-ink">{value}</div>
     </div>
   );
 }

@@ -1,39 +1,49 @@
+"use client";
+
+import Image from "next/image";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 const links = [
   { href: "/", label: "Home" },
   { href: "/explore", label: "Explore" },
+  { href: "/strategies", label: "Strategies" },
   { href: "/scans", label: "Scans" },
   { href: "/data", label: "Data" },
 ];
 
 export function Header() {
+  const pathname = usePathname();
+
   return (
-    <header className="sticky top-0 z-40 border-b border-border bg-bg/90 backdrop-blur">
-      <div className="mx-auto flex w-full max-w-6xl items-center justify-between px-6 py-4">
-        <Link href="/" className="flex items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand/20 text-lg font-bold text-brand">
-            ST
-          </div>
-          <div>
-            <div className="text-lg font-semibold tracking-tight text-ink">
-              Shares & Trends
-            </div>
-            <div className="text-xs uppercase tracking-[0.2em] text-muted">
-              Explore · Backtest · Share
-            </div>
-          </div>
+    <header className="sticky top-0 z-40 border-b border-border bg-surface">
+      <div className="mx-auto flex h-16 w-full max-w-[1240px] items-center justify-between px-5 md:px-10">
+        <Link href="/" className="flex shrink-0 items-center">
+          <Image
+            src="/logo.png"
+            alt="Shares and Trends"
+            width={220}
+            height={52}
+            priority
+            className="h-9 w-auto md:h-10"
+          />
         </Link>
-        <nav className="flex items-center gap-6 text-sm">
-          {links.map((link) => (
-            <Link
-              key={link.href}
-              href={link.href}
-              className="text-muted transition hover:text-ink"
-            >
-              {link.label}
-            </Link>
-          ))}
+        <nav className="flex items-center gap-1">
+          {links.map((link) => {
+            const active =
+              link.href === "/"
+                ? pathname === "/"
+                : pathname.startsWith(link.href);
+            return (
+              <Link
+                key={link.href}
+                href={link.href}
+                className={active ? "ui-nav-link-active" : "ui-nav-link"}
+              >
+                {link.label}
+              </Link>
+            );
+          })}
         </nav>
       </div>
     </header>

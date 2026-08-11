@@ -17,6 +17,7 @@ interface PriceChartProps {
   signals?: SignalPoint[];
   emaFast?: (number | null)[];
   emaSlow?: (number | null)[];
+  patternMarkers?: { date: string; label: string }[];
   height?: number;
 }
 
@@ -29,6 +30,7 @@ export function PriceChart({
   signals = [],
   emaFast,
   emaSlow,
+  patternMarkers = [],
   height = 420,
 }: PriceChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -40,23 +42,25 @@ export function PriceChart({
     const chart = createChart(containerRef.current, {
       height,
       layout: {
-        background: { type: ColorType.Solid, color: "#0f1419" },
-        textColor: "#9aa4b2",
+        background: { type: ColorType.Solid, color: "#ffffff" },
+        textColor: "#8190a0",
       },
       grid: {
-        vertLines: { color: "#1e2732" },
-        horzLines: { color: "#1e2732" },
+        vertLines: { color: "#f0ece6" },
+        horzLines: { color: "#f0ece6" },
       },
-      rightPriceScale: { borderColor: "#2a3544" },
-      timeScale: { borderColor: "#2a3544" },
+      rightPriceScale: { borderColor: "#e8e3dc" },
+      timeScale: { borderColor: "#e8e3dc" },
     });
 
     const candleSeries = chart.addSeries(CandlestickSeries, {
-      upColor: "#0f6a4a",
-      downColor: "#df6b4c",
-      borderVisible: false,
-      wickUpColor: "#0f6a4a",
-      wickDownColor: "#df6b4c",
+      upColor: "#159a68",
+      downColor: "#e05252",
+      borderVisible: true,
+      borderUpColor: "#159a68",
+      borderDownColor: "#e05252",
+      wickUpColor: "#159a68",
+      wickDownColor: "#e05252",
     });
 
     candleSeries.setData(
@@ -71,7 +75,7 @@ export function PriceChart({
 
     if (emaFast?.length) {
       const line = chart.addSeries(LineSeries, {
-        color: "#5b9bd5",
+        color: "#3b82f6",
         lineWidth: 2,
       });
       line.setData(
@@ -87,7 +91,7 @@ export function PriceChart({
 
     if (emaSlow?.length) {
       const line = chart.addSeries(LineSeries, {
-        color: "#e8b84a",
+        color: "#e8a317",
         lineWidth: 2,
       });
       line.setData(
@@ -101,19 +105,26 @@ export function PriceChart({
       );
     }
 
-    if (signals.length > 0) {
-      const markers = signals.map((s) => ({
+    if (signals.length > 0 || patternMarkers.length > 0) {
+      const tradeMarkers = signals.map((s) => ({
         time: toUtc(s.date),
         position:
           s.type === "entry"
             ? ("belowBar" as const)
             : ("aboveBar" as const),
-        color: s.type === "entry" ? "#0f6a4a" : "#df6b4c",
+        color: s.type === "entry" ? "#16a34a" : "#dc4c3f",
         shape:
           s.type === "entry" ? ("arrowUp" as const) : ("arrowDown" as const),
         text: s.type === "entry" ? "Entry" : "Exit",
       }));
-      createSeriesMarkers(candleSeries, markers);
+      const candleMarkers = patternMarkers.map((m) => ({
+        time: toUtc(m.date),
+        position: "aboveBar" as const,
+        color: "#e8a317",
+        shape: "circle" as const,
+        text: m.label,
+      }));
+      createSeriesMarkers(candleSeries, [...tradeMarkers, ...candleMarkers]);
     }
 
     chart.timeScale().fitContent();
@@ -131,7 +142,7 @@ export function PriceChart({
       chart.remove();
       chartRef.current = null;
     };
-  }, [bars, signals, emaFast, emaSlow, height]);
+  }, [bars, signals, emaFast, emaSlow, patternMarkers, height]);
 
   return (
     <div
