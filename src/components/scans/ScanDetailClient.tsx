@@ -73,7 +73,7 @@ export function ScanDetailClient({ scanId }: { scanId: string }) {
                   <td>
                     <Link
                       href={`/symbol/${row.symbol}?scanId=${scan.id}`}
-                      className="font-mono font-semibold text-brand-text hover:text-brand"
+                      className="inline-flex items-center font-mono text-sm font-semibold leading-none text-brand-text hover:text-brand"
                     >
                       {row.symbol}
                     </Link>

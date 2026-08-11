@@ -59,15 +59,15 @@ export function ExploreScanResultsPanel({ scan }: ExploreScanResultsPanelProps) 
             <tbody>
               {scan.results.map((row) => (
                 <tr key={row.symbol}>
-                  <td>
+                  <td className="whitespace-nowrap">
                     <Link
                       href={`/symbol/${row.symbol}?scanId=${scan.id}`}
-                      className="font-mono font-semibold text-brand-text hover:underline"
+                      className="inline-flex items-center font-mono text-sm font-semibold leading-none text-brand-text hover:underline"
                     >
                       {row.symbol}
                     </Link>
                   </td>
-                  <td>
+                  <td className="whitespace-nowrap">
                     {row.signalToday ? (
                       <span className="ui-badge bg-brand-light text-brand-text">
                         Today
@@ -79,16 +79,16 @@ export function ExploreScanResultsPanel({ scan }: ExploreScanResultsPanelProps) 
                   <td>{row.stats.winRate.toFixed(1)}%</td>
                   <td>{row.stats.trades}</td>
                   <td
-                    className={
+                    className={`whitespace-nowrap tabular-nums ${
                       row.stats.avgReturnPct >= 0
                         ? "text-success"
                         : "text-danger"
-                    }
+                    }`}
                   >
                     {row.stats.avgReturnPct >= 0 ? "+" : ""}
                     {row.stats.avgReturnPct.toFixed(2)}%
                   </td>
-                  <td>
+                  <td className="whitespace-nowrap tabular-nums">
                     {row.stats.sharpe != null
                       ? row.stats.sharpe.toFixed(2)
                       : "—"}

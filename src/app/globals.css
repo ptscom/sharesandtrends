@@ -228,7 +228,7 @@ textarea::placeholder {
   }
 
   .ui-table th {
-    @apply py-3 pr-4;
+    @apply px-4 py-3 align-middle;
   }
 
   .ui-table tbody tr {
@@ -236,7 +236,7 @@ textarea::placeholder {
   }
 
   .ui-table td {
-    @apply py-3 pr-4 text-ink;
+    @apply px-4 py-3 align-middle text-ink;
   }
 
   /* ── Nav ── */
