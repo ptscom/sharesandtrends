@@ -307,7 +307,7 @@ export function StoredDataInventory({
       </div>
 
       {error && (
-        <p className="mt-4 rounded-xl bg-danger/10 px-4 py-3 text-sm text-danger">
+        <p className="mt-4 rounded-xl bg-danger-light px-4 py-3 text-sm text-danger">
           {error}
         </p>
       )}
@@ -321,7 +321,7 @@ export function StoredDataInventory({
         </p>
       ) : (
         <div className="mt-6 overflow-x-auto">
-          <table className="w-full min-w-[48rem] text-left text-sm">
+          <table className="ui-table min-w-[48rem]">
             <thead>
               <tr className="border-b border-border text-muted">
                 <th className="w-10 py-2 pr-2">
