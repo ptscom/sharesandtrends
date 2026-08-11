@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type MouseEvent } from "react";
 import { ConsolidatedResultsPanel } from "@/components/backtest/ConsolidatedResultsPanel";
-import { StrategySweepPanel } from "@/components/backtest/StrategySweepPanel";
+import { StrategySettingsModal } from "@/components/backtest/StrategySettingsModal";
 import { DEFAULT_WATCHLIST } from "@/lib/data/default-universe";
 import {
   MAX_BACKTEST_SYMBOLS,
@@ -22,8 +22,8 @@ import { getPriceBarsBatch, listSymbols } from "@/lib/storage/prices";
 
 export function BacktestClient() {
   const [selectedIds, setSelectedIds] = useState<string[]>(["ema-cross"]);
-  const [editingStrategyId, setEditingStrategyId] = useState<string | null>(
-    "ema-cross",
+  const [settingsStrategyId, setSettingsStrategyId] = useState<string | null>(
+    null,
   );
   const [strategyConfigs, setStrategyConfigs] = useState<
     Record<string, StrategySweepState>
@@ -50,7 +50,8 @@ export function BacktestClient() {
       (p) =>
         p.pattern.name.toLowerCase().includes(q) ||
         p.category.toLowerCase().includes(q) ||
-        p.id.toLowerCase().includes(q),
+        p.id.toLowerCase().includes(q) ||
+        p.entryLogic.toLowerCase().includes(q),
     );
   }, [allPresets, query]);
 
@@ -72,9 +73,9 @@ export function BacktestClient() {
     [selectedIds, strategyConfigs],
   );
 
-  const editingConfig = editingStrategyId
-    ? strategyConfigs[editingStrategyId]
-    : undefined;
+  const settingsConfig = settingsStrategyId
+    ? strategyConfigs[settingsStrategyId]
+    : null;
 
   const estimate = useMemo(
     () => estimateSweepRuns(selectedStrategies, symbolList.length),
@@ -131,20 +132,16 @@ export function BacktestClient() {
   }, [selectedIds, strategyConfigs]);
 
   const toggleStrategy = (id: string) => {
-    setSelectedIds((prev) => {
-      const next = prev.includes(id)
-        ? prev.filter((x) => x !== id)
-        : [...prev, id];
-      if (!next.includes(id) && editingStrategyId === id) {
-        setEditingStrategyId(null);
-      }
-      return next;
-    });
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
+    );
   };
 
-  const openStrategySettings = (id: string) => {
+  const openStrategySettings = (id: string, e: MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
     setSelectedIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
-    setEditingStrategyId((current) => (current === id ? null : id));
+    setSettingsStrategyId(id);
   };
 
   const updateStrategyConfig = (config: StrategySweepState) => {
@@ -210,139 +207,6 @@ export function BacktestClient() {
     <div className="space-y-6">
       <section className="ui-panel p-6">
         <p className="ui-eyebrow">Step 1</p>
-        <h2 className="ui-section-title mt-2">Select strategies</h2>
-        <p className="ui-helper mt-1">
-          Choose one or more strategies. Use the settings icon to configure
-          fixed values or sweep ranges for each parameter.
-        </p>
-
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search strategies…"
-          className="ui-input mt-4"
-        />
-
-        <div className="mt-4 max-h-64 space-y-2 overflow-y-auto">
-          {filteredPresets.map((preset) => {
-            const style = categoryStyle(preset.category);
-            const checked = selectedIds.includes(preset.id);
-            const isEditing = editingStrategyId === preset.id;
-            const comboCount = strategyConfigs[preset.id]
-              ? countParamCombos(strategyConfigs[preset.id].vars)
-              : 0;
-
-            return (
-              <div
-                key={preset.id}
-                className={`flex items-center gap-2 rounded-lg border p-3 transition ${
-                  isEditing
-                    ? "border-brand bg-brand-light/50"
-                    : checked
-                      ? "border-brand/60 bg-brand-light/30"
-                      : "border-border-subtle bg-input hover:border-border"
-                }`}
-              >
-                <label className="flex min-w-0 flex-1 cursor-pointer items-start gap-3">
-                  <input
-                    type="checkbox"
-                    checked={checked}
-                    onChange={() => toggleStrategy(preset.id)}
-                    className="mt-0.5 h-4 w-4 rounded border-border"
-                  />
-                  <span className="min-w-0 flex-1">
-                    <span className="font-medium text-ink">
-                      {preset.pattern.name}
-                    </span>
-                    <span
-                      className={`ui-badge ml-2 ${style.bg} ${style.text}`}
-                    >
-                      {preset.category}
-                    </span>
-                    {checked && comboCount > 0 && (
-                      <span className="ml-2 text-xs text-muted">
-                        {comboCount} combo{comboCount === 1 ? "" : "s"}
-                      </span>
-                    )}
-                  </span>
-                </label>
-                <button
-                  type="button"
-                  onClick={() => openStrategySettings(preset.id)}
-                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border transition ${
-                    isEditing
-                      ? "border-brand bg-brand text-white"
-                      : "border-border-subtle bg-surface text-body hover:border-brand hover:text-brand-text"
-                  }`}
-                  title={`Configure ${preset.pattern.name}`}
-                  aria-label={`Configure ${preset.pattern.name}`}
-                >
-                  <SettingsIcon />
-                </button>
-              </div>
-            );
-          })}
-        </div>
-      </section>
-
-      {editingConfig && (
-        <section className="ui-panel p-6">
-          <p className="ui-eyebrow">Step 2</p>
-          <h2 className="ui-section-title mt-2">
-            Parameters — {editingConfig.name}
-          </h2>
-          <p className="ui-helper mt-1">
-            Enable sweep on a parameter to test a range (e.g. EMA fast 3–10 step
-            1, slow 50–60 step 10).
-          </p>
-
-          <div className="mt-4">
-            <StrategySweepPanel
-              config={editingConfig}
-              onChange={updateStrategyConfig}
-              hideTitle
-            />
-          </div>
-        </section>
-      )}
-
-      <section className="ui-panel p-6">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <p className="ui-eyebrow">Step 3</p>
-            <h2 className="ui-section-title mt-2">Run backtest</h2>
-            <p className="ui-helper mt-1">
-              Estimated {estimate.total.toLocaleString()} backtest
-              {estimate.total === 1 ? "" : "s"} across {selectedStrategies.length}{" "}
-              strateg{selectedStrategies.length === 1 ? "y" : "ies"} and{" "}
-              {symbolList.length} symbol{symbolList.length === 1 ? "" : "s"}.
-            </p>
-          </div>
-          <button
-            type="button"
-            disabled={running || selectedStrategies.length === 0}
-            onClick={() => void runBacktests()}
-            className="ui-btn-primary disabled:opacity-50"
-          >
-            {running ? "Running…" : "Run backtest"}
-          </button>
-        </div>
-
-        {running && (
-          <p className="ui-helper mt-4">
-            Progress: {progress.done} / {progress.total}
-          </p>
-        )}
-
-        {error && (
-          <p className="mt-4 rounded-xl bg-danger-light px-4 py-3 text-sm text-danger">
-            {error}
-          </p>
-        )}
-      </section>
-
-      <section className="ui-panel p-6">
-        <p className="ui-eyebrow">Symbols</p>
         <h2 className="ui-section-title mt-2">Select symbols</h2>
         <p className="ui-helper mt-1">
           Up to {MAX_BACKTEST_SYMBOLS} symbols per run.
@@ -396,7 +260,141 @@ export function BacktestClient() {
         </p>
       </section>
 
+      <section className="ui-panel p-6">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="ui-eyebrow">Step 2</p>
+            <h2 className="ui-section-title mt-2">Select strategies</h2>
+            <p className="ui-helper mt-1">
+              Choose strategies and use the settings icon to configure parameters.
+            </p>
+          </div>
+          <span className="ui-badge bg-brand-light text-brand-text">
+            {selectedIds.length} selected
+          </span>
+        </div>
+
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search strategies…"
+          className="ui-input mt-4"
+        />
+
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          {filteredPresets.map((preset) => {
+            const style = categoryStyle(preset.category);
+            const checked = selectedIds.includes(preset.id);
+            const comboCount = strategyConfigs[preset.id]
+              ? countParamCombos(strategyConfigs[preset.id].vars)
+              : 0;
+
+            return (
+              <div
+                key={preset.id}
+                className={`rounded-xl border p-4 transition ${
+                  checked
+                    ? "border-brand bg-brand/5"
+                    : "border-border hover:border-brand/40 hover:bg-bg"
+                }`}
+              >
+                <div className="flex items-start gap-3">
+                  <label className="mt-1 flex cursor-pointer items-center">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggleStrategy(preset.id)}
+                      className="h-4 w-4 rounded border-border"
+                    />
+                  </label>
+                  <span
+                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${style.bg}`}
+                  >
+                    <span className={`h-2.5 w-2.5 rounded-full ${style.dot}`} />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <span className="block font-medium text-ink">
+                      {preset.pattern.name}
+                    </span>
+                    <span className="mt-0.5 block text-xs text-muted line-clamp-2">
+                      {preset.entryLogic}
+                    </span>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <span
+                        className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-medium ${style.bg} ${style.text}`}
+                      >
+                        {preset.category}
+                      </span>
+                      {checked && comboCount > 0 && (
+                        <span className="text-[10px] text-muted">
+                          {comboCount} combo{comboCount === 1 ? "" : "s"}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={(e) => openStrategySettings(preset.id, e)}
+                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-surface text-body transition hover:border-brand hover:text-brand-text"
+                    title={`Configure ${preset.pattern.name}`}
+                    aria-label={`Configure ${preset.pattern.name}`}
+                  >
+                    <SettingsIcon />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {filteredPresets.length === 0 && (
+          <p className="py-8 text-center text-sm text-muted">
+            No strategies match your search.
+          </p>
+        )}
+      </section>
+
+      <section className="ui-panel p-6">
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <div>
+            <p className="ui-helper">
+              Estimated {estimate.total.toLocaleString()} backtest
+              {estimate.total === 1 ? "" : "s"} across {selectedStrategies.length}{" "}
+              strateg{selectedStrategies.length === 1 ? "y" : "ies"} and{" "}
+              {symbolList.length} symbol{symbolList.length === 1 ? "" : "s"}.
+            </p>
+          </div>
+          <button
+            type="button"
+            disabled={running || selectedStrategies.length === 0}
+            onClick={() => void runBacktests()}
+            className="ui-btn-primary disabled:opacity-50"
+          >
+            {running ? "Running…" : "Run backtest"}
+          </button>
+        </div>
+
+        {running && (
+          <p className="ui-helper mt-4">
+            Progress: {progress.done} / {progress.total}
+          </p>
+        )}
+
+        {error && (
+          <p className="mt-4 rounded-xl bg-danger-light px-4 py-3 text-sm text-danger">
+            {error}
+          </p>
+        )}
+      </section>
+
       <ConsolidatedResultsPanel rows={results} />
+
+      <StrategySettingsModal
+        open={settingsStrategyId != null}
+        config={settingsConfig}
+        onClose={() => setSettingsStrategyId(null)}
+        onChange={updateStrategyConfig}
+      />
     </div>
   );
 }
