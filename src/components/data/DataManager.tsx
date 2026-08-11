@@ -72,8 +72,9 @@ export function DataManager() {
         onChanged={refreshInventory}
       />
 
-      <section className="ui-panel p-8">
-        <h2 className="ui-page-title text-2xl">Download price data</h2>
+      <section className="ui-panel p-6">
+        <p className="ui-eyebrow">Download</p>
+        <h2 className="ui-section-title mt-2">Download price data</h2>
         <p className="ui-helper mt-2">
           Data is fetched via Yahoo Finance and stored in your browser
           (IndexedDB). No server database.
@@ -117,8 +118,9 @@ export function DataManager() {
         )}
       </section>
 
-      <section className="ui-panel p-8">
-        <h2 className="ui-page-title">Add single symbol</h2>
+      <section className="ui-panel p-6">
+        <p className="ui-eyebrow">Quick add</p>
+        <h2 className="ui-section-title mt-2">Add single symbol</h2>
         <div className="mt-4 flex gap-3">
           <input
             value={customSymbol}
@@ -138,8 +140,8 @@ export function DataManager() {
       </section>
 
       {results.length > 0 && (
-        <section className="ui-panel p-8">
-          <h2 className="ui-page-title">Download results</h2>
+        <section className="ui-panel p-6">
+          <h2 className="ui-section-title">Download results</h2>
           <div className="mt-4 max-h-80 overflow-auto">
             <table className="w-full text-left text-sm">
               <thead>

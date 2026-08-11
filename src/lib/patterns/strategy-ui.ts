@@ -16,26 +16,31 @@ export const LIBRARY_FILTERS = [
 
 export type LibraryFilterId = (typeof LIBRARY_FILTERS)[number]["id"];
 
+/** Category badge colors aligned with the global design system. */
 export const CATEGORY_STYLES: Record<
   string,
   { bg: string; text: string; dot: string }
 > = {
-  Trend: { bg: "bg-accent/15", text: "text-accent", dot: "bg-accent" },
-  Momentum: { bg: "bg-info/15", text: "text-info", dot: "bg-info" },
-  Breakout: { bg: "bg-brand/15", text: "text-brand-dark", dot: "bg-brand" },
+  Trend: { bg: "bg-info-light", text: "text-info", dot: "bg-info" },
+  Momentum: { bg: "bg-brand-light", text: "text-brand-text", dot: "bg-brand" },
+  Breakout: { bg: "bg-brand-light", text: "text-brand-text", dot: "bg-brand" },
   "Mean Reversion": {
-    bg: "bg-success/15",
-    text: "text-success",
-    dot: "bg-success",
+    bg: "bg-accent-light",
+    text: "text-accent",
+    dot: "bg-accent",
   },
-  Candlestick: { bg: "bg-danger/15", text: "text-danger", dot: "bg-danger" },
-  Custom: { bg: "bg-muted/15", text: "text-muted", dot: "bg-muted" },
+  Candlestick: {
+    bg: "bg-danger-light",
+    text: "text-danger",
+    dot: "bg-danger",
+  },
+  Custom: { bg: "bg-input", text: "text-body", dot: "bg-muted" },
 };
 
 export function categoryStyle(category: string) {
   return (
     CATEGORY_STYLES[category] ?? {
-      bg: "bg-accent/15",
+      bg: "bg-accent-light",
       text: "text-accent",
       dot: "bg-accent",
     }

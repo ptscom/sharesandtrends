@@ -267,34 +267,28 @@ export function StrategyBuilder() {
     isPresetId(editingId ?? selectedSource) && isModified;
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <section className="ui-panel p-8">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="text-xs uppercase tracking-[0.3em] text-muted">
-              Strategy builder
-            </p>
-            <h1 className="mt-2 text-3xl font-semibold text-ink">
-              Create & edit strategies
-            </h1>
-            <p className="mt-2 text-sm text-muted">
+            <p className="ui-eyebrow">Strategy builder</p>
+            <h1 className="ui-page-title mt-2">Create & edit strategies</h1>
+            <p className="ui-helper mt-2">
               Built-in presets can be customized and saved in your browser.
               Revert to defaults restores the original factory settings.
             </p>
           </div>
-          <Link
-            href="/explore"
-            className="rounded-full border border-border px-5 py-2 text-sm text-muted hover:text-ink"
-          >
-            Back to Explore
+          <Link href="/explore" className="ui-btn-secondary">
+            ← Back to Explore
           </Link>
         </div>
       </section>
 
-      <section className="grid gap-8 lg:grid-cols-[1fr_1fr]">
+      <section className="grid gap-6 lg:grid-cols-[minmax(0,48fr)_minmax(0,52fr)]">
         <div className="space-y-6">
-          <div className="ui-panel p-8">
-            <h2 className="text-lg font-semibold text-ink">Start from</h2>
+          <div className="ui-panel p-6">
+            <p className="ui-eyebrow">Start from</p>
+            <h2 className="ui-section-title mt-2">Strategy template</h2>
             <select
               value={selectedSource}
               onChange={(e) => {
@@ -321,7 +315,7 @@ export function StrategyBuilder() {
               )}
               <option value="__blank">Blank EMA crossover template</option>
             </select>
-            <p className="mt-2 text-xs text-muted">
+            <p className="ui-helper mt-2">
               {isPresetId(editingId ?? selectedSource)
                 ? isModified
                   ? "This preset has customized settings saved in your browser."
@@ -332,10 +326,8 @@ export function StrategyBuilder() {
             </p>
 
             <div className="mt-6 space-y-4">
-              <label className="block text-sm">
-                <span className="text-xs uppercase tracking-[0.2em] text-muted">
-                  Name
-                </span>
+              <label className="block">
+                <span className="ui-field-label">Name</span>
                 <input
                   value={pattern.name}
                   onChange={(e) =>
@@ -344,10 +336,8 @@ export function StrategyBuilder() {
                   className="ui-input mt-2"
                 />
               </label>
-              <label className="block text-sm">
-                <span className="text-xs uppercase tracking-[0.2em] text-muted">
-                  Description
-                </span>
+              <label className="block">
+                <span className="ui-field-label">Description</span>
                 <textarea
                   value={pattern.description ?? ""}
                   onChange={(e) =>
@@ -360,9 +350,12 @@ export function StrategyBuilder() {
             </div>
           </div>
 
-          <div className="ui-panel p-8">
+          <div className="ui-panel p-6">
             <div className="flex items-center justify-between gap-4">
-              <h2 className="text-lg font-semibold text-ink">Indicators</h2>
+              <div>
+                <p className="ui-eyebrow">Indicators</p>
+                <h2 className="ui-section-title mt-1">Indicator parameters</h2>
+              </div>
               <button
                 type="button"
                 onClick={() =>
@@ -371,7 +364,7 @@ export function StrategyBuilder() {
                     defaultIndicator("ema", pattern.indicators.length),
                   ])
                 }
-                className="text-sm text-brand underline"
+                className="ui-btn-link"
               >
                 + Add indicator
               </button>
@@ -379,13 +372,10 @@ export function StrategyBuilder() {
 
             <div className="mt-4 space-y-4">
               {pattern.indicators.map((ind, index) => (
-                <div
-                  key={`${ind.alias}-${index}`}
-                  className="rounded-2xl border border-border bg-bg p-4"
-                >
+                <div key={`${ind.alias}-${index}`} className="ui-nested-card">
                   <div className="grid gap-3 sm:grid-cols-2">
-                    <label className="text-sm">
-                      <span className="text-muted">Alias</span>
+                    <label>
+                      <span className="ui-field-label">Alias</span>
                       <input
                         value={ind.alias}
                         onChange={(e) => {
@@ -399,8 +389,8 @@ export function StrategyBuilder() {
                         className="ui-input mt-1 font-mono"
                       />
                     </label>
-                    <label className="text-sm">
-                      <span className="text-muted">Type</span>
+                    <label>
+                      <span className="ui-field-label">Type</span>
                       <select
                         value={ind.type}
                         onChange={(e) => {
@@ -438,34 +428,37 @@ export function StrategyBuilder() {
                 </div>
               ))}
             </div>
-            <p className="mt-3 text-xs text-muted">
+            <p className="ui-helper mt-3">
               Params: {summarizeIndicatorParams(pattern.indicators)}
             </p>
           </div>
         </div>
 
         <div className="space-y-6">
-          <div className="ui-panel p-8">
-            <h2 className="text-lg font-semibold text-ink">Signal rules</h2>
-            <p className="mt-1 text-xs text-muted">
+          <div className="ui-panel p-6">
+            <p className="ui-eyebrow">Signal rules</p>
+            <h2 className="ui-section-title mt-2">Entry & exit conditions</h2>
+            <p className="ui-helper mt-1">
               Entry: {describeRule(pattern.entry)} · Exit:{" "}
               {pattern.exit ? describeRule(pattern.exit) : "—"}
             </p>
 
             <RuleEditor
+              variant="entry"
               title="Entry"
               rule={entryRule}
               seriesRefs={seriesRefs}
               onChange={(rule) => updateRule("entry", rule)}
             />
             <RuleEditor
+              variant="exit"
               title="Exit"
               rule={exitRule}
               seriesRefs={seriesRefs}
               onChange={(rule) => updateRule("exit", rule)}
             />
 
-            <label className="mt-4 flex items-center gap-3 text-sm text-muted">
+            <label className="mt-4 flex items-center gap-3 text-sm text-body">
               <input
                 type="checkbox"
                 checked={useFilter}
@@ -485,6 +478,7 @@ export function StrategyBuilder() {
 
             {useFilter && filterRule && (
               <RuleEditor
+                variant="filter"
                 title="Filter"
                 rule={filterRule}
                 seriesRefs={seriesRefs}
@@ -493,11 +487,10 @@ export function StrategyBuilder() {
             )}
           </div>
 
-          <div className="ui-panel p-8">
-            <h2 className="text-lg font-semibold text-ink">
-              Optimization variables
-            </h2>
-            <p className="mt-1 text-sm text-muted">
+          <div className="ui-panel p-6">
+            <p className="ui-eyebrow">Optimization variables</p>
+            <h2 className="ui-section-title mt-2">Tune parameters</h2>
+            <p className="ui-helper mt-1">
               Tune parameters here — the same controls appear in Explore when
               you run a scan.
             </p>
@@ -506,7 +499,7 @@ export function StrategyBuilder() {
             </div>
           </div>
 
-          <div className="ui-panel p-8">
+          <div className="ui-panel p-6">
             <div className="flex flex-wrap gap-3">
               <button
                 type="button"
@@ -524,7 +517,7 @@ export function StrategyBuilder() {
                 type="button"
                 onClick={() => void handleSaveAsNew()}
                 disabled={saving}
-                className="rounded-full border border-border px-6 py-3 text-sm text-muted hover:text-ink disabled:opacity-50"
+                className="ui-btn-secondary disabled:opacity-50"
               >
                 Save as new
               </button>
@@ -542,7 +535,7 @@ export function StrategyBuilder() {
                       // Error shown via setError in handleSave
                     });
                 }}
-                className="rounded-full border border-border px-6 py-3 text-sm text-muted hover:text-ink disabled:opacity-50"
+                className="ui-btn-secondary disabled:opacity-50"
               >
                 Save & scan in Explore
               </button>
@@ -551,7 +544,7 @@ export function StrategyBuilder() {
                   type="button"
                   onClick={() => void handleRevert()}
                   disabled={saving}
-                  className="rounded-full border border-border px-6 py-3 text-sm text-muted hover:text-ink disabled:opacity-50"
+                  className="ui-btn-secondary disabled:opacity-50"
                 >
                   Revert to defaults
                 </button>
@@ -560,19 +553,19 @@ export function StrategyBuilder() {
                 <button
                   type="button"
                   onClick={() => void handleDelete()}
-                  className="rounded-full border border-danger/40 px-6 py-3 text-sm text-danger"
+                  className="rounded-full border border-danger/30 px-5 text-sm font-medium text-danger"
                 >
                   Delete
                 </button>
               )}
             </div>
             {status && (
-              <p className="mt-4 rounded-xl bg-brand/10 px-4 py-3 text-sm text-brand">
+              <p className="mt-4 rounded-xl bg-brand-light px-4 py-3 text-sm text-brand-text">
                 {status}
               </p>
             )}
             {error && (
-              <p className="mt-4 rounded-xl bg-danger/10 px-4 py-3 text-sm text-danger">
+              <p className="mt-4 rounded-xl bg-danger-light px-4 py-3 text-sm text-danger">
                 {error}
               </p>
             )}
@@ -593,22 +586,37 @@ function defaultRule(op: RuleOp): SimpleRule {
 }
 
 function RuleEditor({
+  variant,
   title,
   rule,
   seriesRefs,
   onChange,
 }: {
+  variant: "entry" | "exit" | "filter";
   title: string;
   rule: SimpleRule;
   seriesRefs: string[];
   onChange: (rule: SimpleRule) => void;
 }) {
+  const panelClass =
+    variant === "entry"
+      ? "ui-rule-entry"
+      : variant === "exit"
+        ? "ui-rule-exit"
+        : "ui-nested-card";
+  const labelClass =
+    variant === "entry"
+      ? "ui-rule-label-entry"
+      : variant === "exit"
+        ? "ui-rule-label-exit"
+        : "ui-field-label";
+
   return (
-    <div className="mt-4 rounded-2xl border border-border bg-bg p-4">
-      <p className="text-xs uppercase tracking-[0.2em] text-muted">{title}</p>
+    <div className={`mt-4 ${panelClass}`}>
+      <p className={labelClass}>{title}</p>
       <div className="mt-3 grid gap-3 sm:grid-cols-2">
-        <label className="text-sm">
-          <span className="text-muted">Condition</span>
+        <label>
+          <span className="ui-field-label">Condition</span>
           <select
             value={rule.op}
             onChange={(e) =>
@@ -623,8 +631,8 @@ function RuleEditor({
             ))}
           </select>
         </label>
-        <label className="text-sm">
-          <span className="text-muted">Left series</span>
+        <label>
+          <span className="ui-field-label">Left series</span>
           <select
             value={rule.leftRef}
             onChange={(e) => onChange({ ...rule, leftRef: e.target.value })}
@@ -637,8 +645,8 @@ function RuleEditor({
             ))}
           </select>
         </label>
-        <label className="text-sm">
-          <span className="text-muted">Compare to</span>
+        <label>
+          <span className="ui-field-label">Compare to</span>
           <select
             value={rule.rightKind}
             onChange={(e) =>
@@ -654,8 +662,8 @@ function RuleEditor({
           </select>
         </label>
         {rule.rightKind === "ref" ? (
-          <label className="text-sm">
-            <span className="text-muted">Right series</span>
+          <label>
+            <span className="ui-field-label">Right series</span>
             <select
               value={rule.rightRef ?? seriesRefs[0]}
               onChange={(e) =>
@@ -671,8 +679,8 @@ function RuleEditor({
             </select>
           </label>
         ) : (
-          <label className="text-sm">
-            <span className="text-muted">Value</span>
+          <label>
+            <span className="ui-field-label">Value</span>
             <input
               type="number"
               value={rule.rightValue ?? 0}

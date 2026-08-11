@@ -1,3 +1,4 @@
+import { PageContainer } from "@/components/layout/PageContainer";
 import { SymbolDetail } from "@/components/symbol/SymbolDetail";
 
 export default async function SymbolPage({
@@ -11,12 +12,12 @@ export default async function SymbolPage({
     typeof query.patternId === "string" ? query.patternId : undefined;
 
   return (
-    <div className="mx-auto w-full max-w-6xl px-6 py-10">
+    <PageContainer>
       <SymbolDetail
         symbol={symbol.toUpperCase()}
         scanId={scanId}
         patternId={patternId}
       />
-    </div>
+    </PageContainer>
   );
 }

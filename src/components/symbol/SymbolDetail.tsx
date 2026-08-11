@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { PriceChart } from "@/components/chart/PriceChart";
 import { runBacktest } from "@/lib/engine/backtest";
 import { extractCandlePatternMarkers } from "@/lib/engine/candle-patterns";
@@ -83,33 +83,30 @@ export function SymbolDetail({
   const last = bars[bars.length - 1]!;
 
   return (
-    <div className="space-y-8">
-      <section className="ui-panel p-8">
+    <div className="space-y-6">
+      <section className="ui-panel p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
-            <p className="text-xs uppercase tracking-[0.3em] text-muted">Symbol</p>
-            <h1 className="mt-2 text-4xl font-semibold text-ink">{symbol}</h1>
-            <p className="mt-2 text-muted">
+            <p className="ui-eyebrow">Symbol</p>
+            <h1 className="ui-page-title mt-2">{symbol}</h1>
+            <p className="ui-helper mt-2">
               Last close ${last.close.toFixed(2)} · {bars.length} daily bars stored
               locally
             </p>
             {pattern && (
-              <p className="mt-1 text-sm text-brand">{pattern.name}</p>
+              <p className="mt-1 text-sm font-medium text-brand-text">{pattern.name}</p>
             )}
           </div>
           {scan && (
-            <Link
-              href={`/scans/${scan.id}`}
-              className="text-sm text-brand underline"
-            >
-              ← Back to scan
+            <Link href={`/scans/${scan.id}`} className="ui-btn-secondary">
+              ← Back to Results
             </Link>
           )}
         </div>
       </section>
 
-      <section className="ui-panel p-8">
-        <h2 className="text-xl font-semibold text-ink">Price chart</h2>
+      <section className="ui-panel p-6">
+        <h2 className="ui-section-title">Price chart</h2>
         <div className="mt-4">
           <PriceChart
             bars={bars.slice(-252)}
@@ -122,48 +119,60 @@ export function SymbolDetail({
       </section>
 
       {result && pattern && (
-        <section className="ui-panel p-8">
-          <h2 className="text-xl font-semibold text-ink">
-            {pattern.name} backtest
-          </h2>
+        <section className="ui-panel p-6">
+          <p className="ui-eyebrow">Backtest results</p>
+          <h2 className="ui-section-title mt-2">{pattern.name}</h2>
           {pattern.description && (
-            <p className="mt-1 text-sm text-muted">{pattern.description}</p>
+            <p className="ui-helper mt-1">{pattern.description}</p>
           )}
-          <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <Metric label="Trades" value={String(result.stats.trades)} />
+          <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <Metric label="Trades" value={String(result.stats.trades)} tint="orange" />
             <Metric
               label="Win rate"
               value={`${result.stats.winRate.toFixed(1)}%`}
+              tint="green"
             />
             <Metric
               label="Avg return"
               value={`${result.stats.avgReturnPct.toFixed(2)}%`}
+              tint="purple"
             />
             <Metric
               label="Best / worst"
-              value={`${result.stats.bestReturnPct.toFixed(1)}% / ${result.stats.worstReturnPct.toFixed(1)}%`}
+              value={
+                <span>
+                  <span className="text-success">
+                    {result.stats.bestReturnPct.toFixed(1)}%
+                  </span>
+                  <span className="text-body"> / </span>
+                  <span className="text-danger">
+                    {result.stats.worstReturnPct.toFixed(1)}%
+                  </span>
+                </span>
+              }
+              tint="red"
             />
           </div>
 
           {result.trades.length > 0 && (
-            <div className="mt-6 overflow-x-auto">
-              <table className="w-full text-left text-sm">
+            <div className="mt-6 overflow-x-auto rounded-xl border border-border-subtle">
+              <table className="ui-table min-w-[480px]">
                 <thead>
-                  <tr className="border-b border-border text-muted">
-                    <th className="py-2 pr-4">Entry</th>
-                    <th className="py-2 pr-4">Exit</th>
-                    <th className="py-2 pr-4">Hold</th>
-                    <th className="py-2">Return</th>
+                  <tr>
+                    <th className="px-4">Entry</th>
+                    <th className="px-4">Exit</th>
+                    <th className="px-4">Hold</th>
+                    <th className="px-4">Return</th>
                   </tr>
                 </thead>
                 <tbody>
                   {[...result.trades].reverse().slice(0, 10).map((t) => (
-                    <tr key={`${t.entryDate}-${t.exitDate}`} className="border-b border-border/40">
-                      <td className="py-2 pr-4">{t.entryDate}</td>
-                      <td className="py-2 pr-4">{t.exitDate}</td>
-                      <td className="py-2 pr-4">{t.holdDays}d</td>
+                    <tr key={`${t.entryDate}-${t.exitDate}`}>
+                      <td className="px-4">{t.entryDate}</td>
+                      <td className="px-4">{t.exitDate}</td>
+                      <td className="px-4">{t.holdDays}d</td>
                       <td
-                        className={`py-2 ${t.returnPct >= 0 ? "text-brand" : "text-danger"}`}
+                        className={`px-4 font-semibold ${t.returnPct >= 0 ? "text-success" : "text-danger"}`}
                       >
                         {t.returnPct >= 0 ? "+" : ""}
                         {t.returnPct.toFixed(2)}%
@@ -180,11 +189,28 @@ export function SymbolDetail({
   );
 }
 
-function Metric({ label, value }: { label: string; value: string }) {
+function Metric({
+  label,
+  value,
+  tint,
+}: {
+  label: string;
+  value: ReactNode;
+  tint: "orange" | "green" | "purple" | "red";
+}) {
+  const tintClass =
+    tint === "orange"
+      ? "ui-stat-tint-orange"
+      : tint === "green"
+        ? "ui-stat-tint-green"
+        : tint === "purple"
+          ? "ui-stat-tint-purple"
+          : "ui-stat-tint-red";
+
   return (
-    <div className="ui-stat">
+    <div className={tintClass}>
       <div className="ui-field-label">{label}</div>
-      <div className="mt-1 text-lg font-semibold">{value}</div>
+      <div className="mt-1 text-2xl font-semibold text-ink">{value}</div>
     </div>
   );
 }

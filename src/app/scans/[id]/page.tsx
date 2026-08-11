@@ -1,3 +1,4 @@
+import { PageContainer } from "@/components/layout/PageContainer";
 import { ScanDetailClient } from "@/components/scans/ScanDetailClient";
 
 export default async function ScanDetailPage({
@@ -7,8 +8,8 @@ export default async function ScanDetailPage({
 }) {
   const { id } = await params;
   return (
-    <div className="mx-auto w-full max-w-6xl px-6 py-12">
+    <PageContainer>
       <ScanDetailClient scanId={id} />
-    </div>
+    </PageContainer>
   );
 }

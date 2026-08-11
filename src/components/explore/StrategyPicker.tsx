@@ -96,8 +96,11 @@ export function StrategyPicker({
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center justify-between gap-2">
-        <h3 className="ui-section-title">1. Select strategy</h3>
-        <span className="rounded-full bg-brand/15 px-2.5 py-0.5 text-[10px] font-semibold text-brand-dark">
+        <div>
+          <p className="ui-eyebrow">Step 1</p>
+          <h3 className="ui-section-title mt-1">Select strategy</h3>
+        </div>
+        <span className="ui-badge bg-brand-light text-brand-text">
           {allPresets.length} strategies
         </span>
       </div>

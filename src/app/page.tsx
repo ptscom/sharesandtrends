@@ -1,34 +1,27 @@
 import Link from "next/link";
+import { PageContainer } from "@/components/layout/PageContainer";
 
 export default function HomePage() {
   return (
     <div className="relative overflow-hidden">
       <div className="pointer-events-none absolute inset-0 bg-grid opacity-40" />
-      <div className="pointer-events-none absolute -left-24 top-20 h-64 w-64 rounded-full bg-brand/10 blur-3xl" />
+      <div className="pointer-events-none absolute -left-24 top-20 h-64 w-64 rounded-full bg-brand-light blur-3xl" />
 
-      <section className="relative mx-auto w-full max-w-6xl px-6 pb-20 pt-16 md:pt-24">
-        <p className="text-xs uppercase tracking-[0.3em] text-muted">
-          Personal market lab
-        </p>
-        <h1 className="mt-4 max-w-3xl text-4xl font-semibold tracking-tight md:text-6xl">
+      <PageContainer className="relative pb-20 pt-12 md:pt-16">
+        <p className="ui-eyebrow">Personal market lab</p>
+        <h1 className="ui-page-title mt-4 max-w-3xl">
           Explore patterns. Backtest history. Post with confidence.
         </h1>
-        <p className="mt-5 max-w-2xl text-lg text-muted">
+        <p className="ui-helper mt-5 max-w-2xl text-base">
           Shares & Trends is a browser-based scanner and backtester. Price data
           lives in IndexedDB on your machine — no database server required.
         </p>
 
         <div className="mt-8 flex flex-wrap gap-4">
-          <Link
-            href="/data"
-            className="ui-btn-primary"
-          >
+          <Link href="/data" className="ui-btn-primary">
             1. Download price data
           </Link>
-          <Link
-            href="/explore"
-            className="ui-btn-secondary"
-          >
+          <Link href="/explore" className="ui-btn-secondary">
             2. Explore & scan
           </Link>
         </div>
@@ -48,16 +41,13 @@ export default function HomePage() {
               body: "Filter by win rate and trade count. Preview charts with entry markers.",
             },
           ].map((card) => (
-            <div
-              key={card.title}
-              className="ui-card p-6"
-            >
-              <h2 className="text-xl font-semibold">{card.title}</h2>
-              <p className="mt-3 text-sm text-muted">{card.body}</p>
+            <div key={card.title} className="ui-card p-6">
+              <h2 className="ui-card-title text-lg">{card.title}</h2>
+              <p className="ui-helper mt-3">{card.body}</p>
             </div>
           ))}
         </div>
-      </section>
+      </PageContainer>
     </div>
   );
 }

@@ -43,24 +43,24 @@ export function PriceChart({
       height,
       layout: {
         background: { type: ColorType.Solid, color: "#ffffff" },
-        textColor: "#6b7280",
+        textColor: "#8190a0",
       },
       grid: {
-        vertLines: { color: "#f0ebe3" },
-        horzLines: { color: "#f0ebe3" },
+        vertLines: { color: "#f0ece6" },
+        horzLines: { color: "#f0ece6" },
       },
-      rightPriceScale: { borderColor: "#e8e4dd" },
-      timeScale: { borderColor: "#e8e4dd" },
+      rightPriceScale: { borderColor: "#e8e3dc" },
+      timeScale: { borderColor: "#e8e3dc" },
     });
 
     const candleSeries = chart.addSeries(CandlestickSeries, {
-      upColor: "#16a34a",
-      downColor: "#dc4c3f",
+      upColor: "#159a68",
+      downColor: "#e05252",
       borderVisible: true,
-      borderUpColor: "#16a34a",
-      borderDownColor: "#dc4c3f",
-      wickUpColor: "#16a34a",
-      wickDownColor: "#dc4c3f",
+      borderUpColor: "#159a68",
+      borderDownColor: "#e05252",
+      wickUpColor: "#159a68",
+      wickDownColor: "#e05252",
     });
 
     candleSeries.setData(

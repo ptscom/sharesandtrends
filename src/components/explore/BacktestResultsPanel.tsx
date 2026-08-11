@@ -98,7 +98,7 @@ export function BacktestResultsPanel({
             <Stat
               label="Total return"
               value={`${extendedStats.totalReturnPct >= 0 ? "+" : ""}${extendedStats.totalReturnPct.toFixed(2)}%`}
-              tone={extendedStats.totalReturnPct >= 0 ? "success" : "danger"}
+              tint={extendedStats.totalReturnPct >= 0 ? "green" : "red"}
             />
             <Stat
               label="Sharpe"
@@ -112,19 +112,23 @@ export function BacktestResultsPanel({
                   ? "Good"
                   : undefined
               }
-              tone="success"
+              tint="blue"
             />
             <Stat
               label="Max drawdown"
               value={`${extendedStats.maxDrawdownPct.toFixed(2)}%`}
-              tone="danger"
+              tint="red"
             />
             <Stat
               label="Win rate"
               value={`${preview.stats.winRate.toFixed(1)}%`}
-              tone="info"
+              tint="green"
             />
-            <Stat label="Total trades" value={String(preview.stats.trades)} />
+            <Stat
+              label="Total trades"
+              value={String(preview.stats.trades)}
+              tint="orange"
+            />
             <Stat
               label="Profit factor"
               value={
@@ -132,17 +136,18 @@ export function BacktestResultsPanel({
                   ? "∞"
                   : extendedStats.profitFactor.toFixed(2)
               }
+              tint="blue"
             />
             <Stat
               label="Avg return / trade"
               value={`${preview.stats.avgReturnPct.toFixed(2)}%`}
-              tone={preview.stats.avgReturnPct >= 0 ? "success" : "danger"}
+              tint={preview.stats.avgReturnPct >= 0 ? "green" : "red"}
             />
           </div>
 
           {preview.trades.length > 0 && equityCurves && (
             <div className="mt-6 grid gap-4 lg:grid-cols-12">
-              <div className="rounded-lg border border-border bg-bg p-4 lg:col-span-5">
+              <div className="ui-nested-card lg:col-span-5">
                 <h3 className="ui-section-title">Equity curve</h3>
                 <p className="ui-helper mt-0.5">Cumulative return</p>
                 <div className="mt-3">
@@ -153,13 +158,13 @@ export function BacktestResultsPanel({
                   />
                 </div>
               </div>
-              <div className="rounded-lg border border-border bg-bg p-4 lg:col-span-4">
+              <div className="ui-nested-card lg:col-span-4">
                 <h3 className="ui-section-title">Monthly returns (%)</h3>
                 <div className="mt-3">
                   <MonthlyReturnsHeatmap data={monthlyReturns} />
                 </div>
               </div>
-              <div className="rounded-lg border border-border bg-bg p-4 lg:col-span-3">
+              <div className="ui-nested-card lg:col-span-3">
                 <h3 className="ui-section-title">Distribution of returns</h3>
                 <div className="mt-3">
                   <ReturnDistributionChart bins={distribution} mean={avgReturn} />
@@ -171,54 +176,51 @@ export function BacktestResultsPanel({
           {preview.trades.length > 0 && (
             <div className="mt-6">
               <h3 className="ui-section-title">Trade log (recent 5)</h3>
-              <div className="mt-3 overflow-x-auto rounded-lg border border-border">
-                <table className="w-full min-w-[640px] text-left text-sm">
+              <div className="mt-3 overflow-x-auto rounded-xl border border-border-subtle">
+                <table className="ui-table min-w-[640px]">
                   <thead>
-                    <tr className="border-b border-border bg-bg text-xs uppercase tracking-[0.15em] text-muted">
-                      <th className="px-4 py-3">Entry</th>
-                      <th className="px-4 py-3">Exit</th>
-                      <th className="px-4 py-3">Type</th>
-                      <th className="px-4 py-3">Entry price</th>
-                      <th className="px-4 py-3">Exit price</th>
-                      <th className="px-4 py-3">Days held</th>
-                      <th className="px-4 py-3">Return</th>
-                      <th className="px-4 py-3">Status</th>
+                    <tr>
+                      <th className="px-4">Entry</th>
+                      <th className="px-4">Exit</th>
+                      <th className="px-4">Type</th>
+                      <th className="px-4">Entry price</th>
+                      <th className="px-4">Exit price</th>
+                      <th className="px-4">Days held</th>
+                      <th className="px-4">Return</th>
+                      <th className="px-4">Status</th>
                     </tr>
                   </thead>
                   <tbody>
                     {[...preview.trades].reverse().slice(0, 5).map((t) => (
-                      <tr
-                        key={`${t.entryDate}-${t.exitDate}`}
-                        className="border-b border-border/40 hover:bg-bg/40"
-                      >
-                        <td className="px-4 py-2.5">{t.entryDate}</td>
-                        <td className="px-4 py-2.5">{t.exitDate}</td>
-                        <td className="px-4 py-2.5">
+                      <tr key={`${t.entryDate}-${t.exitDate}`}>
+                        <td className="px-4">{t.entryDate}</td>
+                        <td className="px-4">{t.exitDate}</td>
+                        <td className="px-4">
                           <span
-                            className={`rounded-full px-2 py-0.5 text-xs font-semibold uppercase ${
+                            className={`ui-badge ${
                               t.side === "long"
-                                ? "bg-info/15 text-info"
-                                : "bg-danger/15 text-danger"
+                                ? "bg-info-light text-info"
+                                : "bg-danger-light text-danger"
                             }`}
                           >
                             {t.side}
                           </span>
                         </td>
-                        <td className="px-4 py-2.5 font-mono">
+                        <td className="px-4 font-mono">
                           ${t.entryPrice.toFixed(2)}
                         </td>
-                        <td className="px-4 py-2.5 font-mono">
+                        <td className="px-4 font-mono">
                           ${t.exitPrice.toFixed(2)}
                         </td>
-                        <td className="px-4 py-2.5">{t.holdDays}</td>
+                        <td className="px-4">{t.holdDays}</td>
                         <td
-                          className={`px-4 py-2.5 font-semibold ${t.returnPct >= 0 ? "text-success" : "text-danger"}`}
+                          className={`px-4 font-semibold ${t.returnPct >= 0 ? "text-success" : "text-danger"}`}
                         >
                           {t.returnPct >= 0 ? "+" : ""}
                           {t.returnPct.toFixed(2)}%
                         </td>
-                        <td className="px-4 py-2.5">
-                          <span className="rounded-full bg-success/15 px-2 py-0.5 text-xs font-medium text-success">
+                        <td className="px-4">
+                          <span className="ui-badge bg-success-light text-success">
                             Closed
                           </span>
                         </td>
@@ -257,26 +259,28 @@ function Stat({
   label,
   value,
   sub,
-  tone,
+  tint,
 }: {
   label: string;
   value: string;
   sub?: string;
-  tone?: "success" | "danger" | "info";
+  tint: "orange" | "green" | "blue" | "purple" | "red";
 }) {
-  const valueColor =
-    tone === "success"
-      ? "text-success"
-      : tone === "danger"
-        ? "text-danger"
-        : tone === "info"
-          ? "text-info"
-          : "text-ink";
+  const tintClass =
+    tint === "orange"
+      ? "ui-stat-tint-orange"
+      : tint === "green"
+        ? "ui-stat-tint-green"
+        : tint === "blue"
+          ? "ui-stat-tint-blue"
+          : tint === "purple"
+            ? "ui-stat-tint-purple"
+            : "ui-stat-tint-red";
 
   return (
-    <div className="ui-stat">
+    <div className={tintClass}>
       <div className="ui-field-label">{label}</div>
-      <div className={`mt-1 text-lg font-semibold ${valueColor}`}>{value}</div>
+      <div className="mt-1 text-lg font-semibold text-ink">{value}</div>
       {sub && <div className="text-[10px] text-success">{sub}</div>}
     </div>
   );

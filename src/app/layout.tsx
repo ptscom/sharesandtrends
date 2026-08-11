@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Inter } from "next/font/google";
+import { Geist_Mono } from "next/font/google";
 import { Header } from "@/components/layout/Header";
 import "./globals.css";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const inter = Inter({
+  variable: "--font-inter",
   subsets: ["latin"],
 });
 
@@ -27,13 +28,13 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full`}
+      className={`${inter.variable} ${geistMono.variable} h-full`}
     >
-      <body className="min-h-full flex flex-col antialiased">
+      <body className="flex min-h-full flex-col antialiased">
         <Header />
         <main className="flex-1">{children}</main>
-        <footer className="border-t border-border py-8 text-center text-xs uppercase tracking-[0.2em] text-muted">
-          Data stored in your browser · No server database
+        <footer className="border-t border-border-subtle py-8 text-center">
+          <p className="ui-eyebrow">Data stored in your browser · No server database</p>
         </footer>
       </body>
     </html>

@@ -1,50 +1,84 @@
 @import "tailwindcss";
 
 :root {
+  /* Base */
   --color-bg: #faf8f4;
   --color-surface: #ffffff;
-  --color-ink: #1f2937;
-  --color-muted: #6b7280;
-  --color-border: #e8e4dd;
-  --color-brand: #e8a317;
-  --color-brand-dark: #c98a0f;
-  --color-brand-foreground: #1f2937;
-  --color-danger: #dc4c3f;
-  --color-success: #16a34a;
-  --color-info: #3b82f6;
-  --color-accent: #a78bfa;
+  --color-input: #fcfbf9;
+  --color-ink: #102a43;
+  --color-body: #5f7184;
+  --color-muted: #8190a0;
+  --color-border: #e8e3dc;
+  --color-border-subtle: #f0ece6;
+
+  /* Brand */
+  --color-brand: #f59e0b;
+  --color-brand-hover: #d97706;
+  --color-brand-light: #fff4dd;
+  --color-brand-text: #c96f00;
+  --color-brand-dark: #d97706;
+  --color-brand-foreground: #ffffff;
+
+  /* Semantic */
+  --color-success: #159a68;
+  --color-success-light: #eaf7f1;
+  --color-danger: #e05252;
+  --color-danger-light: #fdeeee;
+  --color-info: #4b78b8;
+  --color-info-light: #eef4fb;
+  --color-accent: #7566c8;
+  --color-accent-light: #f2f0fc;
+
+  /* Charts */
   --color-chart-bg: #ffffff;
-  --color-chart-grid: #f0ebe3;
-  --color-chart-text: #6b7280;
+  --color-chart-grid: #f0ece6;
+  --color-chart-text: #8190a0;
+
+  /* Layout */
+  --page-max-width: 1240px;
+  --shadow-card: 0 2px 10px rgba(30, 40, 50, 0.035);
 }
 
 @theme inline {
   --color-bg: var(--color-bg);
   --color-surface: var(--color-surface);
+  --color-input: var(--color-input);
   --color-ink: var(--color-ink);
+  --color-body: var(--color-body);
   --color-muted: var(--color-muted);
   --color-border: var(--color-border);
+  --color-border-subtle: var(--color-border-subtle);
   --color-brand: var(--color-brand);
+  --color-brand-hover: var(--color-brand-hover);
+  --color-brand-light: var(--color-brand-light);
+  --color-brand-text: var(--color-brand-text);
   --color-brand-dark: var(--color-brand-dark);
   --color-brand-foreground: var(--color-brand-foreground);
   --color-danger: var(--color-danger);
+  --color-danger-light: var(--color-danger-light);
   --color-success: var(--color-success);
+  --color-success-light: var(--color-success-light);
   --color-info: var(--color-info);
+  --color-info-light: var(--color-info-light);
   --color-accent: var(--color-accent);
-  --font-sans: var(--font-geist-sans);
+  --color-accent-light: var(--color-accent-light);
+  --font-sans: var(--font-inter);
   --font-mono: var(--font-geist-mono);
+  --shadow-card: var(--shadow-card);
 }
 
 body {
   background: var(--color-bg);
   color: var(--color-ink);
   font-family: var(--font-sans), system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
 }
 
 .bg-grid {
   background-image:
-    linear-gradient(to right, rgba(31, 41, 55, 0.04) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(31, 41, 55, 0.04) 1px, transparent 1px);
+    linear-gradient(to right, rgba(16, 42, 67, 0.03) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(16, 42, 67, 0.03) 1px, transparent 1px);
   background-size: 48px 48px;
 }
 
@@ -54,48 +88,163 @@ textarea {
   color: var(--color-ink);
 }
 
-input::placeholder {
+input::placeholder,
+textarea::placeholder {
   color: var(--color-muted);
 }
 
 @layer components {
+  /* ── Layout ── */
+  .ui-page {
+    @apply mx-auto w-full max-w-[1240px] px-5 py-10 md:px-10;
+  }
+
+  /* ── Cards & panels ── */
   .ui-card {
     @apply rounded-2xl border border-border bg-surface;
+    box-shadow: var(--shadow-card);
   }
 
   .ui-panel {
     @apply rounded-2xl border border-border bg-surface p-6;
+    box-shadow: var(--shadow-card);
   }
 
-  .ui-section-title {
-    @apply text-sm font-semibold text-ink;
+  .ui-panel-sm {
+    @apply rounded-2xl border border-border bg-surface p-4;
+    box-shadow: var(--shadow-card);
+  }
+
+  .ui-nested-card {
+    @apply rounded-lg border border-border-subtle bg-input p-4;
+  }
+
+  /* ── Typography ── */
+  .ui-eyebrow {
+    @apply text-[11px] font-medium uppercase tracking-[0.16em] text-muted;
   }
 
   .ui-page-title {
-    @apply text-xl font-semibold text-ink;
+    @apply text-[1.75rem] font-bold leading-tight text-ink md:text-[2rem];
+  }
+
+  .ui-section-title {
+    @apply text-base font-semibold text-ink md:text-lg;
+  }
+
+  .ui-card-title {
+    @apply text-base font-semibold text-ink;
   }
 
   .ui-field-label {
-    @apply text-xs font-medium uppercase tracking-[0.15em] text-muted;
+    @apply text-[11px] font-medium uppercase tracking-[0.16em] text-muted;
   }
 
   .ui-helper {
-    @apply text-xs text-muted;
+    @apply text-sm text-body;
   }
 
-  .ui-input {
-    @apply w-full rounded-lg border border-border bg-bg px-3 py-2 text-sm text-ink;
+  .ui-body {
+    @apply text-sm text-body;
   }
 
+  /* ── Buttons ── */
   .ui-btn-primary {
-    @apply rounded-full bg-brand px-5 py-2.5 text-sm font-semibold text-brand-foreground disabled:opacity-50;
+    @apply inline-flex h-10 items-center justify-center rounded-full bg-brand px-5 text-sm font-semibold text-white transition hover:bg-brand-hover disabled:opacity-50;
   }
 
   .ui-btn-secondary {
-    @apply rounded-full border border-border bg-surface px-5 py-2.5 text-sm text-muted hover:text-ink;
+    @apply inline-flex h-10 items-center justify-center rounded-full border border-border bg-surface px-5 text-sm font-medium text-body transition hover:text-ink disabled:opacity-50;
   }
 
+  .ui-btn-link {
+    @apply text-sm font-medium text-brand-text transition hover:text-brand;
+  }
+
+  /* ── Inputs ── */
+  .ui-input {
+    @apply h-11 w-full rounded-lg border border-[#e5e0d8] bg-input px-3 text-sm text-ink transition;
+  }
+
+  .ui-input:focus {
+    @apply border-brand outline-none;
+    box-shadow: 0 0 0 3px var(--color-brand-light);
+  }
+
+  /* ── Signal rule panels ── */
+  .ui-rule-entry {
+    @apply rounded-xl bg-success-light p-4;
+  }
+
+  .ui-rule-exit {
+    @apply rounded-xl bg-danger-light p-4;
+  }
+
+  .ui-rule-label-entry {
+    @apply text-[11px] font-semibold uppercase tracking-[0.16em] text-success;
+  }
+
+  .ui-rule-label-exit {
+    @apply text-[11px] font-semibold uppercase tracking-[0.16em] text-danger;
+  }
+
+  /* ── Metrics ── */
   .ui-stat {
-    @apply rounded-lg border border-border bg-bg p-3;
+    @apply rounded-lg border border-border-subtle bg-input p-4;
+  }
+
+  .ui-stat-tint-orange {
+    @apply rounded-xl bg-brand-light p-4;
+  }
+
+  .ui-stat-tint-green {
+    @apply rounded-xl bg-success-light p-4;
+  }
+
+  .ui-stat-tint-blue {
+    @apply rounded-xl bg-info-light p-4;
+  }
+
+  .ui-stat-tint-purple {
+    @apply rounded-xl bg-accent-light p-4;
+  }
+
+  .ui-stat-tint-red {
+    @apply rounded-xl bg-danger-light p-4;
+  }
+
+  /* ── Badges & tags ── */
+  .ui-badge {
+    @apply inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold;
+  }
+
+  /* ── Tables ── */
+  .ui-table {
+    @apply w-full text-left text-sm;
+  }
+
+  .ui-table thead tr {
+    @apply border-b border-border-subtle text-[11px] font-medium uppercase tracking-[0.16em] text-body;
+  }
+
+  .ui-table th {
+    @apply py-3 pr-4;
+  }
+
+  .ui-table tbody tr {
+    @apply border-b border-border-subtle transition hover:bg-bg/50;
+  }
+
+  .ui-table td {
+    @apply py-3 pr-4 text-ink;
+  }
+
+  /* ── Nav ── */
+  .ui-nav-link {
+    @apply px-3 py-2 text-sm text-body transition hover:text-ink;
+  }
+
+  .ui-nav-link-active {
+    @apply font-semibold text-brand underline decoration-brand decoration-2 underline-offset-4;
   }
 }

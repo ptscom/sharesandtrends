@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { PageContainer } from "@/components/layout/PageContainer";
 import { listScanRuns } from "@/lib/storage/patterns";
 import type { ScanRun } from "@/lib/types";
 
@@ -13,9 +14,9 @@ export default function ScansPage() {
   }, []);
 
   return (
-    <div className="mx-auto w-full max-w-7xl px-6 py-12">
-      <p className="ui-field-label">History</p>
-      <h1 className="ui-page-title mt-2 text-3xl">Saved scans</h1>
+    <PageContainer>
+      <p className="ui-eyebrow">History</p>
+      <h1 className="ui-page-title mt-2">Saved scans</h1>
       <p className="ui-helper mt-2">
         Scan results live in your browser (IndexedDB). Export JSON from a scan
         page to move results between devices.
@@ -30,29 +31,25 @@ export default function ScansPage() {
           >
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
-                <h2 className="text-lg font-semibold text-ink">
-                  {scan.patternName}
-                </h2>
-                <p className="mt-1 text-sm text-muted">
+                <h2 className="ui-card-title text-lg">{scan.patternName}</h2>
+                <p className="ui-helper mt-1">
                   {scan.results.length} matches ·{" "}
                   {new Date(scan.runAt).toLocaleString()}
                 </p>
               </div>
-              <span className="text-xs uppercase tracking-[0.2em] text-brand">
-                Open
-              </span>
+              <span className="ui-eyebrow text-brand-text">Open</span>
             </div>
           </Link>
         ))}
         {scans.length === 0 && (
-          <p className="ui-card p-8 text-center text-muted">
+          <p className="ui-card p-8 text-center text-body">
             No scans yet.{" "}
-            <Link href="/explore" className="text-brand underline">
+            <Link href="/explore" className="text-brand-text underline">
               Run your first scan
             </Link>
           </p>
         )}
       </div>
-    </div>
+    </PageContainer>
   );
 }

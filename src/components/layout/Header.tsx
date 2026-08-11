@@ -16,8 +16,8 @@ export function Header() {
   const pathname = usePathname();
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border bg-surface/95 backdrop-blur">
-      <div className="mx-auto flex w-full max-w-7xl items-center justify-between px-6 py-3">
+    <header className="sticky top-0 z-40 border-b border-border bg-surface">
+      <div className="mx-auto flex h-16 w-full max-w-[1240px] items-center justify-between px-5 md:px-10">
         <Link href="/" className="flex shrink-0 items-center">
           <Image
             src="/logo.png"
@@ -25,10 +25,10 @@ export function Header() {
             width={220}
             height={52}
             priority
-            className="h-10 w-auto md:h-11"
+            className="h-9 w-auto md:h-10"
           />
         </Link>
-        <nav className="flex items-center gap-1 text-sm">
+        <nav className="flex items-center gap-1">
           {links.map((link) => {
             const active =
               link.href === "/"
@@ -38,11 +38,7 @@ export function Header() {
               <Link
                 key={link.href}
                 href={link.href}
-                className={`rounded-lg px-3 py-2 transition ${
-                  active
-                    ? "font-semibold text-ink underline decoration-brand decoration-2 underline-offset-4"
-                    : "text-muted hover:text-ink"
-                }`}
+                className={active ? "ui-nav-link-active" : "ui-nav-link"}
               >
                 {link.label}
               </Link>

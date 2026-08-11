@@ -75,7 +75,8 @@ export function StrategyLibraryModal({
         role="dialog"
         aria-modal="true"
         aria-labelledby="strategy-library-title"
-        className="relative flex max-h-[85vh] w-full max-w-3xl flex-col rounded-2xl border border-border bg-surface"
+        className="relative flex h-[80vh] max-h-[80vh] w-[90vw] max-w-[1200px] flex-col rounded-[18px] border border-border bg-surface"
+        style={{ boxShadow: "var(--shadow-card)" }}
       >
         <div className="flex items-start justify-between gap-4 border-b border-border px-5 py-4">
           <div>

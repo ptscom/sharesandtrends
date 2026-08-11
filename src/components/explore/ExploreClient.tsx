@@ -236,7 +236,7 @@ export function ExploreClient() {
     <div className="space-y-6">
       <section className="grid gap-6 lg:grid-cols-3 lg:items-stretch">
         {/* Column 1: select strategy */}
-        <div className="flex min-h-[24rem] flex-col ui-panel">
+        <div className="flex min-h-[24rem] flex-col ui-panel p-6">
           <StrategyPicker
             selectedId={selectedId}
             customStrategies={customStrategies}
@@ -246,11 +246,12 @@ export function ExploreClient() {
         </div>
 
         {/* Column 2: optimization variables */}
-        <div className="flex min-h-[24rem] flex-col ui-panel">
+        <div className="flex min-h-[24rem] flex-col ui-panel p-6">
           <div className="flex items-center gap-2">
-            <h3 className="ui-section-title">2. Optimization variables</h3>
-            <span className="rounded-full bg-success/15 px-2 py-0.5 text-[10px] font-semibold text-success">
-              Optimization: ON
+            <p className="ui-eyebrow">Step 2</p>
+            <h3 className="ui-section-title">Optimization variables</h3>
+            <span className="ui-badge bg-success-light text-success">
+              ON
             </span>
           </div>
           <p className="ui-helper mt-1">
@@ -262,8 +263,9 @@ export function ExploreClient() {
         </div>
 
         {/* Column 3: scan universe */}
-        <div className="flex min-h-[24rem] flex-col ui-panel">
-          <h3 className="ui-section-title">3. Scan universe</h3>
+        <div className="flex min-h-[24rem] flex-col ui-panel p-6">
+          <p className="ui-eyebrow">Step 3</p>
+          <h3 className="ui-section-title mt-1">Scan universe</h3>
           <p className="ui-helper mt-1">
             Filter symbols and run a universe scan with the current strategy.
           </p>

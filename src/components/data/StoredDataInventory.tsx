@@ -254,10 +254,11 @@ export function StoredDataInventory({
   };
 
   return (
-    <section className="ui-panel p-8">
+    <section className="ui-panel p-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h2 className="ui-page-title">Stored data</h2>
+          <p className="ui-eyebrow">Inventory</p>
+          <h2 className="ui-section-title mt-2">Stored data</h2>
           <p className="ui-helper mt-2">
             Symbols and date ranges saved in your browser. Delete a range or
             remove a symbol entirely.
