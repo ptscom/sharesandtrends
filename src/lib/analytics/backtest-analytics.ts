@@ -150,6 +150,24 @@ export function meanReturn(trades: Trade[]): number {
   return trades.reduce((sum, t) => sum + t.returnPct, 0) / trades.length;
 }
 
+/** Compound equity curve from trade exits (portfolio-level sweep results). */
+export function computeEquityFromTrades(trades: Trade[]): EquityPoint[] {
+  if (trades.length === 0) return [];
+
+  const sorted = [...trades].sort((a, b) => a.exitDate.localeCompare(b.exitDate));
+  let equity = 100;
+  const points: EquityPoint[] = [
+    { date: sorted[0]!.entryDate, value: equity },
+  ];
+
+  for (const trade of sorted) {
+    equity *= 1 + trade.returnPct / 100;
+    points.push({ date: trade.exitDate, value: equity });
+  }
+
+  return points;
+}
+
 export function exportBacktestCsv(
   preview: BacktestResult,
   symbol: string,

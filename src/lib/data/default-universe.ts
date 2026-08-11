@@ -66,3 +66,21 @@ export const SP500_SAMPLE = [
   "MDT",
   "GILD",
 ];
+
+export const SYMBOL_WATCHLISTS = [
+  {
+    id: "tech",
+    label: "Tech Giants",
+    symbols: ["AAPL", "MSFT", "GOOGL", "NVDA", "META", "AMZN"],
+  },
+  {
+    id: "etf",
+    label: "ETFs",
+    symbols: ["SPY", "QQQ"],
+  },
+  {
+    id: "default",
+    label: "Default watchlist",
+    symbols: DEFAULT_WATCHLIST.slice(0, 10),
+  },
+] as const;

@@ -1,6 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { EquityCurveChart } from "@/components/chart/EquityCurveChart";
+import { ReturnDistributionChart } from "@/components/chart/ReturnDistributionChart";
+import {
+  computeEquityFromTrades,
+  computeReturnDistribution,
+  meanReturn,
+} from "@/lib/analytics/backtest-analytics";
 import {
   buildConsolidatedModel,
   exportAllRunsCsv,
@@ -15,6 +22,7 @@ import type { BacktestStats } from "@/lib/types";
 
 interface ConsolidatedResultsPanelProps {
   rows: BacktestSweepRow[];
+  completedAt?: string | null;
 }
 
 const VIEWS: { id: ResultsView; label: string }[] = [
@@ -24,8 +32,24 @@ const VIEWS: { id: ResultsView; label: string }[] = [
   { id: "runs", label: "All runs" },
 ];
 
-export function ConsolidatedResultsPanel({ rows }: ConsolidatedResultsPanelProps) {
+export function ConsolidatedResultsPanel({
+  rows,
+  completedAt,
+}: ConsolidatedResultsPanelProps) {
   const model = useMemo(() => buildConsolidatedModel(rows), [rows]);
+  const portfolioTrades = model.portfolio.metrics.trades;
+  const equityCurve = useMemo(
+    () => computeEquityFromTrades(portfolioTrades),
+    [portfolioTrades],
+  );
+  const distribution = useMemo(
+    () => computeReturnDistribution(portfolioTrades),
+    [portfolioTrades],
+  );
+  const avgReturn = useMemo(
+    () => meanReturn(portfolioTrades),
+    [portfolioTrades],
+  );
   const [view, setView] = useState<ResultsView>("portfolio");
   const [selectedId, setSelectedId] = useState<string>("portfolio");
   const [expanded, setExpanded] = useState<Set<string>>(() => new Set(["portfolio"]));
@@ -59,6 +83,12 @@ export function ConsolidatedResultsPanel({ rows }: ConsolidatedResultsPanelProps
           </h2>
           <p className="ui-helper mt-1">
             Drill down through portfolio, strategy, parameter, and symbol layers.
+            {completedAt && (
+              <span className="text-muted">
+                {" "}
+                · Completed {formatCompletedAt(completedAt)}
+              </span>
+            )}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -81,6 +111,34 @@ export function ConsolidatedResultsPanel({ rows }: ConsolidatedResultsPanelProps
         </div>
       </div>
 
+      <div className="mt-6">
+        <MetricsGrid stats={model.portfolio.metrics.stats} />
+      </div>
+
+      {portfolioTrades.length > 0 && (
+        <div className="mt-6 grid gap-4 lg:grid-cols-2">
+          <div className="ui-nested-card">
+            <h3 className="ui-section-title">Equity curve</h3>
+            <p className="ui-helper mt-0.5">Cumulative return across all runs</p>
+            <div className="mt-3">
+              <EquityCurveChart
+                strategy={equityCurve}
+                buyHold={[]}
+                symbol="Portfolio"
+                height={220}
+              />
+            </div>
+          </div>
+          <div className="ui-nested-card">
+            <h3 className="ui-section-title">Returns distribution</h3>
+            <p className="ui-helper mt-0.5">Trade return frequency</p>
+            <div className="mt-3">
+              <ReturnDistributionChart bins={distribution} mean={avgReturn} />
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="mt-4 flex flex-wrap gap-2">
         {VIEWS.map((item) => (
           <button
@@ -99,7 +157,10 @@ export function ConsolidatedResultsPanel({ rows }: ConsolidatedResultsPanelProps
       </div>
 
       {view === "runs" ? (
-        <AllRunsTable rows={rows} />
+        <div className="mt-6">
+          <h3 className="ui-section-title">All runs</h3>
+          <AllRunsTable rows={rows} completedAt={completedAt} />
+        </div>
       ) : (
         viewRoot && (
           <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(14rem,22rem)_1fr]">
@@ -126,6 +187,16 @@ export function ConsolidatedResultsPanel({ rows }: ConsolidatedResultsPanelProps
             {selectedNode && <LayerDetail node={selectedNode} onSelect={setSelectedId} />}
           </div>
         )
+      )}
+
+      {view !== "runs" && rows.length > 0 && (
+        <div className="mt-8 border-t border-border-subtle pt-6">
+          <h3 className="ui-section-title">Runs summary</h3>
+          <p className="ui-helper mt-1">
+            All {rows.length} backtest runs from this sweep.
+          </p>
+          <AllRunsTable rows={rows} completedAt={completedAt} />
+        </div>
       )}
     </section>
   );
@@ -415,7 +486,13 @@ function TradesTable({ trades }: { trades: import("@/lib/types").Trade[] }) {
   );
 }
 
-function AllRunsTable({ rows }: { rows: BacktestSweepRow[] }) {
+function AllRunsTable({
+  rows,
+  completedAt,
+}: {
+  rows: BacktestSweepRow[];
+  completedAt?: string | null;
+}) {
   const sorted = [...rows].sort(
     (a, b) =>
       b.stats.winRate - a.stats.winRate ||
@@ -423,7 +500,7 @@ function AllRunsTable({ rows }: { rows: BacktestSweepRow[] }) {
   );
 
   return (
-    <div className="mt-6 overflow-x-auto">
+    <div className="mt-4 overflow-x-auto rounded-xl border border-border-subtle">
       <table className="ui-table min-w-[960px]">
         <thead>
           <tr>
@@ -434,8 +511,8 @@ function AllRunsTable({ rows }: { rows: BacktestSweepRow[] }) {
             <th>Win rate</th>
             <th>Avg return</th>
             <th>Sharpe</th>
-            <th>Best</th>
-            <th>Worst</th>
+            <th>Status</th>
+            {completedAt && <th>Completed</th>}
           </tr>
         </thead>
         <tbody>
@@ -457,12 +534,16 @@ function AllRunsTable({ rows }: { rows: BacktestSweepRow[] }) {
               <td>
                 {row.stats.sharpe != null ? row.stats.sharpe.toFixed(2) : "—"}
               </td>
-              <td className="text-success">
-                {row.stats.bestReturnPct.toFixed(1)}%
+              <td>
+                <span className="ui-badge bg-success-light text-success">
+                  Completed
+                </span>
               </td>
-              <td className="text-danger">
-                {row.stats.worstReturnPct.toFixed(1)}%
-              </td>
+              {completedAt && (
+                <td className="text-muted text-xs">
+                  {formatCompletedAt(completedAt)}
+                </td>
+              )}
             </tr>
           ))}
         </tbody>
@@ -478,4 +559,13 @@ function findNode(node: ConsolidatedNode, id: string): ConsolidatedNode | null {
     if (found) return found;
   }
   return null;
+}
+
+function formatCompletedAt(iso: string): string {
+  return new Date(iso).toLocaleString(undefined, {
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }

@@ -1,11 +1,17 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type MouseEvent } from "react";
-import { ConsolidatedResultsPanel } from "@/components/backtest/ConsolidatedResultsPanel";
-import { StrategySettingsModal } from "@/components/backtest/StrategySettingsModal";
-import { DEFAULT_WATCHLIST } from "@/lib/data/default-universe";
+import { BacktestTopBar } from "@/components/backtest/BacktestTopBar";
 import {
-  MAX_BACKTEST_SYMBOLS,
+  BacktestWorkflowSidebar,
+  type BacktestLabView,
+  type BacktestSetupStep,
+} from "@/components/backtest/BacktestWorkflowSidebar";
+import { ConsolidatedResultsPanel } from "@/components/backtest/ConsolidatedResultsPanel";
+import { StrategySelector } from "@/components/backtest/StrategySelector";
+import { StrategySettingsModal } from "@/components/backtest/StrategySettingsModal";
+import { SymbolSelector } from "@/components/backtest/SymbolSelector";
+import {
   MAX_COMBOS_PER_STRATEGY,
   countParamCombos,
   createStrategySweepState,
@@ -16,11 +22,18 @@ import {
 } from "@/lib/engine/param-sweep";
 import { getEffectivePreset } from "@/lib/patterns/preset-store";
 import { STRATEGY_PRESETS, type StrategyPreset } from "@/lib/patterns/strategies";
-import { categoryStyle } from "@/lib/patterns/strategy-ui";
+import type { LibraryFilterId } from "@/lib/patterns/strategy-ui";
 import { listPatterns } from "@/lib/storage/patterns";
 import { getPriceBarsBatch, listSymbols } from "@/lib/storage/prices";
 
 export function BacktestClient() {
+  const [labView, setLabView] = useState<BacktestLabView>("setup");
+  const [setupStep, setSetupStep] = useState<BacktestSetupStep>("symbols");
+  const [selectedSymbols, setSelectedSymbols] = useState<string[]>([
+    "AAPL",
+    "MSFT",
+    "GOOGL",
+  ]);
   const [selectedIds, setSelectedIds] = useState<string[]>(["ema-cross"]);
   const [settingsStrategyId, setSettingsStrategyId] = useState<string | null>(
     null,
@@ -28,13 +41,13 @@ export function BacktestClient() {
   const [strategyConfigs, setStrategyConfigs] = useState<
     Record<string, StrategySweepState>
   >({});
-  const [symbolsInput, setSymbolsInput] = useState("AAPL, MSFT, GOOGL");
-  const [useStoredUniverse, setUseStoredUniverse] = useState(false);
   const [storedSymbols, setStoredSymbols] = useState<string[]>([]);
   const [query, setQuery] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState<LibraryFilterId>("all");
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState({ done: 0, total: 0 });
   const [results, setResults] = useState<BacktestSweepRow[]>([]);
+  const [completedAt, setCompletedAt] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [customPresets, setCustomPresets] = useState<StrategyPreset[]>([]);
 
@@ -45,25 +58,19 @@ export function BacktestClient() {
 
   const filteredPresets = useMemo(() => {
     const q = query.trim().toLowerCase();
-    if (!q) return allPresets;
-    return allPresets.filter(
-      (p) =>
-        p.pattern.name.toLowerCase().includes(q) ||
-        p.category.toLowerCase().includes(q) ||
-        p.id.toLowerCase().includes(q) ||
-        p.entryLogic.toLowerCase().includes(q),
-    );
-  }, [allPresets, query]);
-
-  const symbolList = useMemo(() => {
-    const raw = useStoredUniverse
-      ? storedSymbols
-      : symbolsInput
-          .split(/[,\s]+/)
-          .map((s) => s.trim().toUpperCase())
-          .filter(Boolean);
-    return [...new Set(raw)].slice(0, MAX_BACKTEST_SYMBOLS);
-  }, [symbolsInput, storedSymbols, useStoredUniverse]);
+    return allPresets.filter((preset) => {
+      if (categoryFilter !== "all" && preset.category !== categoryFilter) {
+        return false;
+      }
+      if (!q) return true;
+      return (
+        preset.pattern.name.toLowerCase().includes(q) ||
+        preset.category.toLowerCase().includes(q) ||
+        preset.id.toLowerCase().includes(q) ||
+        preset.entryLogic.toLowerCase().includes(q)
+      );
+    });
+  }, [allPresets, query, categoryFilter]);
 
   const selectedStrategies = useMemo(
     () =>
@@ -78,9 +85,32 @@ export function BacktestClient() {
     : null;
 
   const estimate = useMemo(
-    () => estimateSweepRuns(selectedStrategies, symbolList.length),
-    [selectedStrategies, symbolList.length],
+    () => estimateSweepRuns(selectedStrategies, selectedSymbols.length),
+    [selectedStrategies, selectedSymbols.length],
   );
+
+  const paramSetCount = useMemo(
+    () =>
+      selectedStrategies.reduce(
+        (sum, strategy) => sum + countParamCombos(strategy.vars),
+        0,
+      ),
+    [selectedStrategies],
+  );
+
+  const symbolSummary =
+    selectedSymbols.length === 0
+      ? "No symbols selected"
+      : selectedSymbols.length <= 4
+        ? selectedSymbols.join(", ")
+        : `${selectedSymbols.length} symbols`;
+
+  const strategySummary =
+    selectedStrategies.length === 0
+      ? "No strategies selected"
+      : selectedStrategies.length === 1
+        ? selectedStrategies[0]!.name
+        : `${selectedStrategies.length} strategies`;
 
   useEffect(() => {
     void listSymbols().then((list) =>
@@ -151,13 +181,18 @@ export function BacktestClient() {
   const runBacktests = useCallback(async () => {
     setError(null);
     setResults([]);
+    setCompletedAt(null);
 
     if (selectedStrategies.length === 0) {
       setError("Select at least one strategy.");
+      setLabView("setup");
+      setSetupStep("strategies");
       return;
     }
-    if (symbolList.length === 0) {
-      setError("Enter at least one symbol.");
+    if (selectedSymbols.length === 0) {
+      setError("Select at least one symbol.");
+      setLabView("setup");
+      setSetupStep("symbols");
       return;
     }
 
@@ -179,13 +214,13 @@ export function BacktestClient() {
     setProgress({ done: 0, total: estimate.total });
 
     try {
-      const priceData = await getPriceBarsBatch(symbolList, (done, total) => {
-        setProgress({ done: Math.floor(done * 0.1), total: estimate.total });
+      const priceData = await getPriceBarsBatch(selectedSymbols, () => {
+        setProgress({ done: 0, total: estimate.total });
       });
 
       const rows = await runParameterSweep({
         strategies: selectedStrategies,
-        symbols: symbolList,
+        symbols: selectedSymbols,
         priceData,
         onProgress: (done, total) => setProgress({ done, total }),
       });
@@ -195,199 +230,91 @@ export function BacktestClient() {
         setError(
           "No results. Ensure symbols have at least 60 bars of stored data.",
         );
+      } else {
+        setCompletedAt(new Date().toISOString());
+        setLabView("results");
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Backtest failed");
     } finally {
       setRunning(false);
     }
-  }, [selectedStrategies, symbolList, estimate]);
+  }, [selectedStrategies, selectedSymbols, estimate]);
+
+  const goToSetup = (step: BacktestSetupStep) => {
+    setLabView("setup");
+    setSetupStep(step);
+  };
 
   return (
     <div className="space-y-6">
-      <section className="ui-panel p-6">
-        <p className="ui-eyebrow">Step 1</p>
-        <h2 className="ui-section-title mt-2">Select symbols</h2>
-        <p className="ui-helper mt-1">
-          Up to {MAX_BACKTEST_SYMBOLS} symbols per run.
-        </p>
+      <BacktestTopBar
+        symbolCount={selectedSymbols.length}
+        strategyCount={selectedIds.length}
+        runCount={estimate.total}
+        paramSetCount={paramSetCount}
+        running={running}
+        canRun={selectedIds.length > 0 && selectedSymbols.length > 0}
+        onRun={() => void runBacktests()}
+      />
 
-        <label className="mt-4 flex items-center gap-3 text-sm text-body">
-          <input
-            type="checkbox"
-            checked={useStoredUniverse}
-            onChange={(e) => setUseStoredUniverse(e.target.checked)}
-            className="h-4 w-4 rounded border-border"
-          />
-          Use all stored symbols ({storedSymbols.length})
-        </label>
-
-        {!useStoredUniverse && (
-          <>
-            <label className="mt-4 block">
-              <span className="ui-field-label">Symbols</span>
-              <textarea
-                value={symbolsInput}
-                onChange={(e) => setSymbolsInput(e.target.value.toUpperCase())}
-                rows={3}
-                className="ui-input mt-2 font-mono"
-                placeholder="AAPL, MSFT, GOOGL"
-              />
-            </label>
-            <button
-              type="button"
-              onClick={() =>
-                setSymbolsInput(
-                  DEFAULT_WATCHLIST.slice(0, MAX_BACKTEST_SYMBOLS).join(", "),
-                )
-              }
-              className="ui-btn-link mt-2"
-            >
-              Use default watchlist
-            </button>
-          </>
-        )}
-
-        <p className="ui-helper mt-4">
-          {symbolList.length} symbol{symbolList.length === 1 ? "" : "s"} selected
-          {symbolList.length > 0 && (
-            <span className="text-muted">
-              {" "}
-              · {symbolList.slice(0, 12).join(", ")}
-              {symbolList.length > 12 ? "…" : ""}
-            </span>
-          )}
-        </p>
-      </section>
-
-      <section className="ui-panel p-6">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <p className="ui-eyebrow">Step 2</p>
-            <h2 className="ui-section-title mt-2">Select strategies</h2>
-            <p className="ui-helper mt-1">
-              Choose strategies and use the settings icon to configure parameters.
+      {(running || error) && (
+        <div className="space-y-2">
+          {running && (
+            <p className="ui-helper rounded-xl border border-border-subtle bg-surface px-4 py-3">
+              Progress: {progress.done} / {progress.total}
             </p>
-          </div>
-          <span className="ui-badge bg-brand-light text-brand-text">
-            {selectedIds.length} selected
-          </span>
+          )}
+          {error && (
+            <p className="rounded-xl bg-danger-light px-4 py-3 text-sm text-danger">
+              {error}
+            </p>
+          )}
         </div>
+      )}
 
-        <input
-          value={query}
-          onChange={(e) => setQuery(e.target.value)}
-          placeholder="Search strategies…"
-          className="ui-input mt-4"
+      <div className="grid gap-6 lg:grid-cols-[minmax(13rem,15rem)_1fr]">
+        <BacktestWorkflowSidebar
+          labView={labView}
+          setupStep={setupStep}
+          symbolSummary={symbolSummary}
+          strategySummary={strategySummary}
+          hasResults={results.length > 0}
+          onSelectStep={goToSetup}
+          onViewResults={() => results.length > 0 && setLabView("results")}
         />
 
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          {filteredPresets.map((preset) => {
-            const style = categoryStyle(preset.category);
-            const checked = selectedIds.includes(preset.id);
-            const comboCount = strategyConfigs[preset.id]
-              ? countParamCombos(strategyConfigs[preset.id].vars)
-              : 0;
+        <main className="min-w-0 space-y-6">
+          {labView === "setup" && setupStep === "symbols" && (
+            <SymbolSelector
+              selected={selectedSymbols}
+              storedSymbols={storedSymbols}
+              onChange={setSelectedSymbols}
+            />
+          )}
 
-            return (
-              <div
-                key={preset.id}
-                className={`rounded-xl border p-4 transition ${
-                  checked
-                    ? "border-brand bg-brand/5"
-                    : "border-border hover:border-brand/40 hover:bg-bg"
-                }`}
-              >
-                <div className="flex items-start gap-3">
-                  <label className="mt-1 flex cursor-pointer items-center">
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => toggleStrategy(preset.id)}
-                      className="h-4 w-4 rounded border-border"
-                    />
-                  </label>
-                  <span
-                    className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${style.bg}`}
-                  >
-                    <span className={`h-2.5 w-2.5 rounded-full ${style.dot}`} />
-                  </span>
-                  <div className="min-w-0 flex-1">
-                    <span className="block font-medium text-ink">
-                      {preset.pattern.name}
-                    </span>
-                    <span className="mt-0.5 block text-xs text-muted line-clamp-2">
-                      {preset.entryLogic}
-                    </span>
-                    <div className="mt-2 flex flex-wrap items-center gap-2">
-                      <span
-                        className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-medium ${style.bg} ${style.text}`}
-                      >
-                        {preset.category}
-                      </span>
-                      {checked && comboCount > 0 && (
-                        <span className="text-[10px] text-muted">
-                          {comboCount} combo{comboCount === 1 ? "" : "s"}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={(e) => openStrategySettings(preset.id, e)}
-                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-surface text-body transition hover:border-brand hover:text-brand-text"
-                    title={`Configure ${preset.pattern.name}`}
-                    aria-label={`Configure ${preset.pattern.name}`}
-                  >
-                    <SettingsIcon />
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+          {labView === "setup" && setupStep === "strategies" && (
+            <StrategySelector
+              presets={filteredPresets}
+              selectedIds={selectedIds}
+              strategyConfigs={strategyConfigs}
+              query={query}
+              categoryFilter={categoryFilter}
+              onQueryChange={setQuery}
+              onCategoryChange={setCategoryFilter}
+              onToggle={toggleStrategy}
+              onOpenSettings={openStrategySettings}
+            />
+          )}
 
-        {filteredPresets.length === 0 && (
-          <p className="py-8 text-center text-sm text-muted">
-            No strategies match your search.
-          </p>
-        )}
-      </section>
-
-      <section className="ui-panel p-6">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <p className="ui-helper">
-              Estimated {estimate.total.toLocaleString()} backtest
-              {estimate.total === 1 ? "" : "s"} across {selectedStrategies.length}{" "}
-              strateg{selectedStrategies.length === 1 ? "y" : "ies"} and{" "}
-              {symbolList.length} symbol{symbolList.length === 1 ? "" : "s"}.
-            </p>
-          </div>
-          <button
-            type="button"
-            disabled={running || selectedStrategies.length === 0}
-            onClick={() => void runBacktests()}
-            className="ui-btn-primary disabled:opacity-50"
-          >
-            {running ? "Running…" : "Run backtest"}
-          </button>
-        </div>
-
-        {running && (
-          <p className="ui-helper mt-4">
-            Progress: {progress.done} / {progress.total}
-          </p>
-        )}
-
-        {error && (
-          <p className="mt-4 rounded-xl bg-danger-light px-4 py-3 text-sm text-danger">
-            {error}
-          </p>
-        )}
-      </section>
-
-      <ConsolidatedResultsPanel rows={results} />
+          {labView === "results" && (
+            <ConsolidatedResultsPanel
+              rows={results}
+              completedAt={completedAt}
+            />
+          )}
+        </main>
+      </div>
 
       <StrategySettingsModal
         open={settingsStrategyId != null}
@@ -396,22 +323,5 @@ export function BacktestClient() {
         onChange={updateStrategyConfig}
       />
     </div>
-  );
-}
-
-function SettingsIcon() {
-  return (
-    <svg
-      viewBox="0 0 20 20"
-      fill="currentColor"
-      className="h-4 w-4"
-      aria-hidden
-    >
-      <path
-        fillRule="evenodd"
-        d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.286-.947zM10 13a3 3 0 100-6 3 3 0 000 6z"
-        clipRule="evenodd"
-      />
-    </svg>
   );
 }
