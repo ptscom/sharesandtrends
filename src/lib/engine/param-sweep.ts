@@ -4,7 +4,7 @@ import {
   extractOptimizationVars,
   type OptimizationVar,
 } from "@/lib/patterns/optimization";
-import type { BacktestStats, PatternDefinition } from "@/lib/types";
+import type { BacktestStats, PatternDefinition, Trade } from "@/lib/types";
 
 export const MAX_BACKTEST_SYMBOLS = 50;
 export const MAX_COMBOS_PER_STRATEGY = 100;
@@ -38,6 +38,7 @@ export interface BacktestSweepRow {
   paramLabel: string;
   params: Record<string, number | string>;
   stats: BacktestStats;
+  trades: Trade[];
 }
 
 export function optimizationVarToSweepConfig(v: OptimizationVar): SweepVarConfig {
@@ -232,6 +233,7 @@ export async function runParameterSweep(
           paramLabel,
           params: combo,
           stats: result.stats,
+          trades: result.trades,
         });
 
         done += 1;

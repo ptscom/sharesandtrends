@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { BacktestResultsTable } from "@/components/backtest/BacktestResultsTable";
+import { ConsolidatedResultsPanel } from "@/components/backtest/ConsolidatedResultsPanel";
 import { StrategySweepPanel } from "@/components/backtest/StrategySweepPanel";
 import { DEFAULT_WATCHLIST } from "@/lib/data/default-universe";
 import {
@@ -347,7 +347,7 @@ export function BacktestClient() {
         )}
       </section>
 
-      <BacktestResultsTable rows={results} />
+      <ConsolidatedResultsPanel rows={results} />
     </div>
   );
 }
