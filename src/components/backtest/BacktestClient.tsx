@@ -22,6 +22,9 @@ import { getPriceBarsBatch, listSymbols } from "@/lib/storage/prices";
 
 export function BacktestClient() {
   const [selectedIds, setSelectedIds] = useState<string[]>(["ema-cross"]);
+  const [editingStrategyId, setEditingStrategyId] = useState<string | null>(
+    "ema-cross",
+  );
   const [strategyConfigs, setStrategyConfigs] = useState<
     Record<string, StrategySweepState>
   >({});
@@ -68,6 +71,10 @@ export function BacktestClient() {
         .filter((s): s is StrategySweepState => Boolean(s)),
     [selectedIds, strategyConfigs],
   );
+
+  const editingConfig = editingStrategyId
+    ? strategyConfigs[editingStrategyId]
+    : undefined;
 
   const estimate = useMemo(
     () => estimateSweepRuns(selectedStrategies, symbolList.length),
@@ -124,9 +131,20 @@ export function BacktestClient() {
   }, [selectedIds, strategyConfigs]);
 
   const toggleStrategy = (id: string) => {
-    setSelectedIds((prev) =>
-      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id],
-    );
+    setSelectedIds((prev) => {
+      const next = prev.includes(id)
+        ? prev.filter((x) => x !== id)
+        : [...prev, id];
+      if (!next.includes(id) && editingStrategyId === id) {
+        setEditingStrategyId(null);
+      }
+      return next;
+    });
+  };
+
+  const openStrategySettings = (id: string) => {
+    setSelectedIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
+    setEditingStrategyId((current) => (current === id ? null : id));
   };
 
   const updateStrategyConfig = (config: StrategySweepState) => {
@@ -190,35 +208,42 @@ export function BacktestClient() {
 
   return (
     <div className="space-y-6">
-      <section className="grid gap-6 lg:grid-cols-2">
-        <div className="ui-panel p-6">
-          <p className="ui-eyebrow">Step 1</p>
-          <h2 className="ui-section-title mt-2">Select strategies</h2>
-          <p className="ui-helper mt-1">
-            Choose one or more strategies. Configure fixed values or sweep
-            ranges for each parameter.
-          </p>
+      <section className="ui-panel p-6">
+        <p className="ui-eyebrow">Step 1</p>
+        <h2 className="ui-section-title mt-2">Select strategies</h2>
+        <p className="ui-helper mt-1">
+          Choose one or more strategies. Use the settings icon to configure
+          fixed values or sweep ranges for each parameter.
+        </p>
 
-          <input
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search strategies…"
-            className="ui-input mt-4"
-          />
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search strategies…"
+          className="ui-input mt-4"
+        />
 
-          <div className="mt-4 max-h-56 space-y-2 overflow-y-auto">
-            {filteredPresets.map((preset) => {
-              const style = categoryStyle(preset.category);
-              const checked = selectedIds.includes(preset.id);
-              return (
-                <label
-                  key={preset.id}
-                  className={`flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition ${
-                    checked
-                      ? "border-brand bg-brand-light/40"
+        <div className="mt-4 max-h-64 space-y-2 overflow-y-auto">
+          {filteredPresets.map((preset) => {
+            const style = categoryStyle(preset.category);
+            const checked = selectedIds.includes(preset.id);
+            const isEditing = editingStrategyId === preset.id;
+            const comboCount = strategyConfigs[preset.id]
+              ? countParamCombos(strategyConfigs[preset.id].vars)
+              : 0;
+
+            return (
+              <div
+                key={preset.id}
+                className={`flex items-center gap-2 rounded-lg border p-3 transition ${
+                  isEditing
+                    ? "border-brand bg-brand-light/50"
+                    : checked
+                      ? "border-brand/60 bg-brand-light/30"
                       : "border-border-subtle bg-input hover:border-border"
-                  }`}
-                >
+                }`}
+              >
+                <label className="flex min-w-0 flex-1 cursor-pointer items-start gap-3">
                   <input
                     type="checkbox"
                     checked={checked}
@@ -234,80 +259,49 @@ export function BacktestClient() {
                     >
                       {preset.category}
                     </span>
+                    {checked && comboCount > 0 && (
+                      <span className="ml-2 text-xs text-muted">
+                        {comboCount} combo{comboCount === 1 ? "" : "s"}
+                      </span>
+                    )}
                   </span>
                 </label>
-              );
-            })}
-          </div>
-        </div>
-
-        <div className="ui-panel p-6">
-          <p className="ui-eyebrow">Step 2</p>
-          <h2 className="ui-section-title mt-2">Select symbols</h2>
-          <p className="ui-helper mt-1">
-            Up to {MAX_BACKTEST_SYMBOLS} symbols per run.
-          </p>
-
-          <label className="mt-4 flex items-center gap-3 text-sm text-body">
-            <input
-              type="checkbox"
-              checked={useStoredUniverse}
-              onChange={(e) => setUseStoredUniverse(e.target.checked)}
-              className="h-4 w-4 rounded border-border"
-            />
-            Use all stored symbols ({storedSymbols.length})
-          </label>
-
-          {!useStoredUniverse && (
-            <>
-              <label className="mt-4 block">
-                <span className="ui-field-label">Symbols</span>
-                <textarea
-                  value={symbolsInput}
-                  onChange={(e) => setSymbolsInput(e.target.value.toUpperCase())}
-                  rows={4}
-                  className="ui-input mt-2 font-mono"
-                  placeholder="AAPL, MSFT, GOOGL"
-                />
-              </label>
-              <button
-                type="button"
-                onClick={() =>
-                  setSymbolsInput(DEFAULT_WATCHLIST.slice(0, MAX_BACKTEST_SYMBOLS).join(", "))
-                }
-                className="ui-btn-link mt-2"
-              >
-                Use default watchlist
-              </button>
-            </>
-          )}
-
-          <p className="ui-helper mt-4">
-            {symbolList.length} symbol{symbolList.length === 1 ? "" : "s"} selected
-            {symbolList.length > 0 && (
-              <span className="text-muted"> · {symbolList.slice(0, 8).join(", ")}{symbolList.length > 8 ? "…" : ""}</span>
-            )}
-          </p>
+                <button
+                  type="button"
+                  onClick={() => openStrategySettings(preset.id)}
+                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border transition ${
+                    isEditing
+                      ? "border-brand bg-brand text-white"
+                      : "border-border-subtle bg-surface text-body hover:border-brand hover:text-brand-text"
+                  }`}
+                  title={`Configure ${preset.pattern.name}`}
+                  aria-label={`Configure ${preset.pattern.name}`}
+                >
+                  <SettingsIcon />
+                </button>
+              </div>
+            );
+          })}
         </div>
       </section>
 
-      {selectedStrategies.length > 0 && (
+      {editingConfig && (
         <section className="ui-panel p-6">
-          <p className="ui-eyebrow">Step 3</p>
-          <h2 className="ui-section-title mt-2">Optimization parameters</h2>
+          <p className="ui-eyebrow">Step 2</p>
+          <h2 className="ui-section-title mt-2">
+            Parameters — {editingConfig.name}
+          </h2>
           <p className="ui-helper mt-1">
             Enable sweep on a parameter to test a range (e.g. EMA fast 3–10 step
-            1, slow 50–60 step 10). Each strategy can have different settings.
+            1, slow 50–60 step 10).
           </p>
 
-          <div className="mt-4 space-y-4">
-            {selectedStrategies.map((config) => (
-              <StrategySweepPanel
-                key={config.id}
-                config={config}
-                onChange={updateStrategyConfig}
-              />
-            ))}
+          <div className="mt-4">
+            <StrategySweepPanel
+              config={editingConfig}
+              onChange={updateStrategyConfig}
+              hideTitle
+            />
           </div>
         </section>
       )}
@@ -315,8 +309,8 @@ export function BacktestClient() {
       <section className="ui-panel p-6">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div>
-            <p className="ui-eyebrow">Run</p>
-            <h2 className="ui-section-title mt-2">Execute backtest</h2>
+            <p className="ui-eyebrow">Step 3</p>
+            <h2 className="ui-section-title mt-2">Run backtest</h2>
             <p className="ui-helper mt-1">
               Estimated {estimate.total.toLocaleString()} backtest
               {estimate.total === 1 ? "" : "s"} across {selectedStrategies.length}{" "}
@@ -347,7 +341,79 @@ export function BacktestClient() {
         )}
       </section>
 
+      <section className="ui-panel p-6">
+        <p className="ui-eyebrow">Symbols</p>
+        <h2 className="ui-section-title mt-2">Select symbols</h2>
+        <p className="ui-helper mt-1">
+          Up to {MAX_BACKTEST_SYMBOLS} symbols per run.
+        </p>
+
+        <label className="mt-4 flex items-center gap-3 text-sm text-body">
+          <input
+            type="checkbox"
+            checked={useStoredUniverse}
+            onChange={(e) => setUseStoredUniverse(e.target.checked)}
+            className="h-4 w-4 rounded border-border"
+          />
+          Use all stored symbols ({storedSymbols.length})
+        </label>
+
+        {!useStoredUniverse && (
+          <>
+            <label className="mt-4 block">
+              <span className="ui-field-label">Symbols</span>
+              <textarea
+                value={symbolsInput}
+                onChange={(e) => setSymbolsInput(e.target.value.toUpperCase())}
+                rows={3}
+                className="ui-input mt-2 font-mono"
+                placeholder="AAPL, MSFT, GOOGL"
+              />
+            </label>
+            <button
+              type="button"
+              onClick={() =>
+                setSymbolsInput(
+                  DEFAULT_WATCHLIST.slice(0, MAX_BACKTEST_SYMBOLS).join(", "),
+                )
+              }
+              className="ui-btn-link mt-2"
+            >
+              Use default watchlist
+            </button>
+          </>
+        )}
+
+        <p className="ui-helper mt-4">
+          {symbolList.length} symbol{symbolList.length === 1 ? "" : "s"} selected
+          {symbolList.length > 0 && (
+            <span className="text-muted">
+              {" "}
+              · {symbolList.slice(0, 12).join(", ")}
+              {symbolList.length > 12 ? "…" : ""}
+            </span>
+          )}
+        </p>
+      </section>
+
       <ConsolidatedResultsPanel rows={results} />
     </div>
+  );
+}
+
+function SettingsIcon() {
+  return (
+    <svg
+      viewBox="0 0 20 20"
+      fill="currentColor"
+      className="h-4 w-4"
+      aria-hidden
+    >
+      <path
+        fillRule="evenodd"
+        d="M11.49 3.17c-.38-1.56-2.6-1.56-2.98 0a1.532 1.532 0 01-2.286.948c-1.372-.836-2.942.734-2.106 2.106.54.886.061 2.042-.947 2.287-1.561.379-1.561 2.6 0 2.978a1.532 1.532 0 01.947 2.287c-.836 1.372.734 2.942 2.106 2.106a1.532 1.532 0 012.287.947c.379 1.561 2.6 1.561 2.978 0a1.533 1.533 0 012.287-.947c1.372.836 2.942-.734 2.106-2.106a1.533 1.533 0 01.947-2.287c1.561-.379 1.561-2.6 0-2.978a1.532 1.532 0 01-.947-2.287c.836-1.372-.734-2.942-2.106-2.106a1.532 1.532 0 01-2.286-.947zM10 13a3 3 0 100-6 3 3 0 000 6z"
+        clipRule="evenodd"
+      />
+    </svg>
   );
 }

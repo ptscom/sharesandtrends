@@ -6,9 +6,14 @@ import { countParamCombos } from "@/lib/engine/param-sweep";
 interface StrategySweepPanelProps {
   config: StrategySweepState;
   onChange: (config: StrategySweepState) => void;
+  hideTitle?: boolean;
 }
 
-export function StrategySweepPanel({ config, onChange }: StrategySweepPanelProps) {
+export function StrategySweepPanel({
+  config,
+  onChange,
+  hideTitle = false,
+}: StrategySweepPanelProps) {
   const comboCount = countParamCombos(config.vars);
 
   const updateVar = (id: string, patch: Partial<SweepVarConfig>) => {
@@ -20,12 +25,22 @@ export function StrategySweepPanel({ config, onChange }: StrategySweepPanelProps
 
   return (
     <div className="ui-nested-card space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="ui-card-title">{config.name}</h3>
-        <span className="ui-badge bg-brand-light text-brand-text">
-          {comboCount} combo{comboCount === 1 ? "" : "s"}
-        </span>
-      </div>
+      {!hideTitle && (
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h3 className="ui-card-title">{config.name}</h3>
+          <span className="ui-badge bg-brand-light text-brand-text">
+            {comboCount} combo{comboCount === 1 ? "" : "s"}
+          </span>
+        </div>
+      )}
+
+      {hideTitle && (
+        <div className="flex justify-end">
+          <span className="ui-badge bg-brand-light text-brand-text">
+            {comboCount} combo{comboCount === 1 ? "" : "s"}
+          </span>
+        </div>
+      )}
 
       <div className="space-y-3">
         {config.vars.map((v) => (
