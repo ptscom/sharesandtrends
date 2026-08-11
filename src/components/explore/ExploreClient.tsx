@@ -1,20 +1,23 @@
 "use client";
 
-import { formatShareCaption, ShareCaption } from "@/components/share/ShareCaption";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useState } from "react";
-import { PriceChart } from "@/components/chart/PriceChart";
-import { BacktestResultsPanel } from "@/components/explore/BacktestResultsPanel";
-import { OptimizationPanel } from "@/components/explore/OptimizationPanel";
-import { StrategyPicker } from "@/components/explore/StrategyPicker";
-import { runBacktest } from "@/lib/engine/backtest";
-import { extractCandlePatternMarkers } from "@/lib/engine/candle-patterns";
-import { computeIndicators } from "@/lib/engine/indicators";
+import { useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState, type MouseEvent } from "react";
+import { ExploreScanResultsPanel } from "@/components/explore/ExploreScanResultsPanel";
+import { ExploreStrategySelector } from "@/components/explore/ExploreStrategySelector";
+import { ExploreStrategySettingsModal } from "@/components/explore/ExploreStrategySettingsModal";
+import { ExploreTopBar } from "@/components/explore/ExploreTopBar";
+import {
+  ExploreWorkflowSidebar,
+  type ExploreLabView,
+  type ExploreSetupStep,
+} from "@/components/explore/ExploreWorkflowSidebar";
+import { ScanSettingsPanel } from "@/components/explore/ScanSettingsPanel";
+import { SymbolSelector } from "@/components/shared/SymbolSelector";
+import { DEFAULT_WATCHLIST } from "@/lib/data/default-universe";
 import { runUniverseScanInWorker } from "@/lib/engine/scan-worker-client";
 import { patternToPreset } from "@/lib/patterns/custom";
 import { EMA_CROSS_PATTERN } from "@/lib/patterns/defaults";
-import { chartOverlays } from "@/lib/patterns/optimization";
 import {
   getEffectivePreset,
   isBuiltInPresetId,
@@ -22,53 +25,84 @@ import {
 } from "@/lib/patterns/preset-store";
 import type { StrategyPreset } from "@/lib/patterns/strategies";
 import { STRATEGY_PRESETS } from "@/lib/patterns/strategies";
+import type { LibraryFilterId } from "@/lib/patterns/strategy-ui";
 import {
   getPattern,
   listPatterns,
   savePattern,
   saveScanRun,
 } from "@/lib/storage/patterns";
-import { getPriceBars, listSymbols } from "@/lib/storage/prices";
-import type { BacktestResult, PatternDefinition, ScanRun } from "@/lib/types";
-import { DEFAULT_WATCHLIST } from "@/lib/data/default-universe";
+import { listSymbols } from "@/lib/storage/prices";
+import type { PatternDefinition, ScanRun } from "@/lib/types";
 
 export function ExploreClient() {
-  const router = useRouter();
   const searchParams = useSearchParams();
+
+  const [labView, setLabView] = useState<ExploreLabView>("setup");
+  const [setupStep, setSetupStep] = useState<ExploreSetupStep>("symbols");
+  const [selectedSymbols, setSelectedSymbols] = useState<string[]>([]);
+  const [storedSymbols, setStoredSymbols] = useState<string[]>([]);
+  const [symbolsInitialized, setSymbolsInitialized] = useState(false);
+
   const [selectedId, setSelectedId] = useState("ema-cross");
   const [pattern, setPattern] = useState<PatternDefinition>(EMA_CROSS_PATTERN);
   const [customStrategies, setCustomStrategies] = useState<StrategyPreset[]>([]);
   const [modifiedPresetIds, setModifiedPresetIds] = useState<string[]>([]);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+
+  const [query, setQuery] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState<LibraryFilterId>("all");
   const [minWinRate, setMinWinRate] = useState(70);
   const [minTrades, setMinTrades] = useState(5);
   const [signalTodayOnly, setSignalTodayOnly] = useState(false);
+
   const [scanning, setScanning] = useState(false);
   const [scanPhase, setScanPhase] = useState<"loading" | "scanning">("loading");
   const [scanProgress, setScanProgress] = useState({ done: 0, total: 0 });
   const [scan, setScan] = useState<ScanRun | null>(null);
-  const [previewSymbol, setPreviewSymbol] = useState("AAPL");
-  const [preview, setPreview] = useState<BacktestResult | null>(null);
-  const [storedSymbols, setStoredSymbols] = useState<string[]>([]);
-  const [overlayFast, setOverlayFast] = useState<(number | null)[]>([]);
-  const [overlaySlow, setOverlaySlow] = useState<(number | null)[]>([]);
-  const [patternMarkers, setPatternMarkers] = useState<
-    { date: string; label: string }[]
-  >([]);
-  const [chartBars, setChartBars] = useState<
-    import("@/lib/types").OhlcvBar[]
-  >([]);
-  const [fullBars, setFullBars] = useState<import("@/lib/types").OhlcvBar[]>(
-    [],
+  const [error, setError] = useState<string | null>(null);
+
+  const allPresets = useMemo(
+    () => [...STRATEGY_PRESETS, ...customStrategies],
+    [customStrategies],
   );
-  const [dataRange, setDataRange] = useState<{ from: string; to: string } | null>(
-    null,
-  );
+
+  const filteredPresets = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    return allPresets.filter((preset) => {
+      if (categoryFilter !== "all" && preset.category !== categoryFilter) {
+        return false;
+      }
+      if (!q) return true;
+      return (
+        preset.pattern.name.toLowerCase().includes(q) ||
+        preset.category.toLowerCase().includes(q) ||
+        preset.id.toLowerCase().includes(q) ||
+        preset.entryLogic.toLowerCase().includes(q)
+      );
+    });
+  }, [allPresets, query, categoryFilter]);
+
+  const activePreset = allPresets.find((p) => p.id === selectedId);
+  const strategyName = activePreset?.pattern.name ?? pattern.name;
+
+  const symbolSummary =
+    selectedSymbols.length === 0
+      ? ""
+      : selectedSymbols.length <= 4
+        ? selectedSymbols.join(", ")
+        : `${selectedSymbols.length} symbols`;
+
+  const strategySummary = strategyName;
+  const scanSummary = `${minWinRate}% win · ${minTrades}+ trades${
+    signalTodayOnly ? " · signal today" : ""
+  }`;
 
   const selectStrategy = useCallback(async (preset: StrategyPreset) => {
     setSelectedId(preset.id);
     if (isBuiltInPresetId(preset.id)) {
-      const { pattern } = await getEffectivePreset(preset.id);
-      setPattern(structuredClone(pattern));
+      const { pattern: next } = await getEffectivePreset(preset.id);
+      setPattern(structuredClone(next));
     } else {
       setPattern(structuredClone(preset.pattern));
     }
@@ -77,17 +111,19 @@ export function ExploreClient() {
   const buildPattern = useCallback((): PatternDefinition => pattern, [pattern]);
 
   useEffect(() => {
-    let cancelled = false;
-    listSymbols().then((list) => {
-      if (!cancelled) setStoredSymbols(list.map((s) => s.symbol));
+    void listSymbols().then((list) => {
+      const symbols = list.map((s) => s.symbol);
+      setStoredSymbols(symbols);
     });
-    return () => {
-      cancelled = true;
-    };
   }, []);
 
   useEffect(() => {
-    let cancelled = false;
+    if (symbolsInitialized || storedSymbols.length === 0) return;
+    setSelectedSymbols(storedSymbols);
+    setSymbolsInitialized(true);
+  }, [storedSymbols, symbolsInitialized]);
+
+  useEffect(() => {
     void (async () => {
       const [list, modified] = await Promise.all([
         listPatterns(),
@@ -97,20 +133,15 @@ export function ExploreClient() {
       const custom = list
         .filter((p) => p.id && !presetIds.has(p.id))
         .map(patternToPreset);
-      if (!cancelled) {
-        setCustomStrategies(custom);
-        setModifiedPresetIds(modified);
-      }
+      setCustomStrategies(custom);
+      setModifiedPresetIds(modified);
     })();
-    return () => {
-      cancelled = true;
-    };
   }, []);
 
   useEffect(() => {
     if (searchParams.get("patternId")) return;
-    void getEffectivePreset("ema-cross").then(({ pattern }) => {
-      setPattern(structuredClone(pattern));
+    void getEffectivePreset("ema-cross").then(({ pattern: next }) => {
+      setPattern(structuredClone(next));
     });
   }, [searchParams]);
 
@@ -121,9 +152,9 @@ export function ExploreClient() {
     void (async () => {
       const preset = STRATEGY_PRESETS.find((s) => s.id === patternId);
       if (preset) {
-        const { pattern } = await getEffectivePreset(patternId);
+        const { pattern: next } = await getEffectivePreset(patternId);
         setSelectedId(patternId);
-        setPattern(structuredClone(pattern));
+        setPattern(structuredClone(next));
         return;
       }
       const stored = await getPattern(patternId);
@@ -134,17 +165,28 @@ export function ExploreClient() {
     })();
   }, [searchParams]);
 
-  const runPreview = useCallback(async () => {
-    const bars = await getPriceBars(previewSymbol);
-    if (bars.length === 0) return;
-    setPreview(runBacktest(previewSymbol, bars, buildPattern()));
-  }, [previewSymbol, buildPattern]);
+  const openStrategySettings = (id: string, e: MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const preset = allPresets.find((p) => p.id === id);
+    if (preset) void selectStrategy(preset);
+    setSettingsOpen(true);
+  };
 
   const runScan = useCallback(async () => {
+    setError(null);
+
     const universe =
-      storedSymbols.length > 0 ? storedSymbols : DEFAULT_WATCHLIST;
+      selectedSymbols.length > 0
+        ? selectedSymbols
+        : storedSymbols.length > 0
+          ? storedSymbols
+          : DEFAULT_WATCHLIST;
+
     if (universe.length === 0) {
-      alert("No symbols in browser. Go to Data page and download prices first.");
+      setError("Select at least one symbol or download data first.");
+      setLabView("setup");
+      setSetupStep("symbols");
       return;
     }
 
@@ -171,304 +213,134 @@ export function ExploreClient() {
           setScanProgress({ done, total });
         },
       });
+
       await saveScanRun(result);
       setScan(result);
-      router.push(`/scans/${result.id}`);
-    } catch (error) {
-      alert(error instanceof Error ? error.message : "Scan failed");
+      setLabView("results");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Scan failed");
     } finally {
       setScanning(false);
     }
   }, [
+    selectedSymbols,
     storedSymbols,
     buildPattern,
     minWinRate,
     minTrades,
     signalTodayOnly,
-    router,
     selectedId,
     modifiedPresetIds,
   ]);
 
-  useEffect(() => {
-    void (async () => {
-      const bars = await getPriceBars(previewSymbol);
-      const windowBars = bars.slice(-252);
-      setFullBars(bars);
-      setChartBars(windowBars);
-      setDataRange(
-        bars.length > 0
-          ? { from: bars[0]!.date, to: bars[bars.length - 1]!.date }
-          : null,
-      );
-      if (bars.length > 0) {
-        const p = buildPattern();
-        const ctx = computeIndicators(bars, p.indicators);
-        const overlays = chartOverlays(p, ctx.series);
-        setOverlayFast(overlays.fast ?? []);
-        setOverlaySlow(overlays.slow ?? []);
-        const windowDates = new Set(windowBars.map((b) => b.date));
-        const hasCandlePatterns = p.indicators.some(
-          (ind) => ind.type === "candle_pattern",
-        );
-        setPatternMarkers(
-          hasCandlePatterns
-            ? extractCandlePatternMarkers(bars, ctx.series, p.indicators).filter(
-                (m) => windowDates.has(m.date),
-              )
-            : [],
-        );
-        setPreview(runBacktest(previewSymbol, bars, p));
-      } else {
-        setFullBars([]);
-        setOverlayFast([]);
-        setOverlaySlow([]);
-        setPatternMarkers([]);
-        setPreview(null);
-        setDataRange(null);
-      }
-    })();
-  }, [previewSymbol, buildPattern]);
-
-  const activePattern = buildPattern();
+  const goToSetup = (step: ExploreSetupStep) => {
+    setLabView("setup");
+    setSetupStep(step);
+  };
 
   return (
     <div className="space-y-6">
-      <section className="grid gap-6 lg:grid-cols-3 lg:items-stretch">
-        {/* Column 1: select strategy */}
-        <div className="flex min-h-[24rem] flex-col ui-panel p-6">
-          <StrategyPicker
-            selectedId={selectedId}
-            customStrategies={customStrategies}
-            modifiedPresetIds={modifiedPresetIds}
-            onSelect={(preset) => void selectStrategy(preset)}
-          />
-        </div>
+      <ExploreTopBar
+        symbolCount={selectedSymbols.length}
+        strategyName={strategyName}
+        minWinRate={minWinRate}
+        minTrades={minTrades}
+        signalTodayOnly={signalTodayOnly}
+        scanning={scanning}
+        canScan={selectedSymbols.length > 0 || storedSymbols.length > 0}
+        onScan={() => void runScan()}
+      />
 
-        {/* Column 2: optimization variables */}
-        <div className="flex min-h-[24rem] flex-col ui-panel p-6">
-          <div className="flex items-center gap-2">
-            <p className="ui-eyebrow">Step 2</p>
-            <h3 className="ui-section-title">Optimization variables</h3>
-            <span className="ui-badge bg-success-light text-success">
-              ON
-            </span>
-          </div>
-          <p className="ui-helper mt-1">
-            Adjust indicator periods, thresholds, and backtest settings.
-          </p>
-          <div className="mt-4 min-h-0 flex-1 overflow-y-auto pr-1">
-            <OptimizationPanel pattern={pattern} onChange={setPattern} />
-          </div>
-        </div>
-
-        {/* Column 3: scan universe */}
-        <div className="flex min-h-[24rem] flex-col ui-panel p-6">
-          <p className="ui-eyebrow">Step 3</p>
-          <h3 className="ui-section-title mt-1">Scan universe</h3>
-          <p className="ui-helper mt-1">
-            Filter symbols and run a universe scan with the current strategy.
-          </p>
-
-          <div className="mt-5 flex-1">
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="ui-field-label">Min win rate %</label>
-                <input
-                  type="number"
-                  min={0}
-                  max={100}
-                  value={minWinRate}
-                  onChange={(e) => setMinWinRate(Number(e.target.value))}
-                  className="ui-input mt-2"
-                />
-              </div>
-              <div>
-                <label className="ui-field-label">Min trades</label>
-                <input
-                  type="number"
-                  min={1}
-                  max={500}
-                  value={minTrades}
-                  onChange={(e) => setMinTrades(Number(e.target.value))}
-                  className="ui-input mt-2"
-                />
-              </div>
-            </div>
-
-            <label className="mt-4 flex items-center gap-3 text-sm text-muted">
-              <input
-                type="checkbox"
-                checked={signalTodayOnly}
-                onChange={(e) => setSignalTodayOnly(e.target.checked)}
-                className="h-4 w-4 rounded border-border"
-              />
-              Only show symbols with a signal today
-            </label>
-
-            <div className="mt-6 flex flex-col gap-2">
-              <button
-                type="button"
-                onClick={() => void runScan()}
-                disabled={scanning}
-                className="ui-btn-primary w-full py-3"
-              >
-                {scanning
-                  ? scanPhase === "loading"
-                    ? `Loading prices ${scanProgress.done}/${scanProgress.total}…`
-                    : `Scanning ${scanProgress.done}/${scanProgress.total}…`
-                  : "Scan universe"}
-              </button>
-              <button
-                type="button"
-                onClick={() => void runPreview()}
-                className="ui-btn-secondary w-full"
-              >
-                Refresh preview
-              </button>
-            </div>
-
-            <p className="ui-helper mt-4">
-              {storedSymbols.length} symbols stored locally
+      {(scanning || error) && (
+        <div className="space-y-2">
+          {scanning && (
+            <p className="ui-helper rounded-xl border border-border-subtle bg-surface px-4 py-3">
+              {scanPhase === "loading"
+                ? `Loading prices ${scanProgress.done}/${scanProgress.total}…`
+                : `Scanning ${scanProgress.done}/${scanProgress.total}…`}
+            </p>
+          )}
+          {error && (
+            <p className="rounded-xl bg-danger-light px-4 py-3 text-sm text-danger">
+              {error}
               {storedSymbols.length === 0 && (
                 <>
                   {" "}
-                  —{" "}
-                  <Link href="/data" className="text-brand underline">
-                    download data
-                  </Link>{" "}
-                  first
+                  <Link href="/data" className="underline">
+                    Download data
+                  </Link>
                 </>
               )}
             </p>
-          </div>
-        </div>
-      </section>
-
-      <BacktestResultsPanel
-        preview={preview}
-        fullBars={fullBars}
-        symbol={previewSymbol}
-        patternName={activePattern.name}
-        dataRange={dataRange}
-        symbolInput={previewSymbol}
-        onSymbolChange={setPreviewSymbol}
-      />
-
-      <section className="ui-panel">
-        <h2 className="ui-page-title">Chart preview</h2>
-        <div className="mt-4">
-          {chartBars.length > 0 ? (
-            <PriceChart
-              bars={chartBars}
-              signals={preview?.signals ?? []}
-              emaFast={overlayFast.slice(-252)}
-              emaSlow={overlaySlow.slice(-252)}
-              patternMarkers={patternMarkers}
-            />
-          ) : (
-            <p className="py-20 text-center text-sm text-muted">
-              No local data for {previewSymbol}.{" "}
-              <Link href="/data" className="text-brand underline">
-                Fetch it
-              </Link>
-            </p>
           )}
         </div>
-      </section>
-
-      {scan && (
-        <section className="ui-panel p-8">
-          <div className="flex flex-wrap items-start justify-between gap-4">
-            <div>
-              <p className="text-xs uppercase tracking-[0.3em] text-muted">
-                Latest scan
-              </p>
-              <h2 className="mt-2 text-2xl font-semibold text-ink">
-                {scan.patternName}
-              </h2>
-              <p className="mt-1 text-sm text-muted">
-                {scan.results.length} matches ·{" "}
-                <Link href={`/scans/${scan.id}`} className="text-brand underline">
-                  Open full results
-                </Link>
-              </p>
-            </div>
-            <ShareCaption scan={scan} />
-          </div>
-
-          <div className="mt-6 overflow-x-auto">
-            <table className="w-full min-w-[640px] text-left text-sm">
-              <thead>
-                <tr className="border-b border-border text-xs uppercase tracking-[0.15em] text-muted">
-                  <th className="py-3 pr-4">Symbol</th>
-                  <th className="py-3 pr-4">Signal</th>
-                  <th className="py-3 pr-4">Win rate</th>
-                  <th className="py-3 pr-4">Trades</th>
-                  <th className="py-3 pr-4">Avg return</th>
-                  <th className="py-3">Caption</th>
-                </tr>
-              </thead>
-              <tbody>
-                {scan.results.slice(0, 10).map((row) => (
-                  <tr
-                    key={row.symbol}
-                    className="border-b border-border/50 hover:bg-bg/50"
-                  >
-                    <td className="py-3 pr-4">
-                      <Link
-                        href={`/symbol/${row.symbol}?scanId=${scan.id}`}
-                        className="font-mono font-semibold text-brand"
-                      >
-                        {row.symbol}
-                      </Link>
-                    </td>
-                    <td className="py-3 pr-4">
-                      {row.signalToday ? (
-                        <span className="rounded-full bg-brand/15 px-2 py-1 text-xs font-semibold text-brand">
-                          Today
-                        </span>
-                      ) : (
-                        <span className="text-muted">—</span>
-                      )}
-                    </td>
-                    <td className="py-3 pr-4">
-                      {row.stats.winRate.toFixed(1)}%
-                    </td>
-                    <td className="py-3 pr-4">{row.stats.trades}</td>
-                    <td className="py-3 pr-4">
-                      {row.stats.avgReturnPct.toFixed(2)}%
-                    </td>
-                    <td className="py-3">
-                      <CopyButton
-                        text={formatShareCaption(scan.patternName, row)}
-                      />
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </section>
       )}
-    </div>
-  );
-}
 
-function CopyButton({ text }: { text: string }) {
-  const [copied, setCopied] = useState(false);
-  return (
-    <button
-      type="button"
-      onClick={() => {
-        void navigator.clipboard.writeText(text).then(() => {
-          setCopied(true);
-          setTimeout(() => setCopied(false), 2000);
-        });
-      }}
-      className="text-xs text-brand underline"
-    >
-      {copied ? "Copied!" : "Copy"}
-    </button>
+      <div className="grid gap-6 lg:grid-cols-[minmax(13rem,15rem)_1fr]">
+        <ExploreWorkflowSidebar
+          labView={labView}
+          setupStep={setupStep}
+          symbolSummary={symbolSummary}
+          strategySummary={strategySummary}
+          scanSummary={scanSummary}
+          resultCount={scan?.results.length ?? 0}
+          onSelectStep={goToSetup}
+          onViewResults={() => scan && setLabView("results")}
+        />
+
+        <main className="min-w-0 space-y-6">
+          {labView === "setup" && setupStep === "symbols" && (
+            <SymbolSelector
+              selected={selectedSymbols}
+              storedSymbols={storedSymbols}
+              onChange={setSelectedSymbols}
+              maxSymbols={null}
+              stepLabel="Step 1"
+              description="Choose the symbol universe for this scan."
+            />
+          )}
+
+          {labView === "setup" && setupStep === "strategy" && (
+            <ExploreStrategySelector
+              presets={filteredPresets}
+              allPresets={allPresets}
+              selectedId={selectedId}
+              modifiedPresetIds={modifiedPresetIds}
+              query={query}
+              categoryFilter={categoryFilter}
+              onQueryChange={setQuery}
+              onCategoryChange={setCategoryFilter}
+              onSelect={(preset) => void selectStrategy(preset)}
+              onOpenSettings={openStrategySettings}
+            />
+          )}
+
+          {labView === "setup" && setupStep === "scan" && (
+            <ScanSettingsPanel
+              minWinRate={minWinRate}
+              minTrades={minTrades}
+              signalTodayOnly={signalTodayOnly}
+              symbolCount={selectedSymbols.length}
+              storedSymbolCount={storedSymbols.length}
+              onMinWinRateChange={setMinWinRate}
+              onMinTradesChange={setMinTrades}
+              onSignalTodayOnlyChange={setSignalTodayOnly}
+            />
+          )}
+
+          {labView === "results" && scan && (
+            <ExploreScanResultsPanel scan={scan} />
+          )}
+        </main>
+      </div>
+
+      <ExploreStrategySettingsModal
+        open={settingsOpen}
+        pattern={pattern}
+        strategyName={strategyName}
+        onClose={() => setSettingsOpen(false)}
+        onChange={setPattern}
+      />
+    </div>
   );
 }
