@@ -1,4 +1,5 @@
 import { runBacktest } from "@/lib/engine/backtest";
+import type { TradeSettings } from "@/lib/engine/trade-settings";
 import {
   applyOptimizationVar,
   extractOptimizationVars,
@@ -150,6 +151,7 @@ export interface RunSweepOptions {
   strategies: StrategySweepState[];
   symbols: string[];
   priceData: Record<string, import("@/lib/types").OhlcvBar[]>;
+  tradeSettings?: TradeSettings;
   onProgress?: (done: number, total: number) => void;
   maxCombosPerStrategy?: number;
   maxTotalRuns?: number;
@@ -190,6 +192,7 @@ export async function runParameterSweep(
     symbols,
     priceData,
     onProgress,
+    tradeSettings,
     maxCombosPerStrategy = MAX_COMBOS_PER_STRATEGY,
     maxTotalRuns = MAX_TOTAL_RUNS,
   } = options;
@@ -225,7 +228,7 @@ export async function runParameterSweep(
           continue;
         }
 
-        const result = runBacktest(symbol, bars, pattern);
+        const result = runBacktest(symbol, bars, pattern, tradeSettings);
         rows.push({
           strategyId: strategy.id,
           strategyName: strategy.name,

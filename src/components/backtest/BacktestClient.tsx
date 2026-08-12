@@ -11,7 +11,13 @@ import {
 import { ConsolidatedResultsPanel } from "@/components/backtest/ConsolidatedResultsPanel";
 import { StrategySelector } from "@/components/backtest/StrategySelector";
 import { StrategySettingsModal } from "@/components/backtest/StrategySettingsModal";
+import { TradeSettingsPanel } from "@/components/backtest/TradeSettingsPanel";
 import { SymbolSelector } from "@/components/shared/SymbolSelector";
+import {
+  DEFAULT_TRADE_SETTINGS,
+  formatTradeSettingsSummary,
+  type TradeSettings,
+} from "@/lib/engine/trade-settings";
 import {
   MAX_BACKTEST_SYMBOLS,
   MAX_COMBOS_PER_STRATEGY,
@@ -52,6 +58,8 @@ export function BacktestClient() {
   const [completedAt, setCompletedAt] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [customPresets, setCustomPresets] = useState<StrategyPreset[]>([]);
+  const [tradeSettings, setTradeSettings] =
+    useState<TradeSettings>(DEFAULT_TRADE_SETTINGS);
 
   const allPresets = useMemo(
     () => [...STRATEGY_PRESETS, ...customPresets],
@@ -113,6 +121,8 @@ export function BacktestClient() {
       : selectedStrategies.length === 1
         ? selectedStrategies[0]!.name
         : `${selectedStrategies.length} strategies`;
+
+  const tradeSummary = formatTradeSettingsSummary(tradeSettings);
 
   useEffect(() => {
     void listSymbols().then((list) =>
@@ -224,6 +234,7 @@ export function BacktestClient() {
         strategies: selectedStrategies,
         symbols: selectedSymbols,
         priceData,
+        tradeSettings,
         onProgress: (done, total) => setProgress({ done, total }),
       });
 
@@ -241,7 +252,7 @@ export function BacktestClient() {
     } finally {
       setRunning(false);
     }
-  }, [selectedStrategies, selectedSymbols, estimate]);
+  }, [selectedStrategies, selectedSymbols, estimate, tradeSettings]);
 
   const goToSetup = (step: BacktestSetupStep) => {
     setLabView("setup");
@@ -273,6 +284,7 @@ export function BacktestClient() {
           setupStep={setupStep}
           symbolSummary={symbolSummary}
           strategySummary={strategySummary}
+          tradeSummary={tradeSummary}
           hasResults={results.length > 0}
           onSelectStep={goToSetup}
           onViewResults={() => results.length > 0 && setLabView("results")}
@@ -300,6 +312,13 @@ export function BacktestClient() {
               onCategoryChange={setCategoryFilter}
               onToggle={toggleStrategy}
               onOpenSettings={openStrategySettings}
+            />
+          )}
+
+          {labView === "setup" && setupStep === "trade" && (
+            <TradeSettingsPanel
+              settings={tradeSettings}
+              onChange={setTradeSettings}
             />
           )}
 

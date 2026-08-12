@@ -7,13 +7,14 @@ import {
 } from "@/components/lab/LabShell";
 
 export type BacktestLabView = "setup" | "results";
-export type BacktestSetupStep = "symbols" | "strategies";
+export type BacktestSetupStep = "symbols" | "strategies" | "trade";
 
 interface BacktestWorkflowSidebarProps {
   labView: BacktestLabView;
   setupStep: BacktestSetupStep;
   symbolSummary: string;
   strategySummary: string;
+  tradeSummary: string;
   hasResults: boolean;
   onSelectStep: (step: BacktestSetupStep) => void;
   onViewResults: () => void;
@@ -22,6 +23,7 @@ interface BacktestWorkflowSidebarProps {
 const STEPS: { id: BacktestSetupStep; label: string; number: number }[] = [
   { id: "symbols", label: "Select symbols", number: 1 },
   { id: "strategies", label: "Select strategies", number: 2 },
+  { id: "trade", label: "Trade settings", number: 3 },
 ];
 
 export function BacktestWorkflowSidebar({
@@ -29,10 +31,17 @@ export function BacktestWorkflowSidebar({
   setupStep,
   symbolSummary,
   strategySummary,
+  tradeSummary,
   hasResults,
   onSelectStep,
   onViewResults,
 }: BacktestWorkflowSidebarProps) {
+  const summaries: Record<BacktestSetupStep, string> = {
+    symbols: symbolSummary,
+    strategies: strategySummary,
+    trade: tradeSummary,
+  };
+
   return (
     <LabWorkflowSidebar
       title="Backtest workflow"
@@ -41,15 +50,14 @@ export function BacktestWorkflowSidebar({
           <p className="text-sm font-medium text-ink">How it works</p>
           <p className="mt-1 text-xs leading-relaxed text-body">
             Backtests run for every combination of symbol × strategy × parameter
-            set. Use the settings icon on a strategy card to configure sweeps.
+            set. Trade settings can override strategy exit signals for all runs.
           </p>
         </>
       }
     >
       {STEPS.map((step) => {
         const isActive = labView === "setup" && setupStep === step.id;
-        const summary =
-          step.id === "symbols" ? symbolSummary : strategySummary;
+        const summary = summaries[step.id];
 
         return (
           <LabWorkflowStepButton
@@ -89,7 +97,7 @@ export function BacktestWorkflowSidebar({
         onClick={onViewResults}
         badge={
           <LabStepBadge
-            number={3}
+            number={4}
             done={hasResults && labView !== "results"}
             active={labView === "results"}
           />
