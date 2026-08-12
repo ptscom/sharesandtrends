@@ -10,7 +10,7 @@ import type {
 import { computeIndicators } from "./indicators";
 import { evaluateOptional, evaluateSeries } from "./evaluate";
 
-function computeStats(trades: Trade[]): BacktestStats {
+export function computeStats(trades: Trade[]): BacktestStats {
   if (trades.length === 0) {
     return {
       trades: 0,
