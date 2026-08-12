@@ -71,7 +71,7 @@ export function ExploreStrategySelector({
         </select>
       </div>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-2">
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {presets.map((preset) => {
           const style = categoryStyle(preset.category);
           const isSelected = preset.id === selectedId;
@@ -80,13 +80,13 @@ export function ExploreStrategySelector({
           return (
             <div
               key={preset.id}
-              className={`rounded-xl border p-4 transition ${
+              className={`rounded-xl border p-3 transition ${
                 isSelected
                   ? "border-brand bg-brand/5"
                   : "border-border hover:border-brand/40 hover:bg-bg"
               }`}
             >
-              <div className="flex items-start gap-3">
+              <div className="flex items-start gap-2.5">
                 <button
                   type="button"
                   onClick={() => onSelect(preset)}
@@ -101,35 +101,32 @@ export function ExploreStrategySelector({
                     <span className="h-1.5 w-1.5 rounded-full bg-white" />
                   )}
                 </button>
-                <span
-                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${style.bg}`}
-                >
-                  <span className={`h-2.5 w-2.5 rounded-full ${style.dot}`} />
-                </span>
                 <div className="min-w-0 flex-1">
                   <button
                     type="button"
                     onClick={() => onSelect(preset)}
                     className="w-full text-left"
                   >
-                    <span className="block font-medium text-ink">
-                      {preset.pattern.name}
-                      {modified ? " *" : ""}
+                    <span className="flex items-start justify-between gap-2">
+                      <span className="font-medium text-ink leading-snug">
+                        {preset.pattern.name}
+                        {modified ? " *" : ""}
+                      </span>
+                      <span
+                        className={`shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium leading-none ${style.bg} ${style.text}`}
+                      >
+                        {preset.category}
+                      </span>
                     </span>
-                    <span className="mt-0.5 block text-xs text-muted line-clamp-2">
+                    <span className="mt-1 block text-xs text-muted line-clamp-2">
                       {preset.entryLogic}
-                    </span>
-                    <span
-                      className={`mt-2 inline-block rounded-full px-2 py-0.5 text-[10px] font-medium ${style.bg} ${style.text}`}
-                    >
-                      {preset.category}
                     </span>
                   </button>
                 </div>
                 <button
                   type="button"
                   onClick={(e) => onOpenSettings(preset.id, e)}
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border bg-surface text-body transition hover:border-brand hover:text-brand-text"
+                  className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-border bg-surface text-body transition hover:border-brand hover:text-brand-text"
                   title={`Configure ${preset.pattern.name}`}
                   aria-label={`Configure ${preset.pattern.name}`}
                 >
