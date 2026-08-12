@@ -18,7 +18,7 @@ export function Header() {
 
   return (
     <header className="ui-site-header">
-      <div className="relative mx-auto flex h-16 w-full max-w-[1240px] items-center justify-between px-5 md:px-10">
+      <div className="mx-auto flex h-16 w-full max-w-[1240px] items-center justify-between px-5 md:px-10">
         <Link href="/" className="flex shrink-0 items-center">
           <Image
             src="/logo.png"

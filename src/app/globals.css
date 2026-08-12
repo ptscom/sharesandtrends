@@ -89,6 +89,13 @@ body {
   pointer-events: none;
   background-color: #f3efe8;
   background-image:
+    linear-gradient(
+      to bottom,
+      rgba(16, 42, 67, 0.09) 0%,
+      rgba(16, 42, 67, 0.04) 10%,
+      rgba(16, 42, 67, 0.015) 18%,
+      transparent 32%
+    ),
     radial-gradient(ellipse 85vmax 60vmax at 12% -10%, rgba(245, 158, 11, 0.12), transparent 62%),
     radial-gradient(ellipse 75vmax 50vmax at 92% 6%, rgba(117, 102, 200, 0.09), transparent 58%),
     radial-gradient(ellipse 80vmax 55vmax at 48% 108%, rgba(21, 154, 104, 0.06), transparent 62%),
