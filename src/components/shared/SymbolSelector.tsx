@@ -29,11 +29,19 @@ export function SymbolSelector({
       ? `Up to ${maxSymbols} symbols.`
       : "No limit — select as many stored symbols as you need.";
 
+  const browseSymbols = useMemo(() => {
+    const q = search.trim().toUpperCase();
+    const primary =
+      storedSymbols.length > 0 ? storedSymbols : [...DEFAULT_WATCHLIST];
+    if (!q) return primary;
+    return primary.filter((symbol) => symbol.includes(q));
+  }, [search, storedSymbols]);
+
   const suggestions = useMemo(() => {
     const q = search.trim().toUpperCase();
+    if (!q) return [];
     const pool = [...new Set([...DEFAULT_WATCHLIST, ...storedSymbols])];
-    if (!q) return pool.slice(0, 12);
-    return pool.filter((s) => s.includes(q)).slice(0, 12);
+    return pool.filter((s) => s.includes(q)).slice(0, 16);
   }, [search, storedSymbols]);
 
   const addSymbol = (symbol: string) => {
@@ -61,6 +69,10 @@ export function SymbolSelector({
     );
   };
 
+  const clearSelected = () => onChange([]);
+
+  const atLimit = maxSymbols != null && selected.length >= maxSymbols;
+
   return (
     <section className="ui-panel p-6">
       <p className="ui-eyebrow">{stepLabel}</p>
@@ -81,7 +93,7 @@ export function SymbolSelector({
                   addSymbol(search);
                 }
               }}
-              placeholder="Search symbols…"
+              placeholder="Search downloaded symbols…"
               className="ui-input"
             />
             {search.trim() && (
@@ -91,7 +103,7 @@ export function SymbolSelector({
                     key={symbol}
                     type="button"
                     onClick={() => addSymbol(symbol)}
-                    disabled={selected.includes(symbol)}
+                    disabled={selected.includes(symbol) || atLimit}
                     className="rounded-lg border border-border px-2.5 py-1 font-mono text-xs hover:border-brand disabled:opacity-40"
                   >
                     {symbol}
@@ -102,7 +114,8 @@ export function SymbolSelector({
                     <button
                       type="button"
                       onClick={() => addSymbol(search)}
-                      className="rounded-lg border border-brand bg-brand-light/40 px-2.5 py-1 text-xs font-medium text-brand-text"
+                      disabled={atLimit}
+                      className="rounded-lg border border-brand bg-brand-light/40 px-2.5 py-1 text-xs font-medium text-brand-text disabled:opacity-40"
                     >
                       Add {search.trim().toUpperCase()}
                     </button>
@@ -112,14 +125,15 @@ export function SymbolSelector({
           </div>
 
           <div>
-            <p className="ui-field-label">Popular watchlists</p>
+            <p className="ui-field-label">Quick add</p>
             <div className="mt-2 flex flex-wrap gap-2">
               {SYMBOL_WATCHLISTS.map((list) => (
                 <button
                   key={list.id}
                   type="button"
                   onClick={() => applyWatchlist(list.symbols)}
-                  className="rounded-full border border-border px-3 py-1 text-xs font-medium text-body transition hover:border-brand hover:text-ink"
+                  disabled={atLimit}
+                  className="rounded-full border border-border px-3 py-1 text-xs font-medium text-body transition hover:border-brand hover:text-ink disabled:opacity-40"
                 >
                   {list.label}
                 </button>
@@ -128,37 +142,62 @@ export function SymbolSelector({
                 <button
                   type="button"
                   onClick={addAllStored}
-                  className="rounded-full border border-border px-3 py-1 text-xs font-medium text-body transition hover:border-brand hover:text-ink"
+                  className="rounded-full border border-brand/40 bg-brand-light/50 px-3 py-1 text-xs font-medium text-brand-text transition hover:border-brand"
                 >
-                  All stored ({storedSymbols.length})
+                  All downloaded ({storedSymbols.length})
                 </button>
               )}
             </div>
           </div>
 
-          {selected.length > 0 && (
-            <div>
-              <p className="ui-field-label">Selected</p>
-              <div className="mt-2 flex flex-wrap gap-2">
-                {selected.map((symbol) => (
-                  <span
-                    key={symbol}
-                    className="inline-flex items-center gap-1 rounded-full border border-brand/30 bg-brand-light/50 px-2.5 py-1 font-mono text-xs font-medium text-ink"
-                  >
-                    {symbol}
-                    <button
-                      type="button"
-                      onClick={() => removeSymbol(symbol)}
-                      className="text-muted hover:text-danger"
-                      aria-label={`Remove ${symbol}`}
-                    >
-                      ×
-                    </button>
-                  </span>
-                ))}
-              </div>
+          <div>
+            <div className="flex items-center justify-between gap-2">
+              <p className="ui-field-label">
+                {storedSymbols.length > 0
+                  ? `Downloaded symbols (${browseSymbols.length})`
+                  : `Suggested symbols (${browseSymbols.length})`}
+              </p>
+              {selected.length > 0 && (
+                <button
+                  type="button"
+                  onClick={clearSelected}
+                  className="text-xs font-medium text-muted hover:text-danger"
+                >
+                  Clear all
+                </button>
+              )}
             </div>
-          )}
+            <div className="mt-2 max-h-72 overflow-y-auto rounded-xl border border-border-subtle bg-input/40 p-2">
+              {browseSymbols.length === 0 ? (
+                <p className="px-2 py-4 text-center text-xs text-muted">
+                  No symbols match your search.
+                </p>
+              ) : (
+                <div className="grid grid-cols-2 gap-1 sm:grid-cols-3 md:grid-cols-4">
+                  {browseSymbols.map((symbol) => {
+                    const isSelected = selected.includes(symbol);
+                    return (
+                      <button
+                        key={symbol}
+                        type="button"
+                        onClick={() =>
+                          isSelected ? removeSymbol(symbol) : addSymbol(symbol)
+                        }
+                        disabled={!isSelected && atLimit}
+                        className={`rounded-lg px-2 py-1.5 text-left font-mono text-xs transition ${
+                          isSelected
+                            ? "border border-brand/40 bg-brand-light/60 font-semibold text-ink"
+                            : "border border-transparent text-body hover:border-border hover:bg-surface"
+                        } disabled:opacity-40`}
+                      >
+                        {symbol}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
         </div>
 
         <div className="rounded-xl border border-border-subtle bg-input/50 p-4">

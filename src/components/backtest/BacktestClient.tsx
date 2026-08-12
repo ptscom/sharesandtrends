@@ -19,7 +19,6 @@ import {
   type TradeSettings,
 } from "@/lib/engine/trade-settings";
 import {
-  MAX_BACKTEST_SYMBOLS,
   MAX_COMBOS_PER_STRATEGY,
   countParamCombos,
   createStrategySweepState,
@@ -37,11 +36,8 @@ import { getPriceBarsBatch, listSymbols } from "@/lib/storage/prices";
 export function BacktestClient() {
   const [labView, setLabView] = useState<BacktestLabView>("setup");
   const [setupStep, setSetupStep] = useState<BacktestSetupStep>("symbols");
-  const [selectedSymbols, setSelectedSymbols] = useState<string[]>([
-    "AAPL",
-    "MSFT",
-    "GOOGL",
-  ]);
+  const [selectedSymbols, setSelectedSymbols] = useState<string[]>([]);
+  const [symbolsInitialized, setSymbolsInitialized] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>(["ema-cross"]);
   const [settingsStrategyId, setSettingsStrategyId] = useState<string | null>(
     null,
@@ -125,9 +121,9 @@ export function BacktestClient() {
   const tradeSummary = formatTradeSettingsSummary(tradeSettings);
 
   useEffect(() => {
-    void listSymbols().then((list) =>
-      setStoredSymbols(list.map((s) => s.symbol)),
-    );
+    void listSymbols().then((list) => {
+      setStoredSymbols(list.map((s) => s.symbol));
+    });
     void listPatterns().then((patterns) => {
       const presetIds = new Set(STRATEGY_PRESETS.map((s) => s.id));
       const custom = patterns
@@ -156,6 +152,12 @@ export function BacktestClient() {
       });
     });
   }, []);
+
+  useEffect(() => {
+    if (symbolsInitialized || storedSymbols.length === 0) return;
+    setSelectedSymbols(storedSymbols);
+    setSymbolsInitialized(true);
+  }, [storedSymbols, symbolsInitialized]);
 
   useEffect(() => {
     void (async () => {
@@ -296,7 +298,6 @@ export function BacktestClient() {
               selected={selectedSymbols}
               storedSymbols={storedSymbols}
               onChange={setSelectedSymbols}
-              maxSymbols={MAX_BACKTEST_SYMBOLS}
               description="Choose symbols to include in this backtest sweep."
             />
           )}

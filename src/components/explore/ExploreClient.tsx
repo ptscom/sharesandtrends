@@ -169,10 +169,26 @@ export function ExploreClient() {
   const openStrategySettings = (id: string, e: MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    const preset = allPresets.find((p) => p.id === id);
-    if (preset) void selectStrategy(preset);
+    if (id !== selectedId) {
+      const preset = allPresets.find((p) => p.id === id);
+      if (preset) void selectStrategy(preset);
+    }
     setSettingsOpen(true);
   };
+
+  const saveStrategySettings = useCallback(async () => {
+    const saved = await savePattern({
+      ...pattern,
+      id: pattern.id ?? selectedId,
+    });
+    setPattern(structuredClone(saved));
+    if (isBuiltInPresetId(selectedId)) {
+      setModifiedPresetIds((prev) =>
+        prev.includes(selectedId) ? prev : [...prev, selectedId],
+      );
+    }
+    setSettingsOpen(false);
+  }, [pattern, selectedId]);
 
   const runScan = useCallback(async () => {
     setError(null);
@@ -336,6 +352,7 @@ export function ExploreClient() {
         pattern={pattern}
         strategyName={strategyName}
         onClose={() => setSettingsOpen(false)}
+        onSave={() => void saveStrategySettings()}
         onChange={setPattern}
       />
     </div>

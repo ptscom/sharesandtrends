@@ -7,7 +7,6 @@ import {
 } from "@/lib/patterns/optimization";
 import type { BacktestStats, PatternDefinition, Trade } from "@/lib/types";
 
-export const MAX_BACKTEST_SYMBOLS = 50;
 export const MAX_COMBOS_PER_STRATEGY = 100;
 export const MAX_TOTAL_RUNS = 2500;
 

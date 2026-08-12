@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { formatShareCaption } from "@/components/share/ShareCaption";
+import { ScanResultsTable } from "@/components/shared/ScanResultsTable";
 import type { ScanRun } from "@/lib/types";
 
 interface ExploreScanResultsPanelProps {
@@ -37,82 +37,13 @@ export function ExploreScanResultsPanel({ scan }: ExploreScanResultsPanelProps) 
         </Link>
       </div>
 
-      {scan.results.length === 0 ? (
-        <p className="ui-helper mt-6 rounded-xl border border-border-subtle px-4 py-8 text-center">
-          No symbols matched your filters. Try lowering min win rate or min
-          trades.
-        </p>
-      ) : (
-        <div className="mt-6 overflow-x-auto rounded-xl border border-border-subtle">
-          <table className="ui-table min-w-[720px]">
-            <thead>
-              <tr>
-                <th>Symbol</th>
-                <th>Signal</th>
-                <th>Win rate</th>
-                <th>Trades</th>
-                <th>Avg return</th>
-                <th>Sharpe</th>
-                <th>Caption</th>
-              </tr>
-            </thead>
-            <tbody>
-              {scan.results.map((row) => (
-                <tr key={row.symbol}>
-                  <td className="whitespace-nowrap">
-                    <Link
-                      href={`/symbol/${row.symbol}?scanId=${scan.id}`}
-                      className="inline-flex items-center font-mono text-sm font-semibold leading-none text-brand-text hover:underline"
-                    >
-                      {row.symbol}
-                    </Link>
-                  </td>
-                  <td className="whitespace-nowrap">
-                    {row.signalToday ? (
-                      <span className="ui-badge bg-brand-light text-brand-text">
-                        Today
-                      </span>
-                    ) : (
-                      <span className="text-muted">—</span>
-                    )}
-                  </td>
-                  <td>{row.stats.winRate.toFixed(1)}%</td>
-                  <td>{row.stats.trades}</td>
-                  <td
-                    className={`whitespace-nowrap tabular-nums ${
-                      row.stats.avgReturnPct >= 0
-                        ? "text-success"
-                        : "text-danger"
-                    }`}
-                  >
-                    {row.stats.avgReturnPct >= 0 ? "+" : ""}
-                    {row.stats.avgReturnPct.toFixed(2)}%
-                  </td>
-                  <td className="whitespace-nowrap tabular-nums">
-                    {row.stats.sharpe != null
-                      ? row.stats.sharpe.toFixed(2)
-                      : "—"}
-                  </td>
-                  <td>
-                    <button
-                      type="button"
-                      onClick={() =>
-                        copyCaption(
-                          row.symbol,
-                          formatShareCaption(scan.patternName, row),
-                        )
-                      }
-                      className="text-xs text-brand-text underline"
-                    >
-                      {copiedSymbol === row.symbol ? "Copied!" : "Copy"}
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
+      <div className="mt-6">
+        <ScanResultsTable
+          scan={scan}
+          onCopyCaption={copyCaption}
+          copiedSymbol={copiedSymbol}
+        />
+      </div>
     </section>
   );
 }

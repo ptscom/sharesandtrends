@@ -30,7 +30,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       lang="en"
       className={`${inter.variable} ${geistMono.variable} h-full`}
     >
-      <body className="flex min-h-full flex-col antialiased">
+      <body className="ui-app-bg flex min-h-full flex-col antialiased">
         <Header />
         <main className="flex-1">{children}</main>
         <footer className="border-t border-border-subtle py-8 text-center">

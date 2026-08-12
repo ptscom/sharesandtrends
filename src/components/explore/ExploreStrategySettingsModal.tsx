@@ -9,6 +9,7 @@ interface ExploreStrategySettingsModalProps {
   pattern: PatternDefinition | null;
   strategyName: string;
   onClose: () => void;
+  onSave: () => void;
   onChange: (pattern: PatternDefinition) => void;
 }
 
@@ -17,6 +18,7 @@ export function ExploreStrategySettingsModal({
   pattern,
   strategyName,
   onClose,
+  onSave,
   onChange,
 }: ExploreStrategySettingsModalProps) {
   useEffect(() => {
@@ -72,9 +74,12 @@ export function ExploreStrategySettingsModal({
           <OptimizationPanel pattern={pattern} onChange={onChange} />
         </div>
 
-        <div className="flex items-center justify-end border-t border-border px-5 py-3">
-          <button type="button" onClick={onClose} className="ui-btn-primary">
-            Done
+        <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-3">
+          <button type="button" onClick={onClose} className="ui-btn-secondary">
+            Cancel
+          </button>
+          <button type="button" onClick={onSave} className="ui-btn-primary">
+            Save
           </button>
         </div>
       </div>
