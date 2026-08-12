@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState, type MouseEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, startTransition, type MouseEvent } from "react";
 import { ExploreScanResultsPanel } from "@/components/explore/ExploreScanResultsPanel";
 import { ExploreStrategySelector } from "@/components/explore/ExploreStrategySelector";
 import { ExploreStrategySettingsModal } from "@/components/explore/ExploreStrategySettingsModal";
@@ -34,6 +34,11 @@ import {
   saveScanRun,
 } from "@/lib/storage/patterns";
 import { listSymbols } from "@/lib/storage/prices";
+import {
+  countSelectedSymbols,
+  formatSymbolSummary,
+  resolveSymbolUniverse,
+} from "@/lib/symbols/selection";
 import type { PatternDefinition, ScanRun } from "@/lib/types";
 
 export function ExploreClient() {
@@ -43,6 +48,7 @@ export function ExploreClient() {
   const [setupStep, setSetupStep] = useState<ExploreSetupStep>("symbols");
   const [selectedSymbols, setSelectedSymbols] = useState<string[]>([]);
   const [storedSymbols, setStoredSymbols] = useState<string[]>([]);
+  const [useAllStored, setUseAllStored] = useState(false);
   const [symbolsInitialized, setSymbolsInitialized] = useState(false);
 
   const [selectedId, setSelectedId] = useState("ema-cross");
@@ -87,12 +93,17 @@ export function ExploreClient() {
   const activePreset = allPresets.find((p) => p.id === selectedId);
   const strategyName = activePreset?.pattern.name ?? pattern.name;
 
-  const symbolSummary =
-    selectedSymbols.length === 0
-      ? ""
-      : selectedSymbols.length <= 4
-        ? selectedSymbols.join(", ")
-        : `${selectedSymbols.length} symbols`;
+  const symbolCount = countSelectedSymbols(
+    selectedSymbols,
+    storedSymbols.length,
+    useAllStored,
+  );
+
+  const symbolSummary = formatSymbolSummary(
+    selectedSymbols,
+    storedSymbols.length,
+    useAllStored,
+  );
 
   const strategySummary = strategyName;
   const scanSummary = `${minWinRate}% win · ${minTrades}+ trades${
@@ -120,7 +131,7 @@ export function ExploreClient() {
 
   useEffect(() => {
     if (symbolsInitialized || storedSymbols.length === 0) return;
-    setSelectedSymbols(storedSymbols);
+    setUseAllStored(true);
     setSymbolsInitialized(true);
   }, [storedSymbols, symbolsInitialized]);
 
@@ -193,12 +204,12 @@ export function ExploreClient() {
   const runScan = useCallback(async () => {
     setError(null);
 
-    const universe =
-      selectedSymbols.length > 0
-        ? selectedSymbols
-        : storedSymbols.length > 0
-          ? storedSymbols
-          : DEFAULT_WATCHLIST;
+    const universe = resolveSymbolUniverse({
+      useAllStored,
+      selected: selectedSymbols,
+      stored: storedSymbols,
+      fallback: DEFAULT_WATCHLIST,
+    });
 
     if (universe.length === 0) {
       setError("Select at least one symbol or download data first.");
@@ -242,6 +253,7 @@ export function ExploreClient() {
   }, [
     selectedSymbols,
     storedSymbols,
+    useAllStored,
     buildPattern,
     minWinRate,
     minTrades,
@@ -251,20 +263,27 @@ export function ExploreClient() {
   ]);
 
   const goToSetup = (step: ExploreSetupStep) => {
-    setLabView("setup");
-    setSetupStep(step);
+    startTransition(() => {
+      setLabView("setup");
+      setSetupStep(step);
+    });
+  };
+
+  const viewResults = () => {
+    if (!scan) return;
+    startTransition(() => setLabView("results"));
   };
 
   return (
     <div className="space-y-6">
       <ExploreTopBar
-        symbolCount={selectedSymbols.length}
+        symbolCount={symbolCount}
         strategyName={strategyName}
         minWinRate={minWinRate}
         minTrades={minTrades}
         signalTodayOnly={signalTodayOnly}
         scanning={scanning}
-        canScan={selectedSymbols.length > 0 || storedSymbols.length > 0}
+        canScan={symbolCount > 0 || storedSymbols.length > 0}
         onScan={() => void runScan()}
       />
 
@@ -298,7 +317,7 @@ export function ExploreClient() {
           scanSummary={scanSummary}
           resultCount={scan?.results.length ?? 0}
           onSelectStep={goToSetup}
-          onViewResults={() => scan && setLabView("results")}
+          onViewResults={viewResults}
         />
 
         <main className="min-w-0 space-y-6">
@@ -306,6 +325,8 @@ export function ExploreClient() {
             <SymbolSelector
               selected={selectedSymbols}
               storedSymbols={storedSymbols}
+              useAllStored={useAllStored}
+              onUseAllStoredChange={setUseAllStored}
               onChange={setSelectedSymbols}
               maxSymbols={null}
               stepLabel="Step 1"
@@ -333,7 +354,7 @@ export function ExploreClient() {
               minWinRate={minWinRate}
               minTrades={minTrades}
               signalTodayOnly={signalTodayOnly}
-              symbolCount={selectedSymbols.length}
+              symbolCount={symbolCount}
               storedSymbolCount={storedSymbols.length}
               onMinWinRateChange={setMinWinRate}
               onMinTradesChange={setMinTrades}

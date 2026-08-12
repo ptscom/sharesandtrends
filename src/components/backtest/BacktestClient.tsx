@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState, type MouseEvent } from "react";
+import { useCallback, useEffect, useMemo, useState, startTransition, type MouseEvent } from "react";
 import { BacktestTopBar } from "@/components/backtest/BacktestTopBar";
 import { LabStatusBanner } from "@/components/lab/LabShell";
 import {
@@ -32,11 +32,17 @@ import { STRATEGY_PRESETS, type StrategyPreset } from "@/lib/patterns/strategies
 import type { LibraryFilterId } from "@/lib/patterns/strategy-ui";
 import { listPatterns } from "@/lib/storage/patterns";
 import { getPriceBarsBatch, listSymbols } from "@/lib/storage/prices";
+import {
+  countSelectedSymbols,
+  formatSymbolSummary,
+  resolveSymbolUniverse,
+} from "@/lib/symbols/selection";
 
 export function BacktestClient() {
   const [labView, setLabView] = useState<BacktestLabView>("setup");
   const [setupStep, setSetupStep] = useState<BacktestSetupStep>("symbols");
   const [selectedSymbols, setSelectedSymbols] = useState<string[]>([]);
+  const [useAllStored, setUseAllStored] = useState(false);
   const [symbolsInitialized, setSymbolsInitialized] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>(["ema-cross"]);
   const [settingsStrategyId, setSettingsStrategyId] = useState<string | null>(
@@ -90,9 +96,15 @@ export function BacktestClient() {
     ? strategyConfigs[settingsStrategyId]
     : null;
 
+  const symbolCount = countSelectedSymbols(
+    selectedSymbols,
+    storedSymbols.length,
+    useAllStored,
+  );
+
   const estimate = useMemo(
-    () => estimateSweepRuns(selectedStrategies, selectedSymbols.length),
-    [selectedStrategies, selectedSymbols.length],
+    () => estimateSweepRuns(selectedStrategies, symbolCount),
+    [selectedStrategies, symbolCount],
   );
 
   const paramSetCount = useMemo(
@@ -104,12 +116,11 @@ export function BacktestClient() {
     [selectedStrategies],
   );
 
-  const symbolSummary =
-    selectedSymbols.length === 0
-      ? "No symbols selected"
-      : selectedSymbols.length <= 4
-        ? selectedSymbols.join(", ")
-        : `${selectedSymbols.length} symbols`;
+  const symbolSummary = formatSymbolSummary(
+    selectedSymbols,
+    storedSymbols.length,
+    useAllStored,
+  );
 
   const strategySummary =
     selectedStrategies.length === 0
@@ -155,7 +166,7 @@ export function BacktestClient() {
 
   useEffect(() => {
     if (symbolsInitialized || storedSymbols.length === 0) return;
-    setSelectedSymbols(storedSymbols);
+    setUseAllStored(true);
     setSymbolsInitialized(true);
   }, [storedSymbols, symbolsInitialized]);
 
@@ -203,7 +214,13 @@ export function BacktestClient() {
       setSetupStep("strategies");
       return;
     }
-    if (selectedSymbols.length === 0) {
+    const universe = resolveSymbolUniverse({
+      useAllStored,
+      selected: selectedSymbols,
+      stored: storedSymbols,
+    });
+
+    if (universe.length === 0) {
       setError("Select at least one symbol.");
       setLabView("setup");
       setSetupStep("symbols");
@@ -228,13 +245,13 @@ export function BacktestClient() {
     setProgress({ done: 0, total: estimate.total });
 
     try {
-      const priceData = await getPriceBarsBatch(selectedSymbols, () => {
+      const priceData = await getPriceBarsBatch(universe, () => {
         setProgress({ done: 0, total: estimate.total });
       });
 
       const rows = await runParameterSweep({
         strategies: selectedStrategies,
-        symbols: selectedSymbols,
+        symbols: universe,
         priceData,
         tradeSettings,
         onProgress: (done, total) => setProgress({ done, total }),
@@ -254,22 +271,29 @@ export function BacktestClient() {
     } finally {
       setRunning(false);
     }
-  }, [selectedStrategies, selectedSymbols, estimate, tradeSettings]);
+  }, [selectedStrategies, selectedSymbols, useAllStored, storedSymbols, estimate, tradeSettings]);
 
   const goToSetup = (step: BacktestSetupStep) => {
-    setLabView("setup");
-    setSetupStep(step);
+    startTransition(() => {
+      setLabView("setup");
+      setSetupStep(step);
+    });
+  };
+
+  const viewResults = () => {
+    if (results.length === 0) return;
+    startTransition(() => setLabView("results"));
   };
 
   return (
     <div className="space-y-6">
       <BacktestTopBar
-        symbolCount={selectedSymbols.length}
+        symbolCount={symbolCount}
         strategyCount={selectedIds.length}
         runCount={estimate.total}
         paramSetCount={paramSetCount}
         running={running}
-        canRun={selectedIds.length > 0 && selectedSymbols.length > 0}
+        canRun={selectedIds.length > 0 && symbolCount > 0}
         onRun={() => void runBacktests()}
       />
 
@@ -289,7 +313,7 @@ export function BacktestClient() {
           tradeSummary={tradeSummary}
           hasResults={results.length > 0}
           onSelectStep={goToSetup}
-          onViewResults={() => results.length > 0 && setLabView("results")}
+          onViewResults={viewResults}
         />
 
         <main className="min-w-0 space-y-6">
@@ -297,6 +321,8 @@ export function BacktestClient() {
             <SymbolSelector
               selected={selectedSymbols}
               storedSymbols={storedSymbols}
+              useAllStored={useAllStored}
+              onUseAllStoredChange={setUseAllStored}
               onChange={setSelectedSymbols}
               description="Choose symbols to include in this backtest sweep."
             />
