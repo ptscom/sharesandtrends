@@ -10,8 +10,9 @@ import {
 import { ConsolidatedResultsPanel } from "@/components/backtest/ConsolidatedResultsPanel";
 import { StrategySelector } from "@/components/backtest/StrategySelector";
 import { StrategySettingsModal } from "@/components/backtest/StrategySettingsModal";
-import { SymbolSelector } from "@/components/backtest/SymbolSelector";
+import { SymbolSelector } from "@/components/shared/SymbolSelector";
 import {
+  MAX_BACKTEST_SYMBOLS,
   MAX_COMBOS_PER_STRATEGY,
   countParamCombos,
   createStrategySweepState,
@@ -290,6 +291,8 @@ export function BacktestClient() {
               selected={selectedSymbols}
               storedSymbols={storedSymbols}
               onChange={setSelectedSymbols}
+              maxSymbols={MAX_BACKTEST_SYMBOLS}
+              description="Choose symbols to include in this backtest sweep."
             />
           )}
 
