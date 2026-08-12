@@ -68,12 +68,7 @@
 }
 
 body {
-  background-color: var(--color-bg);
-  background-image:
-    radial-gradient(ellipse 90% 55% at 8% -8%, rgba(245, 158, 11, 0.11), transparent 55%),
-    radial-gradient(ellipse 70% 45% at 96% 4%, rgba(117, 102, 200, 0.09), transparent 50%),
-    radial-gradient(ellipse 55% 40% at 50% 100%, rgba(21, 154, 104, 0.05), transparent 55%),
-    linear-gradient(180deg, #fdfbf7 0%, var(--color-bg) 38%, #f3efe8 100%);
+  background: transparent;
   color: var(--color-ink);
   font-family: var(--font-sans), system-ui, sans-serif;
   font-size: 14px;
@@ -83,19 +78,37 @@ body {
 .ui-app-bg {
   position: relative;
   isolation: isolate;
+  min-height: 100%;
 }
 
 .ui-app-bg::before {
   content: "";
   position: fixed;
   inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  background-color: #f3efe8;
+  background-image:
+    radial-gradient(ellipse 85vmax 60vmax at 12% -10%, rgba(245, 158, 11, 0.12), transparent 62%),
+    radial-gradient(ellipse 75vmax 50vmax at 92% 6%, rgba(117, 102, 200, 0.09), transparent 58%),
+    radial-gradient(ellipse 80vmax 55vmax at 48% 108%, rgba(21, 154, 104, 0.06), transparent 62%),
+    linear-gradient(180deg, #fdfbf7 0%, var(--color-bg) 42%, #f3efe8 100%);
+  background-repeat: no-repeat;
+  background-size: 100% 100%;
+}
+
+.ui-app-bg::after {
+  content: "";
+  position: fixed;
+  inset: 0;
   z-index: -1;
   pointer-events: none;
+  opacity: 0.45;
   background-image:
-    linear-gradient(to right, rgba(16, 42, 67, 0.028) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(16, 42, 67, 0.028) 1px, transparent 1px);
-  background-size: 56px 56px;
-  mask-image: linear-gradient(to bottom, black 0%, black 72%, transparent 100%);
+    linear-gradient(to right, rgba(16, 42, 67, 0.025) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(16, 42, 67, 0.025) 1px, transparent 1px);
+  background-size: 72px 72px;
+  mask-image: radial-gradient(ellipse 130% 95% at 50% 0%, black 15%, transparent 78%);
 }
 
 .bg-grid {

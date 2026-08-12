@@ -208,7 +208,7 @@ export function ExploreClient() {
     }
 
     setScanning(true);
-    setScanPhase("loading");
+    setScanPhase("scanning");
     setScanProgress({ done: 0, total: universe.length });
 
     try {
