@@ -241,10 +241,10 @@ textarea::placeholder {
 
   /* ── Nav ── */
   .ui-nav-link {
-    @apply px-3 py-2 text-sm text-body transition hover:text-ink;
+    @apply inline-flex items-center border-b-2 border-transparent px-3 py-2 text-sm font-medium text-body transition-colors hover:text-ink;
   }
 
   .ui-nav-link-active {
-    @apply font-semibold text-brand underline decoration-brand decoration-2 underline-offset-4;
+    @apply border-brand text-brand;
   }
 }

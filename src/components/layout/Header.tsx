@@ -39,7 +39,7 @@ export function Header() {
               <Link
                 key={link.href}
                 href={link.href}
-                className={active ? "ui-nav-link-active" : "ui-nav-link"}
+                className={`ui-nav-link${active ? " ui-nav-link-active" : ""}`}
               >
                 {link.label}
               </Link>
