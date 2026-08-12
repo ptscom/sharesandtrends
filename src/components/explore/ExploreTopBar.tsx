@@ -1,5 +1,10 @@
 "use client";
 
+import {
+  LabSummaryChip,
+  LabTopBar,
+} from "@/components/lab/LabShell";
+
 interface ExploreTopBarProps {
   symbolCount: number;
   strategyName: string;
@@ -21,60 +26,32 @@ export function ExploreTopBar({
   canScan,
   onScan,
 }: ExploreTopBarProps) {
-  return (
-    <div className="flex flex-wrap items-center justify-between gap-4">
-      <div>
-        <p className="ui-eyebrow">Research</p>
-        <h1 className="ui-page-title mt-1">Explore</h1>
-        <p className="ui-helper mt-1 max-w-2xl">
-          Select a universe of symbols, tune a strategy, and scan for matches
-          ranked by backtest performance.
-        </p>
-      </div>
+  const filterSummary = `${minWinRate}% win · ${minTrades}+ trades${
+    signalTodayOnly ? " · today" : ""
+  }`;
 
-      <div className="flex flex-col items-end gap-3">
-        <div className="flex flex-wrap justify-end gap-2">
-          <SummaryChip label="Symbols" value={symbolCount} />
-          <SummaryChip label="Strategy" value={strategyName} text />
-          <SummaryChip
-            label="Filters"
-            value={`${minWinRate}% win · ${minTrades}+ trades${signalTodayOnly ? " · today" : ""}`}
-            text
+  return (
+    <LabTopBar
+      title="Explore"
+      description="Select a universe of symbols, tune a strategy, and scan for matches ranked by backtest performance."
+      chips={
+        <>
+          <LabSummaryChip label="Symbols" value={symbolCount} />
+          <LabSummaryChip
+            label="Strategy"
+            value={strategyName}
+            mode="text"
           />
-        </div>
-        <button
-          type="button"
-          disabled={!canScan || scanning}
-          onClick={onScan}
-          className="ui-btn-primary inline-flex items-center gap-2 disabled:opacity-50"
-        >
-          <ScanIcon />
-          {scanning ? "Scanning…" : "Scan universe"}
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function SummaryChip({
-  label,
-  value,
-  text = false,
-}: {
-  label: string;
-  value: number | string;
-  text?: boolean;
-}) {
-  return (
-    <span className="inline-flex max-w-[14rem] items-center gap-1.5 truncate rounded-full border border-border bg-surface px-3 py-1 text-xs font-medium text-body">
-      {!text && (
-        <span className="font-semibold text-ink">{value}</span>
-      )}
-      <span className={text ? "truncate font-semibold text-ink" : ""}>
-        {text ? value : label}
-      </span>
-      {!text && label}
-    </span>
+          <LabSummaryChip label="Filters" value={filterSummary} mode="text" />
+        </>
+      }
+      actionLabel="Scan universe"
+      loadingLabel="Scanning…"
+      actionIcon={<ScanIcon />}
+      actionDisabled={!canScan}
+      actionLoading={scanning}
+      onAction={onScan}
+    />
   );
 }
 

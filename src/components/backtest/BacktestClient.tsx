@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState, type MouseEvent } from "react";
 import { BacktestTopBar } from "@/components/backtest/BacktestTopBar";
+import { LabStatusBanner } from "@/components/lab/LabShell";
 import {
   BacktestWorkflowSidebar,
   type BacktestLabView,
@@ -259,20 +260,12 @@ export function BacktestClient() {
         onRun={() => void runBacktests()}
       />
 
-      {(running || error) && (
-        <div className="space-y-2">
-          {running && (
-            <p className="ui-helper rounded-xl border border-border-subtle bg-surface px-4 py-3">
-              Progress: {progress.done} / {progress.total}
-            </p>
-          )}
-          {error && (
-            <p className="rounded-xl bg-danger-light px-4 py-3 text-sm text-danger">
-              {error}
-            </p>
-          )}
-        </div>
-      )}
+      <LabStatusBanner
+        progress={
+          running ? `Progress: ${progress.done} / ${progress.total}` : null
+        }
+        error={error}
+      />
 
       <div className="grid gap-6 lg:grid-cols-[minmax(13rem,15rem)_1fr]">
         <BacktestWorkflowSidebar

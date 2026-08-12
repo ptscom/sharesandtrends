@@ -7,6 +7,7 @@ import { ExploreScanResultsPanel } from "@/components/explore/ExploreScanResults
 import { ExploreStrategySelector } from "@/components/explore/ExploreStrategySelector";
 import { ExploreStrategySettingsModal } from "@/components/explore/ExploreStrategySettingsModal";
 import { ExploreTopBar } from "@/components/explore/ExploreTopBar";
+import { LabStatusBanner } from "@/components/lab/LabShell";
 import {
   ExploreWorkflowSidebar,
   type ExploreLabView,
@@ -251,30 +252,26 @@ export function ExploreClient() {
         onScan={() => void runScan()}
       />
 
-      {(scanning || error) && (
-        <div className="space-y-2">
-          {scanning && (
-            <p className="ui-helper rounded-xl border border-border-subtle bg-surface px-4 py-3">
-              {scanPhase === "loading"
-                ? `Loading prices ${scanProgress.done}/${scanProgress.total}…`
-                : `Scanning ${scanProgress.done}/${scanProgress.total}…`}
-            </p>
-          )}
-          {error && (
-            <p className="rounded-xl bg-danger-light px-4 py-3 text-sm text-danger">
-              {error}
-              {storedSymbols.length === 0 && (
-                <>
-                  {" "}
-                  <Link href="/data" className="underline">
-                    Download data
-                  </Link>
-                </>
-              )}
-            </p>
-          )}
-        </div>
-      )}
+      <LabStatusBanner
+        progress={
+          scanning
+            ? scanPhase === "loading"
+              ? `Loading prices ${scanProgress.done}/${scanProgress.total}…`
+              : `Scanning ${scanProgress.done}/${scanProgress.total}…`
+            : null
+        }
+        error={error}
+        errorExtra={
+          error && storedSymbols.length === 0 ? (
+            <>
+              {" "}
+              <Link href="/data" className="underline">
+                Download data
+              </Link>
+            </>
+          ) : undefined
+        }
+      />
 
       <div className="grid gap-6 lg:grid-cols-[minmax(13rem,15rem)_1fr]">
         <ExploreWorkflowSidebar
