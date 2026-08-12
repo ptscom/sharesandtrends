@@ -140,7 +140,6 @@ textarea::placeholder {
   /* ── Site header ── */
   .ui-site-header {
     @apply sticky top-0 z-40 bg-transparent;
-    box-shadow: 0 12px 28px -18px rgba(16, 42, 67, 0.28);
   }
 
   .ui-site-header::before {
