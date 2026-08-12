@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, type MouseEvent } from "react";
-import { StrategyLibraryModal } from "@/components/explore/StrategyLibraryModal";
+import type { MouseEvent } from "react";
 import type { StrategyPreset } from "@/lib/patterns/strategies";
 import {
   LIBRARY_FILTERS,
@@ -11,7 +10,6 @@ import {
 
 interface ExploreStrategySelectorProps {
   presets: StrategyPreset[];
-  allPresets: StrategyPreset[];
   selectedId: string;
   modifiedPresetIds: string[];
   query: string;
@@ -24,7 +22,6 @@ interface ExploreStrategySelectorProps {
 
 export function ExploreStrategySelector({
   presets,
-  allPresets,
   selectedId,
   modifiedPresetIds,
   query,
@@ -34,8 +31,6 @@ export function ExploreStrategySelector({
   onSelect,
   onOpenSettings,
 }: ExploreStrategySelectorProps) {
-  const [libraryOpen, setLibraryOpen] = useState(false);
-
   return (
     <section className="ui-panel p-6">
       <div className="flex flex-wrap items-start justify-between gap-4">
@@ -143,26 +138,6 @@ export function ExploreStrategySelector({
           No strategies match your search.
         </p>
       )}
-
-      <button
-        type="button"
-        onClick={() => setLibraryOpen(true)}
-        className="ui-btn-secondary mt-4"
-      >
-        Browse strategy library
-      </button>
-
-      <StrategyLibraryModal
-        open={libraryOpen}
-        onClose={() => setLibraryOpen(false)}
-        allPresets={allPresets}
-        selectedId={selectedId}
-        modifiedPresetIds={modifiedPresetIds}
-        onSelect={(preset) => {
-          onSelect(preset);
-          setLibraryOpen(false);
-        }}
-      />
     </section>
   );
 }

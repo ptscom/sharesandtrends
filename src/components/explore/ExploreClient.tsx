@@ -340,7 +340,6 @@ export function ExploreClient() {
           {labView === "setup" && setupStep === "strategy" && (
             <ExploreStrategySelector
               presets={filteredPresets}
-              allPresets={allPresets}
               selectedId={selectedId}
               modifiedPresetIds={modifiedPresetIds}
               query={query}
