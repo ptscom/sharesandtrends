@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, startTransition, type MouseEvent } from "react";
+import { ExplorePriceCacheFooter } from "@/components/explore/ExplorePriceCacheFooter";
 import { ExploreScanResultsPanel } from "@/components/explore/ExploreScanResultsPanel";
 import { ExploreStrategySelector } from "@/components/explore/ExploreStrategySelector";
 import { ExploreStrategySettingsModal } from "@/components/explore/ExploreStrategySettingsModal";
@@ -68,6 +69,7 @@ export function ExploreClient() {
   const [scanProgress, setScanProgress] = useState({ done: 0, total: 0 });
   const [scan, setScan] = useState<ScanRun | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [cacheRefreshKey, setCacheRefreshKey] = useState(0);
 
   const allPresets = useMemo(
     () => [...STRATEGY_PRESETS, ...customStrategies],
@@ -249,6 +251,7 @@ export function ExploreClient() {
       setError(err instanceof Error ? err.message : "Scan failed");
     } finally {
       setScanning(false);
+      setCacheRefreshKey((key) => key + 1);
     }
   }, [
     selectedSymbols,
@@ -367,6 +370,8 @@ export function ExploreClient() {
           )}
         </main>
       </div>
+
+      <ExplorePriceCacheFooter refreshKey={cacheRefreshKey} />
 
       <ExploreStrategySettingsModal
         open={settingsOpen}

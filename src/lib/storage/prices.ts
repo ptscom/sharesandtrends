@@ -2,6 +2,23 @@ import type { OhlcvBar, SymbolMeta } from "@/lib/types";
 import { getDb } from "./db";
 
 const priceCache = new Map<string, OhlcvBar[]>();
+let cacheLastUpdatedAt: string | null = null;
+
+export interface PriceCacheStatus {
+  lastCachedAt: string | null;
+  cachedSymbolCount: number;
+}
+
+export function getPriceCacheStatus(): PriceCacheStatus {
+  return {
+    lastCachedAt: cacheLastUpdatedAt,
+    cachedSymbolCount: priceCache.size,
+  };
+}
+
+function touchCacheMeta(): void {
+  cacheLastUpdatedAt = new Date().toISOString();
+}
 
 function cacheKey(symbol: string): string {
   return symbol.toUpperCase();
@@ -13,14 +30,18 @@ function readCached(symbol: string): OhlcvBar[] | undefined {
 
 function writeCache(symbol: string, bars: OhlcvBar[]): void {
   priceCache.set(cacheKey(symbol), bars);
+  touchCacheMeta();
 }
 
 function dropCache(symbol: string): void {
   priceCache.delete(cacheKey(symbol));
+  cacheLastUpdatedAt =
+    priceCache.size > 0 ? new Date().toISOString() : null;
 }
 
 export function clearPriceCache(): void {
   priceCache.clear();
+  cacheLastUpdatedAt = null;
 }
 
 export async function savePriceBars(
