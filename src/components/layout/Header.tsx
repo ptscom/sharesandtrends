@@ -7,6 +7,7 @@ import { usePathname } from "next/navigation";
 const links = [
   { href: "/", label: "Home" },
   { href: "/explore", label: "Explore" },
+  { href: "/backtest", label: "Backtest" },
   { href: "/strategies", label: "Strategies" },
   { href: "/scans", label: "Scans" },
   { href: "/data", label: "Data" },
@@ -16,7 +17,7 @@ export function Header() {
   const pathname = usePathname();
 
   return (
-    <header className="sticky top-0 z-40 border-b border-border bg-surface">
+    <header className="ui-site-header">
       <div className="mx-auto flex h-16 w-full max-w-[1240px] items-center justify-between px-5 md:px-10">
         <Link href="/" className="flex shrink-0 items-center">
           <Image
@@ -38,7 +39,7 @@ export function Header() {
               <Link
                 key={link.href}
                 href={link.href}
-                className={active ? "ui-nav-link-active" : "ui-nav-link"}
+                className={`ui-nav-link${active ? " ui-nav-link-active" : ""}`}
               >
                 {link.label}
               </Link>

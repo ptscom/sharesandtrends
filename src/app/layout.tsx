@@ -28,9 +28,9 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`${inter.variable} ${geistMono.variable} h-full`}
+      className={`${inter.variable} ${geistMono.variable} h-full bg-[#f3efe8]`}
     >
-      <body className="flex min-h-full flex-col antialiased">
+      <body className="ui-app-bg flex min-h-full flex-col antialiased">
         <Header />
         <main className="flex-1">{children}</main>
         <footer className="border-t border-border-subtle py-8 text-center">

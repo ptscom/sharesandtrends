@@ -41,7 +41,9 @@ export async function runUniverseScanInWorker(
   } = options;
 
   const priceData = await getPriceBarsBatch(universe, (done, total) => {
-    onProgress?.(done, total, "loading");
+    if (done < total) {
+      onProgress?.(done, total, "loading");
+    }
   });
 
   const requestId = crypto.randomUUID();

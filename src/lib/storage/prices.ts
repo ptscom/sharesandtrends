@@ -1,6 +1,49 @@
 import type { OhlcvBar, SymbolMeta } from "@/lib/types";
 import { getDb } from "./db";
 
+const priceCache = new Map<string, OhlcvBar[]>();
+let cacheLastUpdatedAt: string | null = null;
+
+export interface PriceCacheStatus {
+  lastCachedAt: string | null;
+  cachedSymbolCount: number;
+}
+
+export function getPriceCacheStatus(): PriceCacheStatus {
+  return {
+    lastCachedAt: cacheLastUpdatedAt,
+    cachedSymbolCount: priceCache.size,
+  };
+}
+
+function touchCacheMeta(): void {
+  cacheLastUpdatedAt = new Date().toISOString();
+}
+
+function cacheKey(symbol: string): string {
+  return symbol.toUpperCase();
+}
+
+function readCached(symbol: string): OhlcvBar[] | undefined {
+  return priceCache.get(cacheKey(symbol));
+}
+
+function writeCache(symbol: string, bars: OhlcvBar[]): void {
+  priceCache.set(cacheKey(symbol), bars);
+  touchCacheMeta();
+}
+
+function dropCache(symbol: string): void {
+  priceCache.delete(cacheKey(symbol));
+  cacheLastUpdatedAt =
+    priceCache.size > 0 ? new Date().toISOString() : null;
+}
+
+export function clearPriceCache(): void {
+  priceCache.clear();
+  cacheLastUpdatedAt = null;
+}
+
 export async function savePriceBars(
   symbol: string,
   bars: OhlcvBar[],
@@ -16,11 +59,18 @@ export async function savePriceBars(
     symbol: upper,
     lastUpdated: new Date().toISOString(),
   });
+  writeCache(upper, bars);
 }
 
 export async function getPriceBars(symbol: string): Promise<OhlcvBar[]> {
-  const record = await getDb().prices.get(symbol.toUpperCase());
-  return record?.bars ?? [];
+  const upper = cacheKey(symbol);
+  const cached = readCached(symbol);
+  if (cached !== undefined) return cached;
+
+  const record = await getDb().prices.get(upper);
+  const bars = record?.bars ?? [];
+  writeCache(upper, bars);
+  return bars;
 }
 
 const PRICE_LOAD_BATCH = 24;
@@ -32,9 +82,27 @@ export async function getPriceBarsBatch(
 ): Promise<Record<string, OhlcvBar[]>> {
   const out: Record<string, OhlcvBar[]> = {};
   const total = symbols.length;
+  const uncached: string[] = [];
 
-  for (let i = 0; i < symbols.length; i += PRICE_LOAD_BATCH) {
-    const batch = symbols.slice(i, i + PRICE_LOAD_BATCH);
+  for (const symbol of symbols) {
+    const cached = readCached(symbol);
+    if (cached !== undefined) {
+      if (cached.length > 0) out[symbol] = cached;
+    } else {
+      uncached.push(symbol);
+    }
+  }
+
+  let done = total - uncached.length;
+  if (done > 0) onProgress?.(done, total);
+
+  if (uncached.length === 0) {
+    onProgress?.(total, total);
+    return out;
+  }
+
+  for (let i = 0; i < uncached.length; i += PRICE_LOAD_BATCH) {
+    const batch = uncached.slice(i, i + PRICE_LOAD_BATCH);
     const rows = await Promise.all(
       batch.map(async (symbol) => ({
         symbol,
@@ -44,7 +112,8 @@ export async function getPriceBarsBatch(
     for (const { symbol, bars } of rows) {
       if (bars.length > 0) out[symbol] = bars;
     }
-    onProgress?.(Math.min(i + batch.length, total), total);
+    done += batch.length;
+    onProgress?.(Math.min(done, total), total);
   }
 
   return out;
@@ -62,6 +131,7 @@ export async function deleteSymbol(symbol: string): Promise<void> {
   const upper = symbol.toUpperCase();
   await getDb().prices.delete(upper);
   await getDb().symbols.delete(upper);
+  dropCache(upper);
 }
 
 export async function deleteSymbols(symbols: string[]): Promise<void> {
@@ -69,12 +139,14 @@ export async function deleteSymbols(symbols: string[]): Promise<void> {
   const upper = symbols.map((symbol) => symbol.toUpperCase());
   await database.prices.bulkDelete(upper);
   await database.symbols.bulkDelete(upper);
+  for (const symbol of upper) dropCache(symbol);
 }
 
 export async function deleteAllPriceData(): Promise<void> {
   const database = getDb();
   await database.prices.clear();
   await database.symbols.clear();
+  clearPriceCache();
 }
 
 export interface SymbolInventoryRow {
