@@ -3,10 +3,12 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, startTransition, type MouseEvent } from "react";
+import { ExploreMtfStrategySelector, type MtfSlotSelection } from "@/components/explore/ExploreMtfStrategySelector";
 import { ExplorePriceCacheFooter } from "@/components/explore/ExplorePriceCacheFooter";
 import { ExploreScanResultsPanel } from "@/components/explore/ExploreScanResultsPanel";
 import { ExploreStrategySelector } from "@/components/explore/ExploreStrategySelector";
 import { ExploreStrategySettingsModal } from "@/components/explore/ExploreStrategySettingsModal";
+import { ExploreTimeframeTabs } from "@/components/explore/ExploreTimeframeTabs";
 import { ExploreTopBar } from "@/components/explore/ExploreTopBar";
 import { LabStatusBanner } from "@/components/lab/LabShell";
 import {
@@ -20,6 +22,13 @@ import { DEFAULT_WATCHLIST } from "@/lib/data/default-universe";
 import { runUniverseScanInWorker } from "@/lib/engine/scan-worker-client";
 import { patternToPreset } from "@/lib/patterns/custom";
 import { EMA_CROSS_PATTERN } from "@/lib/patterns/defaults";
+import {
+  combineMtfPatterns,
+  formatMtfStrategySummary,
+  formatTimeframeModeLabel,
+  type ExploreTimeframeMode,
+  type MtfSlot,
+} from "@/lib/patterns/mtf-combine";
 import {
   getEffectivePreset,
   isBuiltInPresetId,
@@ -54,6 +63,14 @@ export function ExploreClient() {
 
   const [selectedId, setSelectedId] = useState("ema-cross");
   const [pattern, setPattern] = useState<PatternDefinition>(EMA_CROSS_PATTERN);
+  const [timeframeMode, setTimeframeMode] = useState<ExploreTimeframeMode>("1D");
+  const [mtfSlots, setMtfSlots] = useState<Record<MtfSlot, MtfSlotSelection | null>>({
+    daily: { id: "ema-cross", pattern: EMA_CROSS_PATTERN },
+    weekly: null,
+    monthly: null,
+  });
+  const [activeMtfSlot, setActiveMtfSlot] = useState<MtfSlot>("daily");
+  const [settingsTarget, setSettingsTarget] = useState<"single" | MtfSlot>("single");
   const [customStrategies, setCustomStrategies] = useState<StrategyPreset[]>([]);
   const [modifiedPresetIds, setModifiedPresetIds] = useState<string[]>([]);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -93,7 +110,15 @@ export function ExploreClient() {
   }, [allPresets, query, categoryFilter]);
 
   const activePreset = allPresets.find((p) => p.id === selectedId);
-  const strategyName = activePreset?.pattern.name ?? pattern.name;
+  const strategyName =
+    timeframeMode === "mtf"
+      ? formatMtfStrategySummary(
+          (["daily", "weekly", "monthly"] as MtfSlot[]).map((slot) => ({
+            slot,
+            name: mtfSlots[slot]?.pattern.name ?? null,
+          })),
+        )
+      : (activePreset?.pattern.name ?? pattern.name);
 
   const symbolCount = countSelectedSymbols(
     selectedSymbols,
@@ -107,22 +132,72 @@ export function ExploreClient() {
     useAllStored,
   );
 
-  const strategySummary = strategyName;
+  const strategySummary =
+    timeframeMode === "mtf"
+      ? strategyName
+      : `${formatTimeframeModeLabel(timeframeMode)}: ${strategyName}`;
   const scanSummary = `${minWinRate}% win · ${minTrades}+ trades${
     signalTodayOnly ? " · signal today" : ""
   }`;
 
-  const selectStrategy = useCallback(async (preset: StrategyPreset) => {
-    setSelectedId(preset.id);
-    if (isBuiltInPresetId(preset.id)) {
-      const { pattern: next } = await getEffectivePreset(preset.id);
-      setPattern(structuredClone(next));
-    } else {
-      setPattern(structuredClone(preset.pattern));
-    }
+  const resolvePresetPattern = useCallback(
+    async (preset: StrategyPreset): Promise<PatternDefinition> => {
+      if (isBuiltInPresetId(preset.id)) {
+        const { pattern: next } = await getEffectivePreset(preset.id);
+        return structuredClone(next);
+      }
+      return structuredClone(preset.pattern);
+    },
+    [],
+  );
+
+  const selectStrategy = useCallback(
+    async (preset: StrategyPreset) => {
+      const next = await resolvePresetPattern(preset);
+      setSelectedId(preset.id);
+      setPattern(next);
+      setMtfSlots((prev) => ({
+        ...prev,
+        daily: { id: preset.id, pattern: structuredClone(next) },
+      }));
+    },
+    [resolvePresetPattern],
+  );
+
+  const selectMtfStrategy = useCallback(
+    async (slot: MtfSlot, preset: StrategyPreset) => {
+      const next = await resolvePresetPattern(preset);
+      setMtfSlots((prev) => ({
+        ...prev,
+        [slot]: { id: preset.id, pattern: next },
+      }));
+      if (slot === "daily") {
+        setSelectedId(preset.id);
+        setPattern(structuredClone(next));
+      }
+    },
+    [resolvePresetPattern],
+  );
+
+  const clearMtfSlot = useCallback((slot: MtfSlot) => {
+    if (slot === "daily") return;
+    setMtfSlots((prev) => ({ ...prev, [slot]: null }));
   }, []);
 
-  const buildPattern = useCallback((): PatternDefinition => pattern, [pattern]);
+  const buildPattern = useCallback((): PatternDefinition => {
+    if (timeframeMode === "mtf") {
+      const daily = mtfSlots.daily?.pattern;
+      if (!daily) {
+        throw new Error("Select a daily strategy for multi-timeframe scan.");
+      }
+      return combineMtfPatterns({
+        daily,
+        weekly: mtfSlots.weekly?.pattern ?? null,
+        monthly: mtfSlots.monthly?.pattern ?? null,
+      });
+    }
+    return pattern;
+  }, [timeframeMode, mtfSlots, pattern]);
 
   useEffect(() => {
     void listSymbols().then((list) => {
@@ -186,22 +261,89 @@ export function ExploreClient() {
       const preset = allPresets.find((p) => p.id === id);
       if (preset) void selectStrategy(preset);
     }
+    setSettingsTarget("single");
     setSettingsOpen(true);
   };
 
+  const openMtfStrategySettings = (slot: MtfSlot, id: string, e: MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    const current = mtfSlots[slot];
+    if (!current || current.id !== id) {
+      const preset = allPresets.find((p) => p.id === id);
+      if (preset) void selectMtfStrategy(slot, preset);
+    }
+    setSettingsTarget(slot);
+    setSettingsOpen(true);
+  };
+
+  const settingsPattern =
+    settingsTarget === "single"
+      ? pattern
+      : (mtfSlots[settingsTarget]?.pattern ?? null);
+
+  const settingsStrategyName =
+    settingsTarget === "single"
+      ? (activePreset?.pattern.name ?? pattern.name)
+      : (mtfSlots[settingsTarget]?.pattern.name ?? "Strategy");
+
+  const updateSettingsPattern = useCallback(
+    (next: PatternDefinition) => {
+      if (settingsTarget === "single") {
+        setPattern(next);
+        return;
+      }
+      setMtfSlots((prev) => {
+        const current = prev[settingsTarget];
+        if (!current) return prev;
+        return {
+          ...prev,
+          [settingsTarget]: { ...current, pattern: next },
+        };
+      });
+    },
+    [settingsTarget],
+  );
+
   const saveStrategySettings = useCallback(async () => {
+    if (settingsTarget === "single") {
+      const saved = await savePattern({
+        ...pattern,
+        id: pattern.id ?? selectedId,
+      });
+      setPattern(structuredClone(saved));
+      if (isBuiltInPresetId(selectedId)) {
+        setModifiedPresetIds((prev) =>
+          prev.includes(selectedId) ? prev : [...prev, selectedId],
+        );
+      }
+      setSettingsOpen(false);
+      return;
+    }
+
+    const slot = settingsTarget;
+    const current = mtfSlots[slot];
+    if (!current) return;
+
     const saved = await savePattern({
-      ...pattern,
-      id: pattern.id ?? selectedId,
+      ...current.pattern,
+      id: current.pattern.id ?? current.id,
     });
-    setPattern(structuredClone(saved));
-    if (isBuiltInPresetId(selectedId)) {
+    const cloned = structuredClone(saved);
+    setMtfSlots((prev) => ({
+      ...prev,
+      [slot]: { id: current.id, pattern: cloned },
+    }));
+    if (slot === "daily") {
+      setPattern(cloned);
+    }
+    if (isBuiltInPresetId(current.id)) {
       setModifiedPresetIds((prev) =>
-        prev.includes(selectedId) ? prev : [...prev, selectedId],
+        prev.includes(current.id) ? prev : [...prev, current.id],
       );
     }
     setSettingsOpen(false);
-  }, [pattern, selectedId]);
+  }, [pattern, selectedId, settingsTarget, mtfSlots]);
 
   const runScan = useCallback(async () => {
     setError(null);
@@ -220,14 +362,24 @@ export function ExploreClient() {
       return;
     }
 
+    if (timeframeMode === "mtf" && !mtfSlots.daily) {
+      setError("Select a daily strategy for multi-timeframe scan.");
+      setLabView("setup");
+      setSetupStep("strategy");
+      return;
+    }
+
     setScanning(true);
     setScanPhase("scanning");
     setScanProgress({ done: 0, total: universe.length });
 
     try {
       const built = buildPattern();
+      const scanTimeframeMode: ExploreTimeframeMode =
+        timeframeMode === "mtf" ? "1D" : timeframeMode;
       const p = { ...built, id: built.id ?? selectedId };
       const needsSave =
+        timeframeMode === "mtf" ||
         !isBuiltInPresetId(selectedId) ||
         modifiedPresetIds.includes(selectedId);
       const patternForScan = needsSave ? await savePattern(p) : p;
@@ -235,6 +387,7 @@ export function ExploreClient() {
       const result = await runUniverseScanInWorker({
         universe,
         pattern: patternForScan,
+        timeframeMode: scanTimeframeMode,
         minWinRate,
         minTrades,
         signalTodayOnly,
@@ -258,6 +411,8 @@ export function ExploreClient() {
     storedSymbols,
     useAllStored,
     buildPattern,
+    timeframeMode,
+    mtfSlots,
     minWinRate,
     minTrades,
     signalTodayOnly,
@@ -338,17 +493,49 @@ export function ExploreClient() {
           )}
 
           {labView === "setup" && setupStep === "strategy" && (
-            <ExploreStrategySelector
-              presets={filteredPresets}
-              selectedId={selectedId}
-              modifiedPresetIds={modifiedPresetIds}
-              query={query}
-              categoryFilter={categoryFilter}
-              onQueryChange={setQuery}
-              onCategoryChange={setCategoryFilter}
-              onSelect={(preset) => void selectStrategy(preset)}
-              onOpenSettings={openStrategySettings}
-            />
+            <div className="space-y-4">
+              <ExploreTimeframeTabs
+                mode={timeframeMode}
+                onChange={(mode) => {
+                  setTimeframeMode(mode);
+                  if (mode === "mtf" && !mtfSlots.daily) {
+                    setMtfSlots((prev) => ({
+                      ...prev,
+                      daily: { id: selectedId, pattern: structuredClone(pattern) },
+                    }));
+                  }
+                }}
+              />
+
+              {timeframeMode === "mtf" ? (
+                <ExploreMtfStrategySelector
+                  presets={filteredPresets}
+                  slots={mtfSlots}
+                  modifiedPresetIds={modifiedPresetIds}
+                  query={query}
+                  categoryFilter={categoryFilter}
+                  activeSlot={activeMtfSlot}
+                  onActiveSlotChange={setActiveMtfSlot}
+                  onQueryChange={setQuery}
+                  onCategoryChange={setCategoryFilter}
+                  onSelect={(slot, preset) => void selectMtfStrategy(slot, preset)}
+                  onClearSlot={clearMtfSlot}
+                  onOpenSettings={openMtfStrategySettings}
+                />
+              ) : (
+                <ExploreStrategySelector
+                  presets={filteredPresets}
+                  selectedId={selectedId}
+                  modifiedPresetIds={modifiedPresetIds}
+                  query={query}
+                  categoryFilter={categoryFilter}
+                  onQueryChange={setQuery}
+                  onCategoryChange={setCategoryFilter}
+                  onSelect={(preset) => void selectStrategy(preset)}
+                  onOpenSettings={openStrategySettings}
+                />
+              )}
+            </div>
           )}
 
           {labView === "setup" && setupStep === "scan" && (
@@ -374,11 +561,11 @@ export function ExploreClient() {
 
       <ExploreStrategySettingsModal
         open={settingsOpen}
-        pattern={pattern}
-        strategyName={strategyName}
+        pattern={settingsPattern}
+        strategyName={settingsStrategyName}
         onClose={() => setSettingsOpen(false)}
         onSave={() => void saveStrategySettings()}
-        onChange={setPattern}
+        onChange={updateSettingsPattern}
       />
     </div>
   );

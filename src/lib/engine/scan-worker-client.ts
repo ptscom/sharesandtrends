@@ -1,4 +1,5 @@
 import type { OhlcvBar, PatternDefinition, ScanRun } from "@/lib/types";
+import type { ExploreTimeframeMode } from "@/lib/patterns/mtf-combine";
 import { getPriceBarsBatch } from "@/lib/storage/prices";
 import type {
   ScanWorkerRequest,
@@ -10,6 +11,7 @@ export type ScanProgressPhase = "loading" | "scanning";
 export interface WorkerScanOptions {
   universe: string[];
   pattern: PatternDefinition;
+  timeframeMode?: ExploreTimeframeMode;
   minWinRate?: number;
   minTrades?: number;
   signalTodayOnly?: boolean;
@@ -34,6 +36,7 @@ export async function runUniverseScanInWorker(
   const {
     universe,
     pattern,
+    timeframeMode = "1D",
     minWinRate = 0,
     minTrades = 1,
     signalTodayOnly = false,
@@ -84,6 +87,7 @@ export async function runUniverseScanInWorker(
       universe,
       priceData,
       pattern,
+      timeframeMode,
       minWinRate,
       minTrades,
       signalTodayOnly,

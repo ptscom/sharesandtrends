@@ -1,5 +1,6 @@
 import { runUniverseScanCore } from "@/lib/engine/scanner-core";
 import type { OhlcvBar, PatternDefinition } from "@/lib/types";
+import type { ExploreTimeframeMode } from "@/lib/patterns/mtf-combine";
 
 export interface ScanWorkerRequest {
   type: "scan";
@@ -7,6 +8,7 @@ export interface ScanWorkerRequest {
   universe: string[];
   priceData: Record<string, OhlcvBar[]>;
   pattern: PatternDefinition;
+  timeframeMode: ExploreTimeframeMode;
   minWinRate: number;
   minTrades: number;
   signalTodayOnly: boolean;
@@ -22,7 +24,7 @@ self.onmessage = (event: MessageEvent<ScanWorkerRequest>) => {
   if (msg.type !== "scan") return;
 
   try {
-    const { requestId, universe, priceData, pattern, minWinRate, minTrades, signalTodayOnly } =
+    const { requestId, universe, priceData, pattern, timeframeMode, minWinRate, minTrades, signalTodayOnly } =
       msg;
 
     // Report loading progress in chunks so UI stays responsive.
@@ -42,6 +44,7 @@ self.onmessage = (event: MessageEvent<ScanWorkerRequest>) => {
       universe,
       priceData,
       pattern,
+      timeframeMode,
       minWinRate,
       minTrades,
       signalTodayOnly,
