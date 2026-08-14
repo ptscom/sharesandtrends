@@ -377,12 +377,18 @@ export function ExploreClient() {
       const built = buildPattern();
       const scanTimeframeMode: ExploreTimeframeMode =
         timeframeMode === "mtf" ? "1D" : timeframeMode;
-      const p = { ...built, id: built.id ?? selectedId };
-      const needsSave =
-        timeframeMode === "mtf" ||
-        !isBuiltInPresetId(selectedId) ||
-        modifiedPresetIds.includes(selectedId);
-      const patternForScan = needsSave ? await savePattern(p) : p;
+
+      let patternForScan: PatternDefinition;
+      if (timeframeMode === "mtf") {
+        // Store combined MTF patterns under their own id — never overwrite presets.
+        patternForScan = await savePattern({ ...built });
+      } else {
+        const p = { ...built, id: built.id ?? selectedId };
+        const needsSave =
+          !isBuiltInPresetId(selectedId) ||
+          modifiedPresetIds.includes(selectedId);
+        patternForScan = needsSave ? await savePattern(p) : p;
+      }
 
       const result = await runUniverseScanInWorker({
         universe,

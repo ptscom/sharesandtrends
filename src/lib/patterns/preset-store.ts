@@ -1,6 +1,7 @@
 import type { PatternDefinition, ScanRun } from "@/lib/types";
-import { getPattern, deletePattern, listPatterns, getScanRun } from "@/lib/storage/patterns";
+import { deletePattern, getPattern, listPatterns, getScanRun } from "@/lib/storage/patterns";
 import { EMA_CROSS_PATTERN } from "@/lib/patterns/defaults";
+import { isMtfCombinedPattern } from "@/lib/patterns/mtf-combine";
 import {
   STRATEGY_PRESETS,
   type StrategyPreset,
@@ -35,6 +36,14 @@ export async function getEffectivePreset(presetId: string): Promise<{
 
   const override = await getPattern(presetId);
   if (override) {
+    if (isMtfCombinedPattern(override)) {
+      await deletePattern(presetId);
+      return {
+        preset,
+        pattern: structuredClone(preset.pattern),
+        isModified: false,
+      };
+    }
     return {
       preset,
       pattern: structuredClone(override),
@@ -52,7 +61,15 @@ export async function getEffectivePreset(presetId: string): Promise<{
 export async function listModifiedPresetIds(): Promise<string[]> {
   const presetIds = new Set(STRATEGY_PRESETS.map((s) => s.id));
   const stored = await listPatterns();
-  return stored
+
+  for (const p of stored) {
+    if (p.id && presetIds.has(p.id) && isMtfCombinedPattern(p)) {
+      await deletePattern(p.id);
+    }
+  }
+
+  const fresh = await listPatterns();
+  return fresh
     .filter((p) => p.id && presetIds.has(p.id))
     .map((p) => p.id!);
 }

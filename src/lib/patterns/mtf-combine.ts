@@ -182,3 +182,10 @@ export function formatTimeframeModeLabel(mode: ExploreTimeframeMode): string {
       return "Multi Time Frame";
   }
 }
+
+const MTF_ALIAS_RE = /^(d|w|m)_/;
+
+/** True when a pattern was produced by combineMtfPatterns (prefixed slot aliases). */
+export function isMtfCombinedPattern(pattern: PatternDefinition): boolean {
+  return pattern.indicators.some((ind) => MTF_ALIAS_RE.test(ind.alias));
+}
