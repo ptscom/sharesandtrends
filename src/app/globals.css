@@ -139,7 +139,7 @@ textarea::placeholder {
 @layer components {
   /* ── Site header ── */
   .ui-site-header {
-    @apply sticky top-0 z-40 bg-transparent;
+    @apply sticky z-40 bg-transparent;
   }
 
   .ui-site-header::before {
