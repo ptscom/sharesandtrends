@@ -4,6 +4,8 @@ export type ExploreTimeframeMode = "1D" | "1W" | "1M" | "mtf";
 
 export type MtfSlot = "daily" | "weekly" | "monthly";
 
+export type MtfExitMode = "daily_only" | "daily_and_filter_break";
+
 const SLOT_TIMEFRAME: Record<MtfSlot, Timeframe> = {
   daily: "1D",
   weekly: "1W",
@@ -108,37 +110,92 @@ function andExpressions(expressions: Expression[]): Expression {
   return { op: "and", args: active };
 }
 
+function orExpressions(expressions: Expression[]): Expression {
+  const active = expressions.filter(Boolean);
+  if (active.length === 0) {
+    throw new Error("At least one expression is required.");
+  }
+  if (active.length === 1) return active[0]!;
+  return { op: "or", args: active };
+}
+
+function notExpression(expr: Expression): Expression {
+  return { op: "not", args: [expr] };
+}
+
 export interface MtfCombineInput {
   daily: PatternDefinition;
   weekly?: PatternDefinition | null;
   monthly?: PatternDefinition | null;
+  exitMode: MtfExitMode;
 }
 
-/** Symmetric MTF: buy when all entries align; sell when all exits align. */
+/**
+ * Daily drives the full strategy. Weekly/monthly contribute entry filters only.
+ * Exit follows daily strategy, optionally OR-ing filter breaks on higher timeframes.
+ */
 export function combineMtfPatterns(input: MtfCombineInput): PatternDefinition {
-  const parts: {
+  const dailyPart = prefixPattern(input.daily, "daily");
+
+  const filterParts: {
     slot: MtfSlot;
-    pattern: PatternDefinition;
-  }[] = [{ slot: "daily", pattern: input.daily }];
+    name: string;
+    entry: Expression;
+    indicators: IndicatorDef[];
+  }[] = [];
 
-  if (input.weekly) parts.push({ slot: "weekly", pattern: input.weekly });
-  if (input.monthly) parts.push({ slot: "monthly", pattern: input.monthly });
+  if (input.weekly) {
+    const weekly = prefixPattern(input.weekly, "weekly");
+    filterParts.push({
+      slot: "weekly",
+      name: weekly.name,
+      entry: weekly.entry,
+      indicators: weekly.indicators,
+    });
+  }
 
-  const prefixed = parts.map(({ slot, pattern }) => prefixPattern(pattern, slot));
-  const names = prefixed.map((p) => p.name);
+  if (input.monthly) {
+    const monthly = prefixPattern(input.monthly, "monthly");
+    filterParts.push({
+      slot: "monthly",
+      name: monthly.name,
+      entry: monthly.entry,
+      indicators: monthly.indicators,
+    });
+  }
 
-  const baseBacktest = input.daily.backtest;
+  const names = [dailyPart.name, ...filterParts.map((p) => p.name)];
+
+  const entry = andExpressions([
+    dailyPart.entry,
+    ...filterParts.map((p) => p.entry),
+  ]);
+
+  let exit: Expression | undefined;
+  if (dailyPart.exit) {
+    if (
+      input.exitMode === "daily_and_filter_break" &&
+      filterParts.length > 0
+    ) {
+      const filterBreaks = filterParts.map((p) => notExpression(p.entry));
+      exit = orExpressions([dailyPart.exit, ...filterBreaks]);
+    } else {
+      exit = dailyPart.exit;
+    }
+  } else if (
+    input.exitMode === "daily_and_filter_break" &&
+    filterParts.length > 0
+  ) {
+    exit = orExpressions(filterParts.map((p) => notExpression(p.entry)));
+  }
 
   return {
     name: names.join(" + "),
-    description: "Multi-timeframe combined strategy",
-    indicators: prefixed.flatMap((p) => p.indicators),
-    entry: andExpressions(prefixed.map((p) => p.entry)),
-    exit: (() => {
-      const exits = prefixed.map((p) => p.exit).filter(Boolean) as Expression[];
-      return exits.length > 0 ? andExpressions(exits) : undefined;
-    })(),
-    backtest: baseBacktest,
+    description: "Multi-timeframe: daily strategy with higher-timeframe filters",
+    indicators: [dailyPart.indicators, ...filterParts.map((p) => p.indicators)].flat(),
+    entry,
+    exit,
+    backtest: input.daily.backtest,
   };
 }
 
@@ -168,6 +225,15 @@ export function formatMtfStrategySummary(
   const active = parts.filter((p) => p.name);
   if (active.length === 0) return "Not configured";
   return active.map((p) => `${labels[p.slot]}: ${p.name}`).join(" + ");
+}
+
+export function formatMtfExitModeLabel(mode: MtfExitMode): string {
+  switch (mode) {
+    case "daily_only":
+      return "Daily exit only";
+    case "daily_and_filter_break":
+      return "Daily + filter break";
+  }
 }
 
 export function formatTimeframeModeLabel(mode: ExploreTimeframeMode): string {

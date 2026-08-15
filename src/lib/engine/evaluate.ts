@@ -51,6 +51,10 @@ export function evaluateExpression(
       return (expr.args ?? []).some((arg) =>
         evaluateExpression(ctx, arg, index),
       );
+    case "not": {
+      const child = expr.args?.[0];
+      return child ? !evaluateExpression(ctx, child, index) : false;
+    }
     case "gt": {
       const l = resolveValue(ctx, expr.left, index);
       const r = resolveValue(ctx, expr.right, index);

@@ -11,6 +11,7 @@ import type { PatternDefinition } from "@/lib/types";
 interface OptimizationPanelProps {
   pattern: PatternDefinition;
   onChange: (pattern: PatternDefinition) => void;
+  hideGroups?: OptimizationVarGroup[];
 }
 
 const GROUP_LABELS: Record<OptimizationVarGroup, string> = {
@@ -22,7 +23,9 @@ const GROUP_LABELS: Record<OptimizationVarGroup, string> = {
 export function OptimizationPanel({
   pattern,
   onChange,
+  hideGroups = [],
 }: OptimizationPanelProps) {
+  const hidden = new Set(hideGroups);
   const vars = extractOptimizationVars(pattern);
   const grouped = vars.reduce<Record<OptimizationVarGroup, OptimizationVar[]>>(
     (acc, v) => {
@@ -41,6 +44,7 @@ export function OptimizationPanel({
   return (
     <div className="space-y-6">
       {(Object.keys(grouped) as OptimizationVarGroup[]).map((group) => {
+        if (hidden.has(group)) return null;
         const items = grouped[group];
         if (items.length === 0) return null;
         return (

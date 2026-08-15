@@ -24,9 +24,11 @@ import { patternToPreset } from "@/lib/patterns/custom";
 import { EMA_CROSS_PATTERN } from "@/lib/patterns/defaults";
 import {
   combineMtfPatterns,
+  formatMtfExitModeLabel,
   formatMtfStrategySummary,
   formatTimeframeModeLabel,
   type ExploreTimeframeMode,
+  type MtfExitMode,
   type MtfSlot,
 } from "@/lib/patterns/mtf-combine";
 import {
@@ -51,6 +53,11 @@ import {
 } from "@/lib/symbols/selection";
 import type { PatternDefinition, ScanRun } from "@/lib/types";
 
+const MTF_FILTER_LABELS: Record<"weekly" | "monthly", string> = {
+  weekly: "Weekly filter",
+  monthly: "Monthly filter",
+};
+
 export function ExploreClient() {
   const searchParams = useSearchParams();
 
@@ -70,6 +77,8 @@ export function ExploreClient() {
     monthly: null,
   });
   const [activeMtfSlot, setActiveMtfSlot] = useState<MtfSlot>("daily");
+  const [mtfExitMode, setMtfExitMode] =
+    useState<MtfExitMode>("daily_and_filter_break");
   const [settingsTarget, setSettingsTarget] = useState<"single" | MtfSlot>("single");
   const [customStrategies, setCustomStrategies] = useState<StrategyPreset[]>([]);
   const [modifiedPresetIds, setModifiedPresetIds] = useState<string[]>([]);
@@ -134,7 +143,7 @@ export function ExploreClient() {
 
   const strategySummary =
     timeframeMode === "mtf"
-      ? strategyName
+      ? `${strategyName} · ${formatMtfExitModeLabel(mtfExitMode)}`
       : `${formatTimeframeModeLabel(timeframeMode)}: ${strategyName}`;
   const scanSummary = `${minWinRate}% win · ${minTrades}+ trades${
     signalTodayOnly ? " · signal today" : ""
@@ -194,10 +203,11 @@ export function ExploreClient() {
         daily,
         weekly: mtfSlots.weekly?.pattern ?? null,
         monthly: mtfSlots.monthly?.pattern ?? null,
+        exitMode: mtfExitMode,
       });
     }
     return pattern;
-  }, [timeframeMode, mtfSlots, pattern]);
+  }, [timeframeMode, mtfSlots, mtfExitMode, pattern]);
 
   useEffect(() => {
     void listSymbols().then((list) => {
@@ -282,10 +292,15 @@ export function ExploreClient() {
       ? pattern
       : (mtfSlots[settingsTarget]?.pattern ?? null);
 
+  const isMtfFilterSettings =
+    settingsTarget === "weekly" || settingsTarget === "monthly";
+
   const settingsStrategyName =
     settingsTarget === "single"
       ? (activePreset?.pattern.name ?? pattern.name)
-      : (mtfSlots[settingsTarget]?.pattern.name ?? "Strategy");
+      : settingsTarget === "daily"
+        ? (mtfSlots.daily?.pattern.name ?? "Daily strategy")
+        : `${MTF_FILTER_LABELS[settingsTarget]}: ${mtfSlots[settingsTarget]?.pattern.name ?? "Filter"}`;
 
   const updateSettingsPattern = useCallback(
     (next: PatternDefinition) => {
@@ -518,10 +533,12 @@ export function ExploreClient() {
                   presets={filteredPresets}
                   slots={mtfSlots}
                   modifiedPresetIds={modifiedPresetIds}
+                  exitMode={mtfExitMode}
                   query={query}
                   categoryFilter={categoryFilter}
                   activeSlot={activeMtfSlot}
                   onActiveSlotChange={setActiveMtfSlot}
+                  onExitModeChange={setMtfExitMode}
                   onQueryChange={setQuery}
                   onCategoryChange={setCategoryFilter}
                   onSelect={(slot, preset) => void selectMtfStrategy(slot, preset)}
@@ -569,6 +586,12 @@ export function ExploreClient() {
         open={settingsOpen}
         pattern={settingsPattern}
         strategyName={settingsStrategyName}
+        settingsSubtitle={
+          isMtfFilterSettings
+            ? "Adjust filter indicator parameters and entry thresholds only."
+            : undefined
+        }
+        hideBacktestSettings={isMtfFilterSettings}
         onClose={() => setSettingsOpen(false)}
         onSave={() => void saveStrategySettings()}
         onChange={updateSettingsPattern}

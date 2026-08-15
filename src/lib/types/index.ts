@@ -31,6 +31,7 @@ export type ValueRef = { ref: string } | { value: number };
 export type ExpressionOp =
   | "and"
   | "or"
+  | "not"
   | "gt"
   | "lt"
   | "gte"

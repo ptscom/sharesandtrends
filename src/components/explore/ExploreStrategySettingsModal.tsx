@@ -8,6 +8,8 @@ interface ExploreStrategySettingsModalProps {
   open: boolean;
   pattern: PatternDefinition | null;
   strategyName: string;
+  settingsSubtitle?: string;
+  hideBacktestSettings?: boolean;
   onClose: () => void;
   onSave: () => void;
   onChange: (pattern: PatternDefinition) => void;
@@ -17,6 +19,8 @@ export function ExploreStrategySettingsModal({
   open,
   pattern,
   strategyName,
+  settingsSubtitle = "Adjust indicator periods, thresholds, and backtest settings.",
+  hideBacktestSettings = false,
   onClose,
   onSave,
   onChange,
@@ -56,9 +60,7 @@ export function ExploreStrategySettingsModal({
             <h2 id="explore-settings-title" className="ui-page-title">
               {strategyName}
             </h2>
-            <p className="ui-helper mt-0.5">
-              Adjust indicator periods, thresholds, and backtest settings.
-            </p>
+            <p className="ui-helper mt-0.5">{settingsSubtitle}</p>
           </div>
           <button
             type="button"
@@ -71,7 +73,11 @@ export function ExploreStrategySettingsModal({
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-          <OptimizationPanel pattern={pattern} onChange={onChange} />
+          <OptimizationPanel
+            pattern={pattern}
+            onChange={onChange}
+            hideGroups={hideBacktestSettings ? ["backtest"] : []}
+          />
         </div>
 
         <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-3">

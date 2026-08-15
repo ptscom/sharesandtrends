@@ -7,7 +7,7 @@ import {
   categoryStyle,
   type LibraryFilterId,
 } from "@/lib/patterns/strategy-ui";
-import type { MtfSlot } from "@/lib/patterns/mtf-combine";
+import type { MtfExitMode, MtfSlot } from "@/lib/patterns/mtf-combine";
 import type { PatternDefinition } from "@/lib/types";
 
 export interface MtfSlotSelection {
@@ -19,10 +19,12 @@ interface ExploreMtfStrategySelectorProps {
   presets: StrategyPreset[];
   slots: Record<MtfSlot, MtfSlotSelection | null>;
   modifiedPresetIds: string[];
+  exitMode: MtfExitMode;
   query: string;
   categoryFilter: LibraryFilterId;
   activeSlot: MtfSlot;
   onActiveSlotChange: (slot: MtfSlot) => void;
+  onExitModeChange: (mode: MtfExitMode) => void;
   onQueryChange: (query: string) => void;
   onCategoryChange: (filter: LibraryFilterId) => void;
   onSelect: (slot: MtfSlot, preset: StrategyPreset) => void;
@@ -31,9 +33,9 @@ interface ExploreMtfStrategySelectorProps {
 }
 
 const SLOT_LABELS: Record<MtfSlot, string> = {
-  daily: "Daily",
-  weekly: "Weekly",
-  monthly: "Monthly",
+  daily: "Daily strategy",
+  weekly: "Weekly filter",
+  monthly: "Monthly filter",
 };
 
 const SLOT_ORDER: MtfSlot[] = ["daily", "weekly", "monthly"];
@@ -42,24 +44,28 @@ export function ExploreMtfStrategySelector({
   presets,
   slots,
   modifiedPresetIds,
+  exitMode,
   query,
   categoryFilter,
   activeSlot,
   onActiveSlotChange,
+  onExitModeChange,
   onQueryChange,
   onCategoryChange,
   onSelect,
   onClearSlot,
   onOpenSettings,
 }: ExploreMtfStrategySelectorProps) {
+  const hasFilters = Boolean(slots.weekly || slots.monthly);
+
   return (
     <section className="ui-panel p-6">
       <div>
         <p className="ui-eyebrow">Step 2</p>
         <h2 className="ui-section-title mt-2">Multi-timeframe strategy</h2>
         <p className="ui-helper mt-1">
-          Pick a strategy for each timeframe. Buy when all selected entries align;
-          sell when all exits align.
+          Daily drives entries, exits, and backtest settings. Weekly and monthly
+          use entry conditions as optional filters.
         </p>
       </div>
 
@@ -91,11 +97,42 @@ export function ExploreMtfStrategySelector({
         ))}
       </div>
 
+      <div className="mt-5 rounded-xl border border-border bg-bg p-4">
+        <p className="text-sm font-medium text-ink">Exit behavior</p>
+        <p className="mt-1 text-xs text-muted">
+          Choose whether higher-timeframe filters can also trigger an exit.
+        </p>
+        <div className="mt-3 flex flex-col gap-2 sm:flex-row">
+          <ExitModeOption
+            id="mtf-exit-daily-only"
+            label="Daily exit only"
+            description="Sell when the daily strategy exit fires."
+            checked={exitMode === "daily_only"}
+            onChange={() => onExitModeChange("daily_only")}
+          />
+          <ExitModeOption
+            id="mtf-exit-filter-break"
+            label="Daily + filter break"
+            description="Also sell when a weekly or monthly filter stops being true."
+            checked={exitMode === "daily_and_filter_break"}
+            disabled={!hasFilters}
+            onChange={() => onExitModeChange("daily_and_filter_break")}
+          />
+        </div>
+      </div>
+
       <div className="mt-6 border-t border-border pt-5">
         <p className="text-sm font-medium text-ink">
-          Choose strategy for {SLOT_LABELS[activeSlot]}
-          {activeSlot !== "daily" ? " (optional)" : ""}
+          {activeSlot === "daily"
+            ? `Choose strategy for ${SLOT_LABELS[activeSlot]}`
+            : `Choose filter for ${SLOT_LABELS[activeSlot]} (optional)`}
         </p>
+        {activeSlot !== "daily" && (
+          <p className="mt-1 text-xs text-muted">
+            Only the entry condition is used as a filter. Exit and backtest
+            settings from this preset are ignored.
+          </p>
+        )}
 
         <div className="mt-3 flex flex-col gap-3 sm:flex-row">
           <input
@@ -304,5 +341,48 @@ function SettingsIcon() {
         clipRule="evenodd"
       />
     </svg>
+  );
+}
+
+function ExitModeOption({
+  id,
+  label,
+  description,
+  checked,
+  disabled = false,
+  onChange,
+}: {
+  id: string;
+  label: string;
+  description: string;
+  checked: boolean;
+  disabled?: boolean;
+  onChange: () => void;
+}) {
+  return (
+    <label
+      htmlFor={id}
+      className={`flex flex-1 cursor-pointer rounded-lg border p-3 transition ${
+        disabled
+          ? "cursor-not-allowed border-border bg-surface opacity-60"
+          : checked
+            ? "border-brand bg-brand/5"
+            : "border-border bg-surface hover:border-brand/40"
+      }`}
+    >
+      <input
+        id={id}
+        type="radio"
+        name="mtf-exit-mode"
+        checked={checked}
+        disabled={disabled}
+        onChange={onChange}
+        className="mt-0.5 shrink-0"
+      />
+      <span className="ml-2.5">
+        <span className="block text-sm font-medium text-ink">{label}</span>
+        <span className="mt-0.5 block text-xs text-muted">{description}</span>
+      </span>
+    </label>
   );
 }
