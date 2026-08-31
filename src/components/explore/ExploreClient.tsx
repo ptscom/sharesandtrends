@@ -3,6 +3,10 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, startTransition, type MouseEvent } from "react";
+import { ExploreIndicatorResultsPanel } from "@/components/explore/ExploreIndicatorResultsPanel";
+import { ExploreIndicatorSelector } from "@/components/explore/ExploreIndicatorSelector";
+import { IndicatorComboBuilderModal } from "@/components/explore/IndicatorComboBuilderModal";
+import { IndicatorSettingsModal } from "@/components/explore/IndicatorSettingsModal";
 import { ExploreMtfStrategySelector, type MtfSlotSelection } from "@/components/explore/ExploreMtfStrategySelector";
 import { ExplorePriceCacheFooter } from "@/components/explore/ExplorePriceCacheFooter";
 import { ExploreScanResultsPanel } from "@/components/explore/ExploreScanResultsPanel";
@@ -19,7 +23,15 @@ import {
 import { ScanSettingsPanel } from "@/components/explore/ScanSettingsPanel";
 import { SymbolSelector } from "@/components/shared/SymbolSelector";
 import { DEFAULT_WATCHLIST } from "@/lib/data/default-universe";
+import { runIndicatorScanInWorker } from "@/lib/engine/indicator-scan-worker-client";
 import { runUniverseScanInWorker } from "@/lib/engine/scan-worker-client";
+import {
+  createRegistryIndicatorItems,
+  summarizeEnabledIndicators,
+  type ExploreIndicatorItem,
+  type ExplorePath,
+  type IndicatorScanRun,
+} from "@/lib/explore/indicator-models";
 import { patternToPreset } from "@/lib/patterns/custom";
 import { EMA_CROSS_PATTERN } from "@/lib/patterns/defaults";
 import {
@@ -58,6 +70,29 @@ const MTF_FILTER_LABELS: Record<"weekly" | "monthly", string> = {
   monthly: "Monthly filter",
 };
 
+function initIndicatorItemsByTf(): Record<
+  ExploreTimeframeMode,
+  ExploreIndicatorItem[]
+> {
+  return {
+    "1D": createRegistryIndicatorItems("1D"),
+    "1W": createRegistryIndicatorItems("1W"),
+    "1M": createRegistryIndicatorItems("1M"),
+    mtf: createRegistryIndicatorItems("mtf"),
+  };
+}
+
+function disableAllIndicators(
+  byTf: Record<ExploreTimeframeMode, ExploreIndicatorItem[]>,
+): Record<ExploreTimeframeMode, ExploreIndicatorItem[]> {
+  return Object.fromEntries(
+    Object.entries(byTf).map(([tf, items]) => [
+      tf,
+      items.map((item) => ({ ...item, enabled: false })),
+    ]),
+  ) as Record<ExploreTimeframeMode, ExploreIndicatorItem[]>;
+}
+
 export function ExploreClient() {
   const searchParams = useSearchParams();
 
@@ -67,6 +102,24 @@ export function ExploreClient() {
   const [storedSymbols, setStoredSymbols] = useState<string[]>([]);
   const [useAllStored, setUseAllStored] = useState(false);
   const [symbolsInitialized, setSymbolsInitialized] = useState(false);
+
+  const [explorePath, setExplorePath] = useState<ExplorePath | null>(null);
+  const [indicatorTimeframeMode, setIndicatorTimeframeMode] =
+    useState<ExploreTimeframeMode>("1D");
+  const [indicatorItemsByTf, setIndicatorItemsByTf] = useState(
+    initIndicatorItemsByTf,
+  );
+  const [indicatorCombos, setIndicatorCombos] = useState<ExploreIndicatorItem[]>(
+    [],
+  );
+  const [indicatorSettingsId, setIndicatorSettingsId] = useState<string | null>(
+    null,
+  );
+  const [comboBuilderOpen, setComboBuilderOpen] = useState(false);
+  const [indicatorScan, setIndicatorScan] = useState<IndicatorScanRun | null>(
+    null,
+  );
+  const [lastScanPath, setLastScanPath] = useState<ExplorePath | null>(null);
 
   const [selectedId, setSelectedId] = useState("ema-cross");
   const [pattern, setPattern] = useState<PatternDefinition>(EMA_CROSS_PATTERN);
@@ -142,12 +195,39 @@ export function ExploreClient() {
   );
 
   const strategySummary =
-    timeframeMode === "mtf"
-      ? `${strategyName} · ${formatMtfExitModeLabel(mtfExitMode)}`
-      : `${formatTimeframeModeLabel(timeframeMode)}: ${strategyName}`;
+    explorePath === "indicator"
+      ? "Not used"
+      : timeframeMode === "mtf"
+        ? `${strategyName} · ${formatMtfExitModeLabel(mtfExitMode)}`
+        : `${formatTimeframeModeLabel(timeframeMode)}: ${strategyName}`;
+
+  const currentIndicatorItems = indicatorItemsByTf[indicatorTimeframeMode];
+  const currentCombos = indicatorCombos.filter(
+    (c) => c.timeframeMode === indicatorTimeframeMode,
+  );
+  const allEnabledIndicators = useMemo(() => {
+    const fromRegistry = Object.values(indicatorItemsByTf).flat();
+    return [...fromRegistry, ...indicatorCombos].filter((i) => i.enabled);
+  }, [indicatorItemsByTf, indicatorCombos]);
+
+  const indicatorSummary =
+    explorePath === "strategy"
+      ? "Not used"
+      : summarizeEnabledIndicators(allEnabledIndicators);
+
   const scanSummary = `${minWinRate}% win · ${minTrades}+ trades${
     signalTodayOnly ? " · signal today" : ""
   }`;
+
+  const topBarStrategyLabel =
+    explorePath === "indicator"
+      ? `Indicators: ${indicatorSummary}`
+      : strategyName;
+
+  const resultCount =
+    lastScanPath === "indicator"
+      ? (indicatorScan?.groups.reduce((n, g) => n + g.results.length, 0) ?? 0)
+      : (scan?.results.length ?? 0);
 
   const resolvePresetPattern = useCallback(
     async (preset: StrategyPreset): Promise<PatternDefinition> => {
@@ -160,8 +240,21 @@ export function ExploreClient() {
     [],
   );
 
+  const activateStrategyPath = useCallback(() => {
+    setExplorePath("strategy");
+    setIndicatorItemsByTf((prev) => disableAllIndicators(prev));
+    setIndicatorCombos((prev) =>
+      prev.map((combo) => ({ ...combo, enabled: false })),
+    );
+  }, []);
+
+  const activateIndicatorPath = useCallback(() => {
+    setExplorePath("indicator");
+  }, []);
+
   const selectStrategy = useCallback(
     async (preset: StrategyPreset) => {
+      activateStrategyPath();
       const next = await resolvePresetPattern(preset);
       setSelectedId(preset.id);
       setPattern(next);
@@ -170,11 +263,12 @@ export function ExploreClient() {
         daily: { id: preset.id, pattern: structuredClone(next) },
       }));
     },
-    [resolvePresetPattern],
+    [resolvePresetPattern, activateStrategyPath],
   );
 
   const selectMtfStrategy = useCallback(
     async (slot: MtfSlot, preset: StrategyPreset) => {
+      activateStrategyPath();
       const next = await resolvePresetPattern(preset);
       setMtfSlots((prev) => ({
         ...prev,
@@ -185,8 +279,73 @@ export function ExploreClient() {
         setPattern(structuredClone(next));
       }
     },
-    [resolvePresetPattern],
+    [resolvePresetPattern, activateStrategyPath],
   );
+
+  const toggleIndicator = useCallback(
+    (id: string, enabled: boolean) => {
+      if (enabled) activateIndicatorPath();
+
+      const inRegistry = currentIndicatorItems.some((item) => item.id === id);
+      if (inRegistry) {
+        setIndicatorItemsByTf((prev) => ({
+          ...prev,
+          [indicatorTimeframeMode]: prev[indicatorTimeframeMode].map((item) =>
+            item.id === id ? { ...item, enabled } : item,
+          ),
+        }));
+        return;
+      }
+
+      setIndicatorCombos((prev) =>
+        prev.map((combo) =>
+          combo.id === id ? { ...combo, enabled } : combo,
+        ),
+      );
+    },
+    [activateIndicatorPath, currentIndicatorItems, indicatorTimeframeMode],
+  );
+
+  const updateIndicatorItem = useCallback(
+    (
+      id: string,
+      params: Record<string, number | string>,
+      rule: ExploreIndicatorItem["rule"],
+    ) => {
+      const inRegistry = Object.values(indicatorItemsByTf)
+        .flat()
+        .some((item) => item.id === id);
+
+      if (inRegistry) {
+        setIndicatorItemsByTf((prev) => {
+          const next = { ...prev };
+          for (const tf of Object.keys(next) as ExploreTimeframeMode[]) {
+            next[tf] = next[tf].map((item) =>
+              item.id === id ? { ...item, params, rule } : item,
+            );
+          }
+          return next;
+        });
+        return;
+      }
+
+      setIndicatorCombos((prev) =>
+        prev.map((combo) =>
+          combo.id === id ? { ...combo, params, rule } : combo,
+        ),
+      );
+    },
+    [indicatorItemsByTf],
+  );
+
+  const editingIndicator = useMemo(() => {
+    if (!indicatorSettingsId) return null;
+    const fromRegistry = Object.values(indicatorItemsByTf)
+      .flat()
+      .find((item) => item.id === indicatorSettingsId);
+    if (fromRegistry) return fromRegistry;
+    return indicatorCombos.find((combo) => combo.id === indicatorSettingsId) ?? null;
+  }, [indicatorSettingsId, indicatorItemsByTf, indicatorCombos]);
 
   const clearMtfSlot = useCallback((slot: MtfSlot) => {
     if (slot === "daily") return;
@@ -377,6 +536,48 @@ export function ExploreClient() {
       return;
     }
 
+    if (!explorePath) {
+      setError("Select indicators or a strategy before scanning.");
+      setLabView("setup");
+      setSetupStep("indicators");
+      return;
+    }
+
+    if (explorePath === "indicator") {
+      if (allEnabledIndicators.length === 0) {
+        setError("Select at least one indicator to scan.");
+        setLabView("setup");
+        setSetupStep("indicators");
+        return;
+      }
+
+      setScanning(true);
+      setScanPhase("scanning");
+      setScanProgress({ done: 0, total: universe.length });
+
+      try {
+        const result = await runIndicatorScanInWorker({
+          universe,
+          items: allEnabledIndicators,
+          onProgress: (done, total, phase) => {
+            setScanPhase(phase);
+            setScanProgress({ done, total });
+          },
+        });
+
+        setIndicatorScan(result);
+        setScan(null);
+        setLastScanPath("indicator");
+        setLabView("results");
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Indicator scan failed");
+      } finally {
+        setScanning(false);
+        setCacheRefreshKey((key) => key + 1);
+      }
+      return;
+    }
+
     if (timeframeMode === "mtf" && !mtfSlots.daily) {
       setError("Select a daily strategy for multi-timeframe scan.");
       setLabView("setup");
@@ -420,6 +621,8 @@ export function ExploreClient() {
 
       await saveScanRun(result);
       setScan(result);
+      setIndicatorScan(null);
+      setLastScanPath("strategy");
       setLabView("results");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Scan failed");
@@ -431,6 +634,8 @@ export function ExploreClient() {
     selectedSymbols,
     storedSymbols,
     useAllStored,
+    explorePath,
+    allEnabledIndicators,
     buildPattern,
     timeframeMode,
     mtfSlots,
@@ -449,20 +654,26 @@ export function ExploreClient() {
   };
 
   const viewResults = () => {
-    if (!scan) return;
+    if (resultCount === 0) return;
     startTransition(() => setLabView("results"));
   };
+
+  const canScan =
+    (symbolCount > 0 || storedSymbols.length > 0) &&
+    explorePath !== null &&
+    (explorePath === "strategy" ||
+      (explorePath === "indicator" && allEnabledIndicators.length > 0));
 
   return (
     <div className="space-y-6">
       <ExploreTopBar
         symbolCount={symbolCount}
-        strategyName={strategyName}
+        strategyName={topBarStrategyLabel}
         minWinRate={minWinRate}
         minTrades={minTrades}
         signalTodayOnly={signalTodayOnly}
         scanning={scanning}
-        canScan={symbolCount > 0 || storedSymbols.length > 0}
+        canScan={canScan}
         onScan={() => void runScan()}
       />
 
@@ -491,10 +702,12 @@ export function ExploreClient() {
         <ExploreWorkflowSidebar
           labView={labView}
           setupStep={setupStep}
+          explorePath={explorePath}
           symbolSummary={symbolSummary}
+          indicatorSummary={indicatorSummary}
           strategySummary={strategySummary}
           scanSummary={scanSummary}
-          resultCount={scan?.results.length ?? 0}
+          resultCount={resultCount}
           onSelectStep={goToSetup}
           onViewResults={viewResults}
         />
@@ -511,6 +724,29 @@ export function ExploreClient() {
               stepLabel="Step 1"
               description="Choose the symbol universe for this scan."
             />
+          )}
+
+          {labView === "setup" && setupStep === "indicators" && (
+            <div className="space-y-4">
+              <ExploreTimeframeTabs
+                mode={indicatorTimeframeMode}
+                onChange={setIndicatorTimeframeMode}
+              />
+              <ExploreIndicatorSelector
+                items={currentIndicatorItems}
+                combos={currentCombos}
+                onToggle={toggleIndicator}
+                onOpenSettings={(id, e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setIndicatorSettingsId(id);
+                }}
+                onOpenComboBuilder={() => setComboBuilderOpen(true)}
+                onRemoveCombo={(id) =>
+                  setIndicatorCombos((prev) => prev.filter((c) => c.id !== id))
+                }
+              />
+            </div>
           )}
 
           {labView === "setup" && setupStep === "strategy" && (
@@ -561,7 +797,7 @@ export function ExploreClient() {
             </div>
           )}
 
-          {labView === "setup" && setupStep === "scan" && (
+          {labView === "setup" && setupStep === "scan" && explorePath === "strategy" && (
             <ScanSettingsPanel
               minWinRate={minWinRate}
               minTrades={minTrades}
@@ -574,8 +810,12 @@ export function ExploreClient() {
             />
           )}
 
-          {labView === "results" && scan && (
+          {labView === "results" && lastScanPath === "strategy" && scan && (
             <ExploreScanResultsPanel scan={scan} />
+          )}
+
+          {labView === "results" && lastScanPath === "indicator" && indicatorScan && (
+            <ExploreIndicatorResultsPanel scan={indicatorScan} />
           )}
         </main>
       </div>
@@ -595,6 +835,33 @@ export function ExploreClient() {
         onClose={() => setSettingsOpen(false)}
         onSave={() => void saveStrategySettings()}
         onChange={updateSettingsPattern}
+      />
+
+      {editingIndicator?.indicatorType && (
+        <IndicatorSettingsModal
+          open={Boolean(indicatorSettingsId)}
+          indicatorName={editingIndicator.name}
+          indicatorType={editingIndicator.indicatorType}
+          params={editingIndicator.params}
+          rule={editingIndicator.rule}
+          onClose={() => setIndicatorSettingsId(null)}
+          onSave={(params, rule) => {
+            if (indicatorSettingsId) {
+              updateIndicatorItem(indicatorSettingsId, params, rule);
+            }
+            setIndicatorSettingsId(null);
+          }}
+        />
+      )}
+
+      <IndicatorComboBuilderModal
+        open={comboBuilderOpen}
+        timeframeMode={indicatorTimeframeMode}
+        onClose={() => setComboBuilderOpen(false)}
+        onSave={(combo) => {
+          activateIndicatorPath();
+          setIndicatorCombos((prev) => [...prev, combo]);
+        }}
       />
     </div>
   );
