@@ -13,10 +13,17 @@ import type {
   PriceField,
 } from "@/lib/explore/exploration-models";
 import {
+  coerceConditionForLeft,
   createBlankCondition,
   defaultIndicatorParams,
+  defaultOpForLeft,
+  defaultRightForLeft,
   describeBuilderState,
-  isValidOperandPair,
+  formatIndicatorLabel,
+  getIndicatorRole,
+  operatorsForLeft,
+  OP_LABELS,
+  primaryPeriodKey,
   PRICE_FIELD_OPTIONS,
 } from "@/lib/explore/exploration-to-pattern";
 
@@ -152,26 +159,6 @@ interface ExplorationBuilderModalProps {
   onSave: (name: string, builder: ExplorationBuilderState) => void;
 }
 
-const OPS: { value: ExplorationOp; label: string; cross?: boolean }[] = [
-  { value: "crosses_above", label: "Crosses above", cross: true },
-  { value: "crosses_below", label: "Crosses below", cross: true },
-  { value: "gt", label: ">" },
-  { value: "gte", label: ">=" },
-  { value: "lt", label: "<" },
-  { value: "lte", label: "<=" },
-];
-
-const OSCILLATOR_TYPES = new Set([
-  "rsi",
-  "cci",
-  "williamsr",
-  "mfi",
-  "adx",
-  "roc",
-  "momentum",
-  "zscore",
-]);
-
 export function ExplorationBuilderModal({
   open,
   initial,
@@ -217,20 +204,27 @@ export function ExplorationBuilderModal({
     setConditions((prev) =>
       prev.map((condition) => {
         if (condition.id !== id) return condition;
-        const next = { ...condition, ...patch };
-        if (
-          patch.left ||
-          patch.right ||
-          patch.op
-        ) {
-          if (!isValidOperandPair(next.left, next.op, next.right)) {
-            if (next.op === "crosses_above" || next.op === "crosses_below") {
-              if (next.right.kind === "number") {
-                next.right = { kind: "price", field: "close" };
-              }
-            }
-          }
+
+        let next: ExplorationCondition = { ...condition, ...patch };
+
+        if (patch.left) {
+          const coerced = coerceConditionForLeft(
+            next.left,
+            defaultOpForLeft(next.left),
+            defaultRightForLeft(next.left),
+          );
+          next = { ...next, op: coerced.op, right: coerced.right };
         }
+
+        if (patch.left || patch.op || patch.right) {
+          const coerced = coerceConditionForLeft(
+            next.left,
+            next.op,
+            next.right,
+          );
+          next = { ...next, op: coerced.op, right: coerced.right };
+        }
+
         return next;
       }),
     );
@@ -255,18 +249,18 @@ export function ExplorationBuilderModal({
       <div
         role="dialog"
         aria-modal="true"
-        className="relative flex max-h-[90vh] w-[95vw] max-w-[760px] flex-col rounded-[18px] border border-border bg-surface"
+        className="relative flex max-h-[90vh] w-[95vw] max-w-[680px] flex-col rounded-[18px] border border-border bg-surface"
         style={{ boxShadow: "var(--shadow-card)" }}
       >
         <div className="border-b border-border px-5 py-4">
-          <h2 className="ui-page-title">Exploration builder</h2>
+          <h2 className="ui-page-title">Rule builder</h2>
           <p className="ui-helper mt-0.5">
-            Combine conditions with AND / OR. Operands are typed — crosses
-            compare two series; thresholds use a number on the right.
+            Build a filter with IF / AND rows. Pick an indicator, choose how it
+            compares, then set the threshold or compare target.
           </p>
         </div>
 
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-4">
           <label className="block text-sm">
             <span className="ui-field-label">Filter name</span>
             <input
@@ -276,53 +270,55 @@ export function ExplorationBuilderModal({
             />
           </label>
 
-          <div>
-            <span className="ui-field-label">Combine with</span>
-            <div className="mt-2 flex gap-2">
-              {(["and", "or"] as const).map((item) => (
-                <button
-                  key={item}
-                  type="button"
-                  onClick={() => setLogic(item)}
-                  className={`rounded-lg border px-3 py-1.5 text-sm font-medium uppercase ${
-                    logic === item
-                      ? "border-brand bg-brand/10 text-brand-text"
-                      : "border-border text-muted"
-                  }`}
-                >
-                  {item}
-                </button>
+          <div className="rounded-xl border border-border bg-bg/60 p-4">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <p className="text-sm font-medium text-ink">Conditions</p>
+              <div className="flex items-center gap-2 text-xs">
+                <span className="text-muted">Combine with</span>
+                {(["and", "or"] as const).map((item) => (
+                  <button
+                    key={item}
+                    type="button"
+                    onClick={() => setLogic(item)}
+                    className={`rounded-md border px-2 py-1 font-semibold uppercase ${
+                      logic === item
+                        ? "border-brand bg-brand/10 text-brand-text"
+                        : "border-border text-muted"
+                    }`}
+                  >
+                    {item}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="space-y-3">
+              {conditions.map((condition, index) => (
+                <RuleRow
+                  key={condition.id}
+                  label={index === 0 ? "IF" : logic.toUpperCase()}
+                  condition={condition}
+                  onChange={(patch) => updateCondition(condition.id, patch)}
+                  onRemove={() =>
+                    setConditions((prev) =>
+                      prev.filter((c) => c.id !== condition.id),
+                    )
+                  }
+                  canRemove={conditions.length > 1}
+                />
               ))}
             </div>
-          </div>
 
-          <div className="space-y-3">
-            {conditions.map((condition, index) => (
-              <ConditionRow
-                key={condition.id}
-                index={index}
-                logic={logic}
-                condition={condition}
-                onChange={(patch) => updateCondition(condition.id, patch)}
-                onRemove={() =>
-                  setConditions((prev) =>
-                    prev.filter((c) => c.id !== condition.id),
-                  )
-                }
-                canRemove={conditions.length > 1}
-              />
-            ))}
+            <button
+              type="button"
+              onClick={() =>
+                setConditions((prev) => [...prev, createBlankCondition()])
+              }
+              className="mt-3 text-sm font-medium text-brand-text hover:underline"
+            >
+              + Add condition
+            </button>
           </div>
-
-          <button
-            type="button"
-            onClick={() =>
-              setConditions((prev) => [...prev, createBlankCondition()])
-            }
-            className="ui-btn-secondary text-sm"
-          >
-            + Add condition
-          </button>
 
           <div className="rounded-xl border border-border-subtle bg-bg px-4 py-3">
             <p className="text-xs font-semibold uppercase tracking-wide text-muted">
@@ -350,175 +346,110 @@ export function ExplorationBuilderModal({
   );
 }
 
-function ConditionRow({
-  index,
-  logic,
+function RuleRow({
+  label,
   condition,
   onChange,
   onRemove,
   canRemove,
 }: {
-  index: number;
-  logic: "and" | "or";
+  label: string;
   condition: ExplorationCondition;
   onChange: (patch: Partial<ExplorationCondition>) => void;
   onRemove: () => void;
   canRemove: boolean;
 }) {
-  const crossOp =
-    condition.op === "crosses_above" || condition.op === "crosses_below";
-  const leftIsOscillator =
-    condition.left.kind === "indicator" &&
-    OSCILLATOR_TYPES.has(condition.left.indicatorType);
-
-  const availableOps = OPS.filter((op) => {
-    if (leftIsOscillator && op.cross) return false;
-    return true;
-  });
+  const left = condition.left;
+  const availableOps = operatorsForLeft(left);
 
   return (
-    <div className="rounded-xl border border-border p-3">
-      {index > 0 && (
-        <p className="mb-2 text-xs font-semibold uppercase text-muted">
-          {logic}
-        </p>
-      )}
-      <div className="grid gap-2 lg:grid-cols-[1fr_auto_1fr_auto]">
-        <OperandEditor
-          operand={condition.left}
-          onChange={(left) => onChange({ left })}
-        />
+    <div className="flex items-center gap-3">
+      <span className="w-10 shrink-0 text-xs font-bold uppercase tracking-wide text-muted">
+        {label}
+      </span>
+
+      <div className="grid min-w-0 flex-1 gap-2 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,0.8fr)]">
+        <LeftOperandPicker operand={left} onChange={(next) => onChange({ left: next })} />
+
         <select
           value={condition.op}
           onChange={(e) => onChange({ op: e.target.value as ExplorationOp })}
           className="ui-input"
         >
           {availableOps.map((op) => (
-            <option key={op.value} value={op.value}>
-              {op.label}
+            <option key={op} value={op}>
+              {OP_LABELS[op]}
             </option>
           ))}
         </select>
-        <OperandEditor
+
+        <RightOperandPicker
+          left={left}
+          op={condition.op}
           operand={condition.right}
           onChange={(right) => onChange({ right })}
-          allowNumber={!crossOp}
-          leftHint={condition.left}
         />
-        {canRemove && (
-          <button
-            type="button"
-            onClick={onRemove}
-            className="text-muted hover:text-ink"
-            aria-label="Remove condition"
-          >
-            ✕
-          </button>
-        )}
       </div>
+
+      {canRemove && (
+        <button
+          type="button"
+          onClick={onRemove}
+          className="shrink-0 text-muted hover:text-ink"
+          aria-label="Remove condition"
+        >
+          ✕
+        </button>
+      )}
     </div>
   );
 }
 
-function OperandEditor({
+function LeftOperandPicker({
   operand,
   onChange,
-  allowNumber = true,
-  leftHint,
 }: {
   operand: ExplorationOperand;
   onChange: (operand: ExplorationOperand) => void;
-  allowNumber?: boolean;
-  leftHint?: ExplorationOperand;
 }) {
-  const [kind, setKind] = useState<"price" | "indicator" | "number">(
-    operand.kind,
-  );
+  const selectValue =
+    operand.kind === "price"
+      ? `price:${operand.field}`
+      : operand.kind === "indicator"
+        ? `ind:${operand.indicatorType}`
+        : "ind:rsi";
 
-  useEffect(() => {
-    setKind(operand.kind);
-  }, [operand.kind]);
+  const indicatorOperand =
+    operand.kind === "indicator"
+      ? operand
+      : {
+          kind: "indicator" as const,
+          indicatorType: "rsi",
+          params: defaultIndicatorParams("rsi"),
+        };
 
-  const leftIsOscillator =
-    leftHint?.kind === "indicator" &&
-    OSCILLATOR_TYPES.has(leftHint.indicatorType);
-
-  return (
-    <div className="space-y-2">
-      <select
-        value={kind}
-        onChange={(e) => {
-          const next = e.target.value as "price" | "indicator" | "number";
-          setKind(next);
-          if (next === "price") {
-            onChange({ kind: "price", field: "close" });
-          } else if (next === "number") {
-            onChange({ kind: "number", value: leftIsOscillator ? 50 : 0 });
-          } else {
-            onChange({
-              kind: "indicator",
-              indicatorType: "sma",
-              params: defaultIndicatorParams("sma"),
-            });
-          }
-        }}
-        className="ui-input"
-      >
-        <option value="price">Price</option>
-        <option value="indicator">Indicator</option>
-        {allowNumber && <option value="number">Number</option>}
-      </select>
-
-      {operand.kind === "price" && (
-        <select
-          value={operand.field}
-          onChange={(e) =>
-            onChange({ kind: "price", field: e.target.value as PriceField })
-          }
-          className="ui-input"
-        >
-          {PRICE_FIELD_OPTIONS.map((opt) => (
-            <option key={opt.value} value={opt.value}>
-              {opt.label}
-            </option>
-          ))}
-        </select>
-      )}
-
-      {operand.kind === "number" && (
-        <input
-          type="number"
-          value={operand.value}
-          onChange={(e) =>
-            onChange({ kind: "number", value: parseFloat(e.target.value) })
-          }
-          className="ui-input"
-        />
-      )}
-
-      {operand.kind === "indicator" && (
-        <IndicatorOperandEditor operand={operand} onChange={onChange} />
-      )}
-    </div>
-  );
-}
-
-function IndicatorOperandEditor({
-  operand,
-  onChange,
-}: {
-  operand: Extract<ExplorationOperand, { kind: "indicator" }>;
-  onChange: (operand: ExplorationOperand) => void;
-}) {
-  const def = getIndicatorDefinition(operand.indicatorType);
+  const periodKey = primaryPeriodKey(indicatorOperand.indicatorType);
+  const def = getIndicatorDefinition(indicatorOperand.indicatorType);
   const outputs = def?.outputs ?? [];
+  const showLinePicker =
+    operand.kind === "indicator" &&
+    getIndicatorRole(operand.indicatorType) === "line_cross" &&
+    outputs.length > 1;
 
   return (
-    <div className="space-y-2">
+    <div className="flex min-w-0 gap-2">
       <select
-        value={operand.indicatorType}
+        value={selectValue}
         onChange={(e) => {
-          const type = e.target.value;
+          const value = e.target.value;
+          if (value.startsWith("price:")) {
+            onChange({
+              kind: "price",
+              field: value.replace("price:", "") as PriceField,
+            });
+            return;
+          }
+          const type = value.replace("ind:", "");
           onChange({
             kind: "indicator",
             indicatorType: type,
@@ -526,68 +457,47 @@ function IndicatorOperandEditor({
             output: undefined,
           });
         }}
-        className="ui-input"
+        className="ui-input min-w-0 flex-1"
       >
         {INDICATOR_REGISTRY.map((item) => (
-          <option key={item.id} value={item.id}>
-            {item.name}
+          <option key={item.id} value={`ind:${item.id}`}>
+            {formatIndicatorLabel(item.id, defaultIndicatorParams(item.id))}
           </option>
         ))}
+        <optgroup label="Price">
+          {PRICE_FIELD_OPTIONS.map((opt) => (
+            <option key={opt.value} value={`price:${opt.value}`}>
+              {opt.label}
+            </option>
+          ))}
+        </optgroup>
       </select>
 
-      {def &&
-        Object.entries(def.params).map(([key, schema]) => (
-          <label key={key} className="block text-xs">
-            <span className="text-muted">{schema.label ?? key}</span>
-            {schema.type === "enum" ? (
-              <select
-                value={String(operand.params[key] ?? schema.default)}
-                onChange={(e) =>
-                  onChange({
-                    ...operand,
-                    params: { ...operand.params, [key]: e.target.value },
-                  })
-                }
-                className="ui-input mt-1"
-              >
-                {(schema.options ?? []).map((opt) => (
-                  <option key={opt} value={opt}>
-                    {opt}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <input
-                type="number"
-                value={Number(operand.params[key] ?? schema.default)}
-                min={schema.min}
-                max={schema.max}
-                step={schema.type === "float" ? 0.1 : 1}
-                onChange={(e) =>
-                  onChange({
-                    ...operand,
-                    params: {
-                      ...operand.params,
-                      [key]:
-                        schema.type === "float"
-                          ? parseFloat(e.target.value)
-                          : parseInt(e.target.value, 10),
-                    },
-                  })
-                }
-                className="ui-input mt-1"
-              />
-            )}
-          </label>
-        ))}
+      {operand.kind === "indicator" && periodKey && (
+        <input
+          type="number"
+          value={Number(operand.params[periodKey] ?? 14)}
+          min={2}
+          max={500}
+          onChange={(e) =>
+            onChange({
+              ...operand,
+              params: {
+                ...operand.params,
+                [periodKey]: parseInt(e.target.value, 10) || 14,
+              },
+            })
+          }
+          className="ui-input w-16 shrink-0 tabular-nums"
+          aria-label="Period"
+        />
+      )}
 
-      {outputs.length > 1 && (
+      {showLinePicker && operand.kind === "indicator" && (
         <select
           value={operand.output ?? outputs[0]}
-          onChange={(e) =>
-            onChange({ ...operand, output: e.target.value })
-          }
-          className="ui-input"
+          onChange={(e) => onChange({ ...operand, output: e.target.value })}
+          className="ui-input w-24 shrink-0"
         >
           {outputs.map((output) => (
             <option key={output} value={output}>
@@ -597,5 +507,134 @@ function IndicatorOperandEditor({
         </select>
       )}
     </div>
+  );
+}
+
+function RightOperandPicker({
+  left,
+  op,
+  operand,
+  onChange,
+}: {
+  left: ExplorationOperand;
+  op: ExplorationOp;
+  operand: ExplorationOperand;
+  onChange: (operand: ExplorationOperand) => void;
+}) {
+  const crossOp = op === "crosses_above" || op === "crosses_below";
+  const leftRole =
+    left.kind === "indicator" ? getIndicatorRole(left.indicatorType) : null;
+
+  if (leftRole === "line_cross" && left.kind === "indicator") {
+    const def = getIndicatorDefinition(left.indicatorType);
+    const outputs = def?.outputs ?? [];
+    const leftLine = left.output ?? outputs[0];
+    const currentOutput =
+      operand.kind === "indicator" ? operand.output : outputs.find((o) => o !== leftLine);
+    return (
+      <select
+        value={currentOutput ?? outputs[1] ?? outputs[0]}
+        onChange={(e) =>
+          onChange({
+            kind: "indicator",
+            indicatorType: left.indicatorType,
+            params: { ...left.params },
+            output: e.target.value,
+          })
+        }
+        className="ui-input"
+      >
+        {outputs
+          .filter((output) => output !== leftLine)
+          .map((output) => (
+            <option key={output} value={output}>
+              {output}
+            </option>
+          ))}
+      </select>
+    );
+  }
+
+  if (leftRole === "oscillator") {
+    const value = operand.kind === "number" ? operand.value : 30;
+    return (
+      <input
+        type="number"
+        value={value}
+        step={
+          left.kind === "indicator" && left.indicatorType === "rsi" ? 1 : 0.1
+        }
+        onChange={(e) =>
+          onChange({ kind: "number", value: parseFloat(e.target.value) || 0 })
+        }
+        className="ui-input tabular-nums"
+        aria-label="Threshold"
+      />
+    );
+  }
+
+  if (left.kind === "price" || crossOp || leftRole === "overlay" || leftRole === "band") {
+    const selectValue =
+      operand.kind === "price"
+        ? `price:${operand.field}`
+        : operand.kind === "indicator"
+          ? `ind:${operand.indicatorType}:${operand.params.length ?? 20}`
+          : "price:close";
+
+    return (
+      <select
+        value={selectValue}
+        onChange={(e) => {
+          const value = e.target.value;
+          if (value.startsWith("price:")) {
+            onChange({
+              kind: "price",
+              field: value.replace("price:", "") as PriceField,
+            });
+            return;
+          }
+          const [, type, period] = value.split(":");
+          onChange({
+            kind: "indicator",
+            indicatorType: type!,
+            params: {
+              ...defaultIndicatorParams(type!),
+              length: parseInt(period ?? "20", 10),
+            },
+          });
+        }}
+        className="ui-input"
+      >
+        <optgroup label="Price">
+          {PRICE_FIELD_OPTIONS.map((opt) => (
+            <option key={opt.value} value={`price:${opt.value}`}>
+              {opt.label}
+            </option>
+          ))}
+        </optgroup>
+        <optgroup label="Moving averages">
+          {["sma", "ema"].flatMap((type) =>
+            [20, 50, 200].map((period) => (
+              <option key={`${type}-${period}`} value={`ind:${type}:${period}`}>
+                {formatIndicatorLabel(type, { length: period })}
+              </option>
+            )),
+          )}
+        </optgroup>
+      </select>
+    );
+  }
+
+  const value = operand.kind === "number" ? operand.value : 0;
+  return (
+    <input
+      type="number"
+      value={value}
+      onChange={(e) =>
+        onChange({ kind: "number", value: parseFloat(e.target.value) || 0 })
+      }
+      className="ui-input tabular-nums"
+      aria-label="Value"
+    />
   );
 }
