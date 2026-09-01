@@ -1,13 +1,16 @@
 import { runIndicatorScanCore } from "@/lib/explore/indicator-scan";
-import type { ExploreIndicatorItem } from "@/lib/explore/indicator-models";
-import type { OhlcvBar } from "@/lib/types";
+import type { OhlcvBar, PatternDefinition } from "@/lib/types";
+import type { ExploreTimeframeMode } from "@/lib/patterns/mtf-combine";
 
 export interface IndicatorScanWorkerRequest {
   type: "indicator-scan";
   requestId: string;
   universe: string[];
   priceData: Record<string, OhlcvBar[]>;
-  items: ExploreIndicatorItem[];
+  pattern: PatternDefinition;
+  filterName: string;
+  filterDescription: string;
+  timeframeMode: ExploreTimeframeMode;
 }
 
 export type IndicatorScanWorkerResponse =
@@ -24,7 +27,15 @@ self.onmessage = (event: MessageEvent<IndicatorScanWorkerRequest>) => {
   if (msg.type !== "indicator-scan") return;
 
   try {
-    const { requestId, universe, priceData, items } = msg;
+    const {
+      requestId,
+      universe,
+      priceData,
+      pattern,
+      filterName,
+      filterDescription,
+      timeframeMode,
+    } = msg;
 
     const chunk = Math.max(1, Math.floor(universe.length / 20));
     for (let i = 0; i < universe.length; i += chunk) {
@@ -38,7 +49,14 @@ self.onmessage = (event: MessageEvent<IndicatorScanWorkerRequest>) => {
       self.postMessage(response);
     }
 
-    const scan = runIndicatorScanCore({ universe, priceData, items });
+    const scan = runIndicatorScanCore({
+      universe,
+      priceData,
+      pattern,
+      filterName,
+      filterDescription,
+      timeframeMode,
+    });
 
     const done: IndicatorScanWorkerResponse = { type: "done", requestId, scan };
     self.postMessage(done);
