@@ -1,13 +1,11 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import {
-  getIndicatorDefinition,
-  INDICATOR_REGISTRY,
-} from "@/lib/engine/registry";
+import { getIndicatorDefinition } from "@/lib/engine/registry";
 import type {
   ExplorationBuilderState,
   ExplorationCondition,
+  ExplorationConditionRow,
   ExplorationOp,
   ExplorationOperand,
   PriceField,
@@ -15,12 +13,17 @@ import type {
 import {
   coerceConditionForLeft,
   createBlankCondition,
+  createBlankRow,
   defaultIndicatorParams,
   defaultOpForLeft,
   defaultRightForLeft,
   describeBuilderState,
   formatIndicatorLabel,
   getIndicatorRole,
+  groupedIndicatorsForPicker,
+  indicatorHasSource,
+  indicatorSourceOptions,
+  normalizeBuilderState,
   operatorsForLeft,
   OP_LABELS,
   primaryPeriodKey,
@@ -166,20 +169,20 @@ export function ExplorationBuilderModal({
   onSave,
 }: ExplorationBuilderModalProps) {
   const [name, setName] = useState("Custom exploration");
-  const [logic, setLogic] = useState<"and" | "or">("and");
-  const [conditions, setConditions] = useState<ExplorationCondition[]>([]);
+  const [rows, setRows] = useState<ExplorationConditionRow[]>([]);
 
   useEffect(() => {
     if (!open) return;
-    if (initial) {
-      setName("Custom exploration");
-      setLogic(initial.logic);
-      setConditions(initial.conditions.map((c) => ({ ...c })));
-    } else {
-      setName("Custom exploration");
-      setLogic("and");
-      setConditions([createBlankCondition()]);
-    }
+    const normalized = normalizeBuilderState(
+      initial ?? { rows: [{ id: crypto.randomUUID(), condition: createBlankCondition() }] },
+    );
+    setName("Custom exploration");
+    setRows(
+      normalized.rows.map((row) => ({
+        ...row,
+        condition: { ...row.condition },
+      })),
+    );
   }, [open, initial]);
 
   useEffect(() => {
@@ -197,46 +200,67 @@ export function ExplorationBuilderModal({
 
   if (!open) return null;
 
-  const updateCondition = (
+  const updateRow = (
     id: string,
-    patch: Partial<ExplorationCondition>,
+    patch: {
+      connector?: "and" | "or";
+      condition?: Partial<ExplorationCondition>;
+    },
   ) => {
-    setConditions((prev) =>
-      prev.map((condition) => {
-        if (condition.id !== id) return condition;
+    setRows((prev) =>
+      prev.map((row) => {
+        if (row.id !== id) return row;
 
-        let next: ExplorationCondition = { ...condition, ...patch };
+        let nextCondition: ExplorationCondition = patch.condition
+          ? { ...row.condition, ...patch.condition }
+          : row.condition;
 
-        if (patch.left) {
+        if (patch.condition?.left) {
           const coerced = coerceConditionForLeft(
-            next.left,
-            defaultOpForLeft(next.left),
-            defaultRightForLeft(next.left),
+            nextCondition.left,
+            defaultOpForLeft(nextCondition.left),
+            defaultRightForLeft(nextCondition.left),
           );
-          next = { ...next, op: coerced.op, right: coerced.right };
+          nextCondition = {
+            ...nextCondition,
+            op: coerced.op,
+            right: coerced.right,
+          };
         }
 
-        if (patch.left || patch.op || patch.right) {
+        if (
+          patch.condition?.left ||
+          patch.condition?.op ||
+          patch.condition?.right
+        ) {
           const coerced = coerceConditionForLeft(
-            next.left,
-            next.op,
-            next.right,
+            nextCondition.left,
+            nextCondition.op,
+            nextCondition.right,
           );
-          next = { ...next, op: coerced.op, right: coerced.right };
+          nextCondition = {
+            ...nextCondition,
+            op: coerced.op,
+            right: coerced.right,
+          };
         }
 
-        return next;
+        return {
+          ...row,
+          connector: patch.connector ?? row.connector,
+          condition: nextCondition,
+        };
       }),
     );
   };
 
   const handleSave = () => {
-    if (conditions.length === 0) return;
-    onSave(name, { logic, conditions });
+    if (rows.length === 0) return;
+    onSave(name, { rows });
     onClose();
   };
 
-  const preview = describeBuilderState({ logic, conditions });
+  const preview = describeBuilderState({ rows });
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center">
@@ -249,14 +273,15 @@ export function ExplorationBuilderModal({
       <div
         role="dialog"
         aria-modal="true"
-        className="relative flex max-h-[90vh] w-[95vw] max-w-[680px] flex-col rounded-[18px] border border-border bg-surface"
+        className="relative flex max-h-[90vh] w-[95vw] max-w-[760px] flex-col rounded-[18px] border border-border bg-surface"
         style={{ boxShadow: "var(--shadow-card)" }}
       >
         <div className="border-b border-border px-5 py-4">
           <h2 className="ui-page-title">Rule builder</h2>
           <p className="ui-helper mt-0.5">
-            Build a filter with IF / AND rows. Pick an indicator, choose how it
-            compares, then set the threshold or compare target.
+            Build a filter with IF / AND / OR rows. Each indicator can use its
+            own source (close, open, etc.). Mix AND and OR between rows — e.g. A
+            OR B AND C OR A.
           </p>
         </div>
 
@@ -271,49 +296,32 @@ export function ExplorationBuilderModal({
           </label>
 
           <div className="rounded-xl border border-border bg-bg/60 p-4">
-            <div className="mb-3 flex items-center justify-between gap-3">
-              <p className="text-sm font-medium text-ink">Conditions</p>
-              <div className="flex items-center gap-2 text-xs">
-                <span className="text-muted">Combine with</span>
-                {(["and", "or"] as const).map((item) => (
-                  <button
-                    key={item}
-                    type="button"
-                    onClick={() => setLogic(item)}
-                    className={`rounded-md border px-2 py-1 font-semibold uppercase ${
-                      logic === item
-                        ? "border-brand bg-brand/10 text-brand-text"
-                        : "border-border text-muted"
-                    }`}
-                  >
-                    {item}
-                  </button>
-                ))}
-              </div>
-            </div>
+            <p className="mb-3 text-sm font-medium text-ink">Conditions</p>
 
             <div className="space-y-3">
-              {conditions.map((condition, index) => (
+              {rows.map((row, index) => (
                 <RuleRow
-                  key={condition.id}
-                  label={index === 0 ? "IF" : logic.toUpperCase()}
-                  condition={condition}
-                  onChange={(patch) => updateCondition(condition.id, patch)}
-                  onRemove={() =>
-                    setConditions((prev) =>
-                      prev.filter((c) => c.id !== condition.id),
-                    )
+                  key={row.id}
+                  index={index}
+                  connector={row.connector}
+                  condition={row.condition}
+                  onConnectorChange={(connector) =>
+                    updateRow(row.id, { connector })
                   }
-                  canRemove={conditions.length > 1}
+                  onChange={(patch) =>
+                    updateRow(row.id, { condition: patch })
+                  }
+                  onRemove={() =>
+                    setRows((prev) => prev.filter((r) => r.id !== row.id))
+                  }
+                  canRemove={rows.length > 1}
                 />
               ))}
             </div>
 
             <button
               type="button"
-              onClick={() =>
-                setConditions((prev) => [...prev, createBlankCondition()])
-              }
+              onClick={() => setRows((prev) => [...prev, createBlankRow()])}
               className="mt-3 text-sm font-medium text-brand-text hover:underline"
             >
               + Add condition
@@ -335,7 +343,7 @@ export function ExplorationBuilderModal({
           <button
             type="button"
             onClick={handleSave}
-            disabled={conditions.length === 0}
+            disabled={rows.length === 0}
             className="ui-btn-primary disabled:opacity-50"
           >
             Use filter
@@ -347,14 +355,18 @@ export function ExplorationBuilderModal({
 }
 
 function RuleRow({
-  label,
+  index,
+  connector,
   condition,
+  onConnectorChange,
   onChange,
   onRemove,
   canRemove,
 }: {
-  label: string;
+  index: number;
+  connector?: "and" | "or";
   condition: ExplorationCondition;
+  onConnectorChange: (connector: "and" | "or") => void;
   onChange: (patch: Partial<ExplorationCondition>) => void;
   onRemove: () => void;
   canRemove: boolean;
@@ -363,13 +375,32 @@ function RuleRow({
   const availableOps = operatorsForLeft(left);
 
   return (
-    <div className="flex items-center gap-3">
-      <span className="w-10 shrink-0 text-xs font-bold uppercase tracking-wide text-muted">
-        {label}
-      </span>
+    <div className="flex items-start gap-3">
+      <div className="flex w-16 shrink-0 flex-col gap-1 pt-2">
+        {index === 0 ? (
+          <span className="text-xs font-bold uppercase tracking-wide text-muted">
+            IF
+          </span>
+        ) : (
+          <select
+            value={connector ?? "and"}
+            onChange={(e) =>
+              onConnectorChange(e.target.value as "and" | "or")
+            }
+            className="ui-input px-1 text-xs font-bold uppercase"
+            aria-label="Connector to previous condition"
+          >
+            <option value="and">AND</option>
+            <option value="or">OR</option>
+          </select>
+        )}
+      </div>
 
-      <div className="grid min-w-0 flex-1 gap-2 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_minmax(0,0.8fr)]">
-        <LeftOperandPicker operand={left} onChange={(next) => onChange({ left: next })} />
+      <div className="grid min-w-0 flex-1 gap-2 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,0.75fr)]">
+        <LeftOperandPicker
+          operand={left}
+          onChange={(next) => onChange({ left: next })}
+        />
 
         <select
           value={condition.op}
@@ -395,7 +426,7 @@ function RuleRow({
         <button
           type="button"
           onClick={onRemove}
-          className="shrink-0 text-muted hover:text-ink"
+          className="shrink-0 pt-2 text-muted hover:text-ink"
           aria-label="Remove condition"
         >
           ✕
@@ -436,75 +467,106 @@ function LeftOperandPicker({
     getIndicatorRole(operand.indicatorType) === "line_cross" &&
     outputs.length > 1;
 
+  const showSource =
+    operand.kind === "indicator" && indicatorHasSource(operand.indicatorType);
+
   return (
-    <div className="flex min-w-0 gap-2">
-      <select
-        value={selectValue}
-        onChange={(e) => {
-          const value = e.target.value;
-          if (value.startsWith("price:")) {
-            onChange({
-              kind: "price",
-              field: value.replace("price:", "") as PriceField,
-            });
-            return;
-          }
-          const type = value.replace("ind:", "");
-          onChange({
-            kind: "indicator",
-            indicatorType: type,
-            params: defaultIndicatorParams(type),
-            output: undefined,
-          });
-        }}
-        className="ui-input min-w-0 flex-1"
-      >
-        {INDICATOR_REGISTRY.map((item) => (
-          <option key={item.id} value={`ind:${item.id}`}>
-            {formatIndicatorLabel(item.id, defaultIndicatorParams(item.id))}
-          </option>
-        ))}
-        <optgroup label="Price">
-          {PRICE_FIELD_OPTIONS.map((opt) => (
-            <option key={opt.value} value={`price:${opt.value}`}>
-              {opt.label}
-            </option>
-          ))}
-        </optgroup>
-      </select>
-
-      {operand.kind === "indicator" && periodKey && (
-        <input
-          type="number"
-          value={Number(operand.params[periodKey] ?? 14)}
-          min={2}
-          max={500}
-          onChange={(e) =>
-            onChange({
-              ...operand,
-              params: {
-                ...operand.params,
-                [periodKey]: parseInt(e.target.value, 10) || 14,
-              },
-            })
-          }
-          className="ui-input w-16 shrink-0 tabular-nums"
-          aria-label="Period"
-        />
-      )}
-
-      {showLinePicker && operand.kind === "indicator" && (
+    <div className="flex min-w-0 flex-col gap-2">
+      <div className="flex min-w-0 gap-2">
         <select
-          value={operand.output ?? outputs[0]}
-          onChange={(e) => onChange({ ...operand, output: e.target.value })}
-          className="ui-input w-24 shrink-0"
+          value={selectValue}
+          onChange={(e) => {
+            const value = e.target.value;
+            if (value.startsWith("price:")) {
+              onChange({
+                kind: "price",
+                field: value.replace("price:", "") as PriceField,
+              });
+              return;
+            }
+            const type = value.replace("ind:", "");
+            onChange({
+              kind: "indicator",
+              indicatorType: type,
+              params: defaultIndicatorParams(type),
+              output: undefined,
+            });
+          }}
+          className="ui-input min-w-0 flex-1"
         >
-          {outputs.map((output) => (
-            <option key={output} value={output}>
-              {output}
-            </option>
+          {groupedIndicatorsForPicker().map((group) => (
+            <optgroup key={group.category} label={group.label}>
+              {group.items.map((item) => (
+                <option key={item.id} value={`ind:${item.id}`}>
+                  {item.name}
+                </option>
+              ))}
+            </optgroup>
           ))}
+          <optgroup label="Price">
+            {PRICE_FIELD_OPTIONS.map((opt) => (
+              <option key={opt.value} value={`price:${opt.value}`}>
+                {opt.label}
+              </option>
+            ))}
+          </optgroup>
         </select>
+
+        {operand.kind === "indicator" && periodKey && (
+          <input
+            type="number"
+            value={Number(operand.params[periodKey] ?? 14)}
+            min={2}
+            max={500}
+            onChange={(e) =>
+              onChange({
+                ...operand,
+                params: {
+                  ...operand.params,
+                  [periodKey]: parseInt(e.target.value, 10) || 14,
+                },
+              })
+            }
+            className="ui-input w-16 shrink-0 tabular-nums"
+            aria-label="Period"
+          />
+        )}
+
+        {showLinePicker && operand.kind === "indicator" && (
+          <select
+            value={operand.output ?? outputs[0]}
+            onChange={(e) => onChange({ ...operand, output: e.target.value })}
+            className="ui-input w-24 shrink-0"
+          >
+            {outputs.map((output) => (
+              <option key={output} value={output}>
+                {output}
+              </option>
+            ))}
+          </select>
+        )}
+      </div>
+
+      {showSource && operand.kind === "indicator" && (
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted">Source</span>
+          <select
+            value={String(operand.params.source ?? "close")}
+            onChange={(e) =>
+              onChange({
+                ...operand,
+                params: { ...operand.params, source: e.target.value },
+              })
+            }
+            className="ui-input flex-1 text-sm"
+          >
+            {indicatorSourceOptions(operand.indicatorType).map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </select>
+        </div>
       )}
     </div>
   );
@@ -613,7 +675,7 @@ function RightOperandPicker({
           ))}
         </optgroup>
         <optgroup label="Moving averages">
-          {["sma", "ema"].flatMap((type) =>
+          {["sma", "ema", "wma"].flatMap((type) =>
             [20, 50, 200].map((period) => (
               <option key={`${type}-${period}`} value={`ind:${type}:${period}`}>
                 {formatIndicatorLabel(type, { length: period })}

@@ -1,5 +1,6 @@
 import {
   getIndicatorDefinition,
+  INDICATOR_REGISTRY,
   type IndicatorDefinition,
 } from "@/lib/engine/registry";
 import type { ExploreTimeframeMode } from "@/lib/patterns/mtf-combine";
@@ -12,6 +13,7 @@ import { getExplorationPreset } from "@/lib/explore/exploration-presets";
 import type {
   ExplorationBuilderState,
   ExplorationCondition,
+  ExplorationConditionRow,
   ExplorationFilter,
   ExplorationOperand,
   ExplorationOp,
@@ -36,6 +38,8 @@ function primaryOutputKey(def: IndicatorDefinition, alias: string): string {
   if (def.id === "trix") return `${alias}_trix`;
   if (def.id === "keltner") return `${alias}_middle`;
   if (def.id === "envelope") return `${alias}_middle`;
+  if (def.id === "stoch_rsi") return `${alias}_stochRSI`;
+  if (def.id === "kst") return `${alias}_kst`;
   return `${alias}_${def.outputs[0]}`;
 }
 
@@ -134,28 +138,76 @@ function conditionToExpression(
   };
 }
 
+function buildLogicExpression(
+  rows: ExplorationConditionRow[],
+  aliasMap: Map<string, string>,
+): Expression {
+  const normalized = normalizeBuilderState({ rows });
+  if (normalized.rows.length === 0) {
+    throw new Error("Add at least one condition");
+  }
+
+  const expressions = normalized.rows.map((row) =>
+    conditionToExpression(row.condition, aliasMap),
+  );
+
+  let result = expressions[0]!;
+  for (let i = 1; i < normalized.rows.length; i++) {
+    const connector = normalized.rows[i]!.connector ?? "and";
+    result = { op: connector, args: [result, expressions[i]!] };
+  }
+  return result;
+}
+
+export function normalizeBuilderState(
+  builder: ExplorationBuilderState,
+): ExplorationBuilderState {
+  if (builder.rows?.length) {
+    return builder;
+  }
+
+  if (builder.conditions?.length) {
+    const logic = builder.logic ?? "and";
+    return {
+      rows: builder.conditions.map((condition, index) => ({
+        id: condition.id,
+        connector: index === 0 ? undefined : logic,
+        condition,
+      })),
+    };
+  }
+
+  return {
+    rows: [
+      {
+        id: crypto.randomUUID(),
+        condition: createBlankCondition(),
+      },
+    ],
+  };
+}
+
+export function createBlankRow(): ExplorationConditionRow {
+  return {
+    id: crypto.randomUUID(),
+    connector: "and",
+    condition: createBlankCondition(),
+  };
+}
+
 export function builderStateToPattern(
   name: string,
   builder: ExplorationBuilderState,
   timeframeMode: ExploreTimeframeMode,
 ): PatternDefinition {
-  if (builder.conditions.length === 0) {
+  const normalized = normalizeBuilderState(builder);
+  if (normalized.rows.length === 0) {
     throw new Error("Add at least one condition");
   }
 
-  const { indicators, aliasMap } = collectIndicators(
-    builder.conditions,
-    timeframeMode,
-  );
-
-  const expressions = builder.conditions.map((condition) =>
-    conditionToExpression(condition, aliasMap),
-  );
-
-  const entry: Expression =
-    expressions.length === 1
-      ? expressions[0]!
-      : { op: builder.logic, args: expressions };
+  const conditions = normalized.rows.map((row) => row.condition);
+  const { indicators, aliasMap } = collectIndicators(conditions, timeframeMode);
+  const entry = buildLogicExpression(normalized.rows, aliasMap);
 
   return {
     name,
@@ -166,9 +218,17 @@ export function builderStateToPattern(
 }
 
 export function describeBuilderState(builder: ExplorationBuilderState): string {
-  if (builder.conditions.length === 0) return "No conditions";
-  const parts = builder.conditions.map(describeCondition);
-  return parts.join(` ${builder.logic.toUpperCase()} `);
+  const normalized = normalizeBuilderState(builder);
+  if (normalized.rows.length === 0) return "No conditions";
+
+  return normalized.rows
+    .map((row, index) => {
+      const part = describeCondition(row.condition);
+      if (index === 0) return part;
+      const join = (row.connector ?? "and").toUpperCase();
+      return `${join} ${part}`;
+    })
+    .join(" ");
 }
 
 function describeOperand(operand: ExplorationOperand): string {
@@ -178,15 +238,11 @@ function describeOperand(operand: ExplorationOperand): string {
   if (operand.kind === "number") {
     return String(operand.value);
   }
-  const def = getIndicatorDefinition(operand.indicatorType);
-  const name = def?.name ?? operand.indicatorType;
-  const period = operand.params.length ?? operand.params.period;
-  const suffix =
-    period !== undefined ? `(${period})` : "";
-  if (operand.output && def && def.outputs.length > 1) {
-    return `${name}${suffix} ${operand.output}`;
-  }
-  return `${name}${suffix}`;
+  return formatIndicatorLabel(
+    operand.indicatorType,
+    operand.params,
+    operand.output,
+  );
 }
 
 function describeOp(op: ExplorationOp): string {
@@ -252,7 +308,7 @@ export function createBlankCondition(): ExplorationCondition {
     left: {
       kind: "indicator",
       indicatorType: "rsi",
-      params: { length: 14 },
+      params: { length: 14, source: "close" },
     },
     op: "crosses_above",
     right: { kind: "number", value: 30 },
@@ -324,9 +380,30 @@ export const INDICATOR_SHORT_NAMES: Record<string, string> = {
   rolling_low: "Rolling Low",
   volume_sma: "Vol SMA",
   candle_pattern: "Candle",
+  wma: "WMA",
+  wema: "WEMA",
+  stoch_rsi: "Stoch RSI",
+  awesome_oscillator: "AO",
+  force_index: "Force Index",
+  vwap: "VWAP",
+  kst: "KST",
+  adl: "ADL",
+  stddev: "Std Dev",
+  highest: "Highest",
+  lowest: "Lowest",
+  dmi: "DMI",
 };
 
-export type IndicatorRole = "oscillator" | "overlay" | "line_cross" | "band" | "other";
+export const INDICATOR_CATEGORY_LABELS: Record<string, string> = {
+  overlap: "Moving averages & overlays",
+  momentum: "Momentum",
+  trend: "Trend",
+  volatility: "Volatility",
+  volume: "Volume",
+  price: "Price levels",
+  mean_reversion: "Mean reversion",
+  pattern: "Patterns",
+};
 
 const OSCILLATOR_TYPES = new Set([
   "rsi",
@@ -337,11 +414,33 @@ const OSCILLATOR_TYPES = new Set([
   "roc",
   "momentum",
   "zscore",
+  "awesome_oscillator",
+  "force_index",
+  "stoch_rsi",
 ]);
 
-const OVERLAY_TYPES = new Set(["sma", "ema", "psar", "rolling_high", "rolling_low", "volume_sma"]);
-const LINE_CROSS_TYPES = new Set(["macd", "stochastic", "trix"]);
+const OVERLAY_TYPES = new Set([
+  "sma",
+  "ema",
+  "wma",
+  "wema",
+  "psar",
+  "rolling_high",
+  "rolling_low",
+  "volume_sma",
+  "vwap",
+  "highest",
+  "lowest",
+]);
+const LINE_CROSS_TYPES = new Set(["macd", "stochastic", "trix", "kst", "stoch_rsi"]);
 const BAND_TYPES = new Set(["bb", "keltner", "envelope"]);
+
+export type IndicatorRole =
+  | "oscillator"
+  | "overlay"
+  | "line_cross"
+  | "band"
+  | "other";
 
 export function getIndicatorRole(type: string): IndicatorRole {
   if (OSCILLATOR_TYPES.has(type)) return "oscillator";
@@ -357,21 +456,82 @@ export function formatIndicatorLabel(
   output?: string,
 ): string {
   const short = INDICATOR_SHORT_NAMES[type] ?? type.toUpperCase();
-  const period = params.length ?? params.period ?? params.k;
-  const base = period !== undefined ? `${short} (${period})` : short;
-  if (output && LINE_CROSS_TYPES.has(type)) {
-    return `${base} · ${output}`;
+  const period =
+    params.length ??
+    params.period ??
+    params.k ??
+    params.rsiPeriod ??
+    params.fastPeriod;
+  let label = period !== undefined ? `${short} (${period})` : short;
+  const source = params.source;
+  if (source && source !== "close") {
+    label += ` · ${String(source).toUpperCase()}`;
   }
-  return base;
+  if (output && LINE_CROSS_TYPES.has(type)) {
+    label += ` · ${output}`;
+  }
+  return label;
+}
+
+export function indicatorHasSource(type: string): boolean {
+  return Boolean(getIndicatorDefinition(type)?.params.source);
+}
+
+export function indicatorSourceOptions(
+  type: string,
+): { value: string; label: string }[] {
+  const def = getIndicatorDefinition(type);
+  const options = def?.params.source?.options ?? ["close"];
+  return options.map((value) => ({
+    value,
+    label: value.toUpperCase(),
+  }));
+}
+
+export function groupedIndicatorsForPicker(): {
+  category: string;
+  label: string;
+  items: { id: string; name: string }[];
+}[] {
+  const groups = new Map<string, { id: string; name: string }[]>();
+  for (const item of INDICATOR_REGISTRY) {
+    if (item.id === "candle_pattern") continue;
+    const list = groups.get(item.category) ?? [];
+    list.push({
+      id: item.id,
+      name: formatIndicatorLabel(item.id, defaultIndicatorParams(item.id)),
+    });
+    groups.set(item.category, list);
+  }
+
+  const order = [
+    "overlap",
+    "momentum",
+    "trend",
+    "volatility",
+    "volume",
+    "price",
+    "mean_reversion",
+  ];
+
+  return order
+    .filter((category) => groups.has(category))
+    .map((category) => ({
+      category,
+      label: INDICATOR_CATEGORY_LABELS[category] ?? category,
+      items: groups.get(category)!,
+    }));
 }
 
 export function primaryPeriodKey(
   type: string,
-): "length" | "period" | "k" | null {
+): "length" | "period" | "k" | "rsiPeriod" | "fastPeriod" | null {
   const def = getIndicatorDefinition(type);
   if (!def) return null;
   if ("length" in def.params) return "length";
+  if ("rsiPeriod" in def.params) return "rsiPeriod";
   if ("period" in def.params) return "period";
+  if ("fastPeriod" in def.params) return "fastPeriod";
   if ("k" in def.params) return "k";
   return null;
 }
@@ -400,12 +560,14 @@ export function defaultRightForLeft(
     };
   }
   if (role === "line_cross") {
-    const output =
-      left.indicatorType === "macd"
-        ? "signal"
-        : left.indicatorType === "stochastic"
-          ? "d"
-          : "signal";
+    const outputMap: Record<string, string> = {
+      macd: "signal",
+      stochastic: "d",
+      trix: "signal",
+      kst: "signal",
+      stoch_rsi: "d",
+    };
+    const output = outputMap[left.indicatorType] ?? "signal";
     return {
       kind: "indicator",
       indicatorType: left.indicatorType,

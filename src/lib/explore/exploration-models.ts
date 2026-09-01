@@ -30,9 +30,20 @@ export interface ExplorationCondition {
   right: ExplorationOperand;
 }
 
+/** One rule row — first row is IF, later rows join via connector. */
+export interface ExplorationConditionRow {
+  id: string;
+  /** How this row connects to the previous row (undefined on first row). */
+  connector?: "and" | "or";
+  condition: ExplorationCondition;
+}
+
 export interface ExplorationBuilderState {
-  logic: "and" | "or";
-  conditions: ExplorationCondition[];
+  rows: ExplorationConditionRow[];
+  /** @deprecated Legacy flat list — migrated via normalizeBuilderState() */
+  logic?: "and" | "or";
+  /** @deprecated Legacy flat list — migrated via normalizeBuilderState() */
+  conditions?: ExplorationCondition[];
 }
 
 export interface ExplorationParamDef {
