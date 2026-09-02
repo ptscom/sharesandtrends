@@ -37,6 +37,7 @@ import { runUniverseScanInWorker } from "@/lib/engine/scan-worker-client";
 import type {
   ExplorationFilter,
   IndicatorScanRun,
+  SavedExploration,
 } from "@/lib/explore/exploration-models";
 import {
   defaultParamsForPreset,
@@ -77,6 +78,11 @@ import {
   savePattern,
   saveScanRun,
 } from "@/lib/storage/patterns";
+import {
+  deleteExploration,
+  listExplorations,
+  saveExploration,
+} from "@/lib/storage/explorations";
 import { listSymbols } from "@/lib/storage/prices";
 import {
   countSelectedSymbols,
@@ -125,6 +131,9 @@ export function ExploreClient() {
     useState<ExplorationFilterId>("all");
   const [presetSettingsId, setPresetSettingsId] = useState<string | null>(null);
   const [builderOpen, setBuilderOpen] = useState(false);
+  const [savedExplorations, setSavedExplorations] = useState<
+    SavedExploration[]
+  >([]);
   const [indicatorScan, setIndicatorScan] = useState<IndicatorScanRun | null>(
     null,
   );
@@ -283,6 +292,65 @@ export function ExploreClient() {
     [activateExplorationPath, explorationFilter, explorationTimeframeMode],
   );
 
+  const reloadSavedExplorations = useCallback(async () => {
+    const list = await listExplorations();
+    setSavedExplorations(list);
+  }, []);
+
+  const selectSavedExploration = useCallback(
+    (savedId: string) => {
+      const saved = savedExplorations.find((item) => item.id === savedId);
+      if (!saved) return;
+
+      activateExplorationPath({
+        source: "builder",
+        name: saved.name,
+        savedId: saved.id,
+        timeframeMode: explorationTimeframeMode,
+        builder: saved.builder,
+      });
+      setSelectedExplorationPresetId(null);
+    },
+    [activateExplorationPath, explorationTimeframeMode, savedExplorations],
+  );
+
+  const handleDeleteSavedExploration = useCallback(
+    async (savedId: string) => {
+      await deleteExploration(savedId);
+      setSavedExplorations((prev) => prev.filter((item) => item.id !== savedId));
+      if (explorationFilter?.savedId === savedId) {
+        setExplorationFilter(null);
+        setSelectedExplorationPresetId(DEFAULT_EXPLORATION_PRESET_ID);
+      }
+    },
+    [explorationFilter?.savedId],
+  );
+
+  const handleAddToExploration = useCallback(
+    async (
+      name: string,
+      builder: NonNullable<ExplorationFilter["builder"]>,
+      editingSavedId?: string,
+    ) => {
+      const saved = await saveExploration({
+        id: editingSavedId,
+        name,
+        builder,
+      });
+      await reloadSavedExplorations();
+      activateExplorationPath({
+        source: "builder",
+        name: saved.name,
+        savedId: saved.id,
+        timeframeMode: explorationTimeframeMode,
+        builder: saved.builder,
+      });
+      setSelectedExplorationPresetId(null);
+      setBuilderOpen(false);
+    },
+    [activateExplorationPath, explorationTimeframeMode, reloadSavedExplorations],
+  );
+
   const selectStrategy = useCallback(
     async (preset: StrategyPreset) => {
       activateStrategyPath();
@@ -360,7 +428,8 @@ export function ExploreClient() {
       setCustomStrategies(custom);
       setModifiedPresetIds(modified);
     })();
-  }, []);
+    void reloadSavedExplorations();
+  }, [reloadSavedExplorations]);
 
   useEffect(() => {
     if (searchParams.get("patternId")) return;
@@ -723,11 +792,14 @@ export function ExploreClient() {
               <ExploreExplorationSelector
                 filter={explorationFilter}
                 selectedPresetId={selectedExplorationPresetId}
+                savedExplorations={savedExplorations}
                 query={explorationQuery}
                 categoryFilter={explorationCategoryFilter}
                 onQueryChange={setExplorationQuery}
                 onCategoryChange={setExplorationCategoryFilter}
                 onSelectPreset={selectExplorationPreset}
+                onSelectSaved={selectSavedExploration}
+                onDeleteSaved={(id) => void handleDeleteSavedExploration(id)}
                 onOpenPresetSettings={openExplorationPresetSettings}
                 onOpenBuilder={() => {
                   activateExplorationPath();
@@ -861,16 +933,16 @@ export function ExploreClient() {
             ? (explorationFilter.builder ?? null)
             : null
         }
+        initialName={
+          explorationFilter?.source === "builder"
+            ? explorationFilter.name
+            : undefined
+        }
+        editingSavedId={explorationFilter?.savedId ?? null}
         onClose={() => setBuilderOpen(false)}
-        onSave={(name, builder) => {
-          activateExplorationPath({
-            source: "builder",
-            name,
-            timeframeMode: explorationTimeframeMode,
-            builder,
-          });
-          setSelectedExplorationPresetId(null);
-        }}
+        onAdd={(name, builder, savedId) =>
+          void handleAddToExploration(name, builder, savedId)
+        }
       />
     </div>
   );

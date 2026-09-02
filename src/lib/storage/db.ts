@@ -1,4 +1,5 @@
 import Dexie, { type Table } from "dexie";
+import type { SavedExploration } from "@/lib/explore/exploration-models";
 import type {
   OhlcvBar,
   PatternDefinition,
@@ -23,6 +24,7 @@ export class SharesAndTrendsDB extends Dexie {
   patterns!: Table<PatternDefinition, string>;
   scans!: Table<ScanRun, string>;
   meta!: Table<AppMeta, string>;
+  explorations!: Table<SavedExploration, string>;
 
   constructor() {
     super("sharesandtrends");
@@ -32,6 +34,14 @@ export class SharesAndTrendsDB extends Dexie {
       patterns: "id",
       scans: "id, runAt",
       meta: "key",
+    });
+    this.version(2).stores({
+      prices: "symbol",
+      symbols: "symbol",
+      patterns: "id",
+      scans: "id, runAt",
+      meta: "key",
+      explorations: "id, updatedAt",
     });
   }
 }

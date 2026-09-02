@@ -52,8 +52,9 @@ const OP_LABELS_COMPACT: Record<ExplorationOp, string> = {
 
 /** Shared column tracks — flat fixed columns, no 1fr (avoids huge middle gap) */
 const RULE_GRID_COLS =
-  "grid-cols-[3rem_8.5rem_3.25rem_4.75rem_8.5rem_5rem_1.75rem]";
+  "grid-cols-[4.25rem_10rem_3.25rem_4.75rem_8.5rem_5rem_1.75rem]";
 const RULE_GRID_GAP = "gap-x-1.5 gap-y-1";
+const CONNECTOR_FIELD = `${FIELD} w-full !px-1 text-center text-[10px] font-bold uppercase tracking-tight`;
 
 interface ExplorationPresetSettingsModalProps {
   open: boolean;
@@ -183,15 +184,23 @@ export function ExplorationPresetSettingsModal({
 interface ExplorationBuilderModalProps {
   open: boolean;
   initial: ExplorationBuilderState | null;
+  initialName?: string;
+  editingSavedId?: string | null;
   onClose: () => void;
-  onSave: (name: string, builder: ExplorationBuilderState) => void;
+  onAdd: (
+    name: string,
+    builder: ExplorationBuilderState,
+    savedId?: string,
+  ) => void;
 }
 
 export function ExplorationBuilderModal({
   open,
   initial,
+  initialName,
+  editingSavedId,
   onClose,
-  onSave,
+  onAdd,
 }: ExplorationBuilderModalProps) {
   const [name, setName] = useState("Custom exploration");
   const [rows, setRows] = useState<ExplorationConditionRow[]>([]);
@@ -201,14 +210,14 @@ export function ExplorationBuilderModal({
     const normalized = normalizeBuilderState(
       initial ?? { rows: [{ id: crypto.randomUUID(), condition: createBlankCondition() }] },
     );
-    setName("Custom exploration");
+    setName(initialName?.trim() || "Custom exploration");
     setRows(
       normalized.rows.map((row) => ({
         ...row,
         condition: { ...row.condition },
       })),
     );
-  }, [open, initial]);
+  }, [open, initial, initialName]);
 
   useEffect(() => {
     if (!open) return;
@@ -279,9 +288,9 @@ export function ExplorationBuilderModal({
     );
   };
 
-  const handleSave = () => {
+  const handleAdd = () => {
     if (rows.length === 0) return;
-    onSave(name, { rows });
+    onAdd(name, { rows }, editingSavedId ?? undefined);
     onClose();
   };
 
@@ -365,11 +374,11 @@ export function ExplorationBuilderModal({
           </button>
           <button
             type="button"
-            onClick={handleSave}
-            disabled={rows.length === 0}
+            onClick={handleAdd}
+            disabled={rows.length === 0 || !name.trim()}
             className="ui-btn-primary disabled:opacity-50"
           >
-            Use filter
+            Add to Exploration
           </button>
         </div>
       </div>
@@ -412,7 +421,7 @@ function RuleRow({
             onChange={(e) =>
               onConnectorChange(e.target.value as "and" | "or")
             }
-            className={`${FIELD} w-full !px-0.5 text-center text-[11px] font-bold uppercase`}
+            className={CONNECTOR_FIELD}
             aria-label="Connector to previous condition"
           >
             <option value="and">AND</option>

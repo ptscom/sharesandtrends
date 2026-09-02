@@ -507,6 +507,7 @@ export const DEFAULT_EXPLORATION_PRESET_ID = "exp-sma-price";
 
 export const EXPLORATION_FILTERS = [
   { id: "all", label: "All" },
+  { id: "custom", label: "My explorations" },
   { id: "Trend", label: "Trend" },
   { id: "Momentum", label: "Momentum" },
   { id: "Volatility", label: "Volatility" },

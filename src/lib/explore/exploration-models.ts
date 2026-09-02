@@ -84,6 +84,16 @@ export interface ExplorationFilter {
   presetId?: string;
   params?: Record<string, number | string>;
   builder?: ExplorationBuilderState;
+  /** Set when this custom filter was saved to the exploration library */
+  savedId?: string;
+}
+
+export interface SavedExploration {
+  id: string;
+  name: string;
+  builder: ExplorationBuilderState;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface IndicatorScanResultRow {
