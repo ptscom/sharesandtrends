@@ -1,30 +1,30 @@
 import { v4 as uuidv4 } from "uuid";
-import type { OhlcvBar } from "@/lib/types";
+import type { OhlcvBar, PatternDefinition } from "@/lib/types";
 import { hasSignalToday } from "@/lib/engine/backtest";
 import { prepareScanBarsAndPattern } from "@/lib/engine/scan-timeframe";
 import type { ExploreTimeframeMode } from "@/lib/patterns/mtf-combine";
-import {
-  indicatorItemToPattern,
-  type ExploreIndicatorItem,
-  type IndicatorScanGroup,
-  type IndicatorScanResultRow,
-  type IndicatorScanRun,
-} from "@/lib/explore/indicator-models";
+import type {
+  IndicatorScanResultRow,
+  IndicatorScanRun,
+} from "@/lib/explore/exploration-models";
 
 export interface IndicatorScanCoreOptions {
   universe: string[];
   priceData: Record<string, OhlcvBar[]>;
-  items: ExploreIndicatorItem[];
+  pattern: PatternDefinition;
+  filterName: string;
+  filterDescription: string;
+  timeframeMode: ExploreTimeframeMode;
 }
 
-function scanItemForUniverse(
+function scanPatternForUniverse(
   universe: string[],
   priceData: Record<string, OhlcvBar[]>,
-  item: ExploreIndicatorItem,
+  pattern: PatternDefinition,
+  timeframeMode: ExploreTimeframeMode,
 ): IndicatorScanResultRow[] {
-  const pattern = indicatorItemToPattern(item);
   const tfMode: ExploreTimeframeMode =
-    item.timeframeMode === "mtf" ? "1D" : item.timeframeMode;
+    timeframeMode === "mtf" ? "1D" : timeframeMode;
 
   const results: IndicatorScanResultRow[] = [];
 
@@ -57,20 +57,29 @@ function scanItemForUniverse(
 export function runIndicatorScanCore(
   options: IndicatorScanCoreOptions,
 ): IndicatorScanRun {
-  const { universe, priceData, items } = options;
-  const enabled = items.filter((item) => item.enabled);
+  const {
+    universe,
+    priceData,
+    pattern,
+    filterName,
+    filterDescription,
+    timeframeMode,
+  } = options;
 
-  const groups: IndicatorScanGroup[] = enabled.map((item) => ({
-    itemId: item.id,
-    itemName: item.name,
-    timeframeMode: item.timeframeMode,
-    results: scanItemForUniverse(universe, priceData, item),
-  }));
+  const results = scanPatternForUniverse(
+    universe,
+    priceData,
+    pattern,
+    timeframeMode,
+  );
 
   return {
     id: uuidv4(),
     runAt: new Date().toISOString(),
     universe,
-    groups,
+    filterName,
+    filterDescription,
+    timeframeMode,
+    results,
   };
 }
