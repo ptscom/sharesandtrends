@@ -50,10 +50,10 @@ const OP_LABELS_COMPACT: Record<ExplorationOp, string> = {
   crosses_below: "cross below",
 };
 
-/** Shared column tracks — every row uses subgrid so columns line up */
+/** Shared column tracks — flat fixed columns, no 1fr (avoids huge middle gap) */
 const RULE_GRID_COLS =
-  "grid-cols-[3.25rem_minmax(0,1fr)_8.5rem_5.5rem_1.75rem]";
-const LEFT_OPERAND_COLS = "grid-cols-[minmax(5.5rem,7.25rem)_3.25rem_4.75rem]";
+  "grid-cols-[3rem_8.5rem_3.25rem_4.75rem_8.5rem_5rem_1.75rem]";
+const RULE_GRID_GAP = "gap-x-1.5 gap-y-1";
 
 interface ExplorationPresetSettingsModalProps {
   open: boolean;
@@ -320,7 +320,9 @@ export function ExplorationBuilderModal({
 
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
           <div className="rounded-lg border border-border bg-bg/50 px-2.5 py-2">
-            <div className={`grid ${RULE_GRID_COLS} gap-x-2 gap-y-1`}>
+            <div
+              className={`grid w-fit max-w-full ${RULE_GRID_COLS} ${RULE_GRID_GAP}`}
+            >
               {rows.map((row, index) => (
                 <RuleRow
                   key={row.id}
@@ -397,11 +399,11 @@ function RuleRow({
 
   return (
     <div
-      className={`col-span-full grid ${RULE_GRID_COLS} grid-cols-subgrid items-center gap-x-2 rounded-md border border-transparent py-0.5 hover:border-border-subtle`}
+      className={`col-span-full grid ${RULE_GRID_COLS} grid-cols-subgrid items-center ${RULE_GRID_GAP} rounded-md border border-transparent py-0.5 hover:border-border-subtle`}
     >
-      <div className="flex h-9 items-center justify-center">
+      <div className="flex h-9 w-full items-center justify-center">
         {index === 0 ? (
-          <span className="text-[11px] font-bold uppercase tracking-wide text-muted">
+          <span className="w-full text-center text-[11px] font-bold uppercase tracking-wide text-muted">
             IF
           </span>
         ) : (
@@ -410,7 +412,7 @@ function RuleRow({
             onChange={(e) =>
               onConnectorChange(e.target.value as "and" | "or")
             }
-            className={`${FIELD} !px-1 text-center text-[11px] font-bold uppercase`}
+            className={`${FIELD} w-full !px-0.5 text-center text-[11px] font-bold uppercase`}
             aria-label="Connector to previous condition"
           >
             <option value="and">AND</option>
@@ -419,7 +421,7 @@ function RuleRow({
         )}
       </div>
 
-      <LeftOperandPicker
+      <LeftOperandFields
         operand={left}
         onChange={(next) => onChange({ left: next })}
       />
@@ -459,7 +461,7 @@ function RuleRow({
   );
 }
 
-function LeftOperandPicker({
+function LeftOperandFields({
   operand,
   onChange,
 }: {
@@ -491,9 +493,7 @@ function LeftOperandPicker({
     operand.kind === "indicator" && periodKey && !isCandle && !showLinePicker;
 
   return (
-    <div
-      className={`grid ${LEFT_OPERAND_COLS} min-w-0 items-center gap-1`}
-    >
+    <>
       <select
         value={selectValue}
         onChange={(e) => {
@@ -577,7 +577,7 @@ function LeftOperandPicker({
       ) : (
         <span className="h-9" aria-hidden />
       )}
-    </div>
+    </>
   );
 }
 
