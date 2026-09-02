@@ -9,6 +9,7 @@ import type {
   IndicatorDef,
   PatternDefinition,
 } from "@/lib/types";
+import { CANDLE_PATTERN_CATALOG } from "@/lib/patterns/candle-catalog";
 import { getExplorationPreset } from "@/lib/explore/exploration-presets";
 import type {
   ExplorationBuilderState,
@@ -18,6 +19,7 @@ import type {
   ExplorationOperand,
   ExplorationOp,
   ExplorationPreset,
+  PriceField,
 } from "@/lib/explore/exploration-models";
 
 const PRICE_FIELDS = ["open", "high", "low", "close"] as const;
@@ -402,7 +404,7 @@ export const INDICATOR_CATEGORY_LABELS: Record<string, string> = {
   volume: "Volume",
   price: "Price levels",
   mean_reversion: "Mean reversion",
-  pattern: "Patterns",
+  pattern: "Candlestick",
 };
 
 const OSCILLATOR_TYPES = new Set([
@@ -440,9 +442,11 @@ export type IndicatorRole =
   | "overlay"
   | "line_cross"
   | "band"
+  | "pattern"
   | "other";
 
 export function getIndicatorRole(type: string): IndicatorRole {
+  if (type === "candle_pattern") return "pattern";
   if (OSCILLATOR_TYPES.has(type)) return "oscillator";
   if (OVERLAY_TYPES.has(type)) return "overlay";
   if (LINE_CROSS_TYPES.has(type)) return "line_cross";
@@ -455,6 +459,11 @@ export function formatIndicatorLabel(
   params: Record<string, number | string>,
   output?: string,
 ): string {
+  if (type === "candle_pattern") {
+    const patternId = String(params.pattern ?? "doji");
+    const meta = CANDLE_PATTERN_CATALOG.find((p) => p.id === patternId);
+    return meta?.name ?? patternId.replaceAll("_", " ");
+  }
   const short = INDICATOR_SHORT_NAMES[type] ?? type.toUpperCase();
   const period =
     params.length ??
@@ -531,15 +540,68 @@ export function groupedIndicatorsForPicker(): {
     "volume",
     "price",
     "mean_reversion",
+    "pattern",
   ];
 
-  return order
+  const result = order
     .filter((category) => groups.has(category))
     .map((category) => ({
       category,
       label: INDICATOR_CATEGORY_LABELS[category] ?? category,
       items: groups.get(category)!,
     }));
+
+  const candleItems = CANDLE_PATTERN_CATALOG.filter((p) => p.implemented).map(
+    (p) => ({
+      id: `candle:${p.id}`,
+      name: p.name,
+    }),
+  );
+
+  if (candleItems.length > 0) {
+    result.push({
+      category: "pattern",
+      label: INDICATOR_CATEGORY_LABELS.pattern ?? "Candlestick",
+      items: candleItems,
+    });
+  }
+
+  return result;
+}
+
+export function operandPickerValue(operand: ExplorationOperand): string {
+  if (operand.kind === "price") return `price:${operand.field}`;
+  if (operand.kind === "indicator" && operand.indicatorType === "candle_pattern") {
+    return `candle:${operand.params.pattern ?? "doji"}`;
+  }
+  if (operand.kind === "indicator") return `ind:${operand.indicatorType}`;
+  return "ind:rsi";
+}
+
+export function parseOperandPickerValue(value: string): ExplorationOperand {
+  if (value.startsWith("price:")) {
+    return {
+      kind: "price",
+      field: value.replace("price:", "") as PriceField,
+    };
+  }
+  if (value.startsWith("candle:")) {
+    const patternId = value.replace("candle:", "");
+    return {
+      kind: "indicator",
+      indicatorType: "candle_pattern",
+      params: {
+        ...defaultIndicatorParams("candle_pattern"),
+        pattern: patternId,
+      },
+    };
+  }
+  const type = value.replace("ind:", "");
+  return {
+    kind: "indicator",
+    indicatorType: type,
+    params: defaultIndicatorParams(type),
+  };
 }
 
 export function primaryPeriodKey(
@@ -562,7 +624,7 @@ export function defaultRightForLeft(
     return { kind: "number", value: 0 };
   }
   const role = getIndicatorRole(left.indicatorType);
-  if (role === "oscillator") {
+  if (role === "oscillator" || role === "pattern") {
     const defaults: Record<string, number> = {
       rsi: 50,
       cci: 0,
@@ -572,6 +634,7 @@ export function defaultRightForLeft(
       roc: 0,
       momentum: 0,
       zscore: 0,
+      candle_pattern: 0.5,
     };
     return {
       kind: "number",
@@ -600,6 +663,7 @@ export function defaultRightForLeft(
 export function defaultOpForLeft(left: ExplorationOperand): ExplorationOp {
   if (left.kind !== "indicator") return "crosses_above";
   const role = getIndicatorRole(left.indicatorType);
+  if (role === "pattern") return "crosses_above";
   if (role === "oscillator") return "gt";
   if (role === "line_cross") return "crosses_above";
   return "crosses_above";
@@ -616,7 +680,7 @@ export function coerceConditionForLeft(
 
   const role = getIndicatorRole(left.indicatorType);
 
-  if (role === "oscillator") {
+  if (role === "oscillator" || role === "pattern") {
     const nextRight =
       right.kind === "number" ? right : defaultRightForLeft(left);
     return { op, right: nextRight };
@@ -667,7 +731,7 @@ export function operatorsForLeft(left: ExplorationOperand): ExplorationOp[] {
   }
 
   const role = getIndicatorRole(left.indicatorType);
-  if (role === "oscillator") {
+  if (role === "oscillator" || role === "pattern") {
     return ["gt", "gte", "lt", "lte", "crosses_above", "crosses_below"];
   }
   if (role === "line_cross") {

@@ -27,9 +27,19 @@ import {
   normalizeBuilderState,
   operatorsForLeft,
   OP_LABELS,
+  operandPickerValue,
+  parseOperandPickerValue,
   primaryPeriodKey,
   PRICE_FIELD_OPTIONS,
 } from "@/lib/explore/exploration-to-pattern";
+
+/** Compact controls shared across rule rows */
+const FIELD =
+  "ui-input h-9 min-h-9 shrink-0 px-2 py-0 text-sm leading-tight";
+const FIELD_NUM = `${FIELD} w-[3.25rem] tabular-nums`;
+const FIELD_SRC = `${FIELD} w-[4.75rem]`;
+const FIELD_OP = `${FIELD} min-w-[6.5rem]`;
+const FIELD_IND = `${FIELD} min-w-[6rem] flex-1`;
 
 interface ExplorationPresetSettingsModalProps {
   open: boolean;
@@ -274,32 +284,29 @@ export function ExplorationBuilderModal({
       <div
         role="dialog"
         aria-modal="true"
-        className="relative flex max-h-[90vh] w-[95vw] max-w-[760px] flex-col rounded-[18px] border border-border bg-surface"
+        className="relative flex max-h-[92vh] w-[min(96vw,920px)] flex-col rounded-[18px] border border-border bg-surface"
         style={{ boxShadow: "var(--shadow-card)" }}
       >
-        <div className="border-b border-border px-5 py-4">
-          <h2 className="ui-page-title">Rule builder</h2>
-          <p className="ui-helper mt-0.5">
-            Build a filter with IF / AND / OR rows. Each indicator can use its
-            own source (close, open, etc.). Mix AND and OR between rows — e.g. A
-            OR B AND C OR A.
-          </p>
-        </div>
-
-        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto px-5 py-4">
-          <label className="block text-sm">
-            <span className="ui-field-label">Filter name</span>
+        <div className="flex flex-wrap items-end justify-between gap-3 border-b border-border px-4 py-3">
+          <div>
+            <h2 className="ui-page-title text-base">Rule builder</h2>
+            <p className="ui-helper mt-0.5 text-xs">
+              IF / AND / OR rows · mix logic · candlesticks included
+            </p>
+          </div>
+          <label className="min-w-[12rem] flex-1 text-sm sm:max-w-xs">
+            <span className="ui-field-label text-xs">Filter name</span>
             <input
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="ui-input mt-1"
+              className={`${FIELD} mt-0.5 w-full`}
             />
           </label>
+        </div>
 
-          <div className="rounded-xl border border-border bg-bg/60 p-4">
-            <p className="mb-3 text-sm font-medium text-ink">Conditions</p>
-
-            <div className="space-y-3">
+        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
+          <div className="rounded-lg border border-border bg-bg/50 px-3 py-2.5">
+            <div className="space-y-1.5">
               {rows.map((row, index) => (
                 <RuleRow
                   key={row.id}
@@ -323,21 +330,20 @@ export function ExplorationBuilderModal({
             <button
               type="button"
               onClick={() => setRows((prev) => [...prev, createBlankRow()])}
-              className="mt-3 text-sm font-medium text-brand-text hover:underline"
+              className="mt-2 text-xs font-medium text-brand-text hover:underline"
             >
               + Add condition
             </button>
           </div>
 
-          <div className="rounded-xl border border-border-subtle bg-bg px-4 py-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-muted">
-              Preview
-            </p>
-            <p className="mt-1 text-sm text-ink">{preview}</p>
-          </div>
+          <p className="mt-2 rounded-lg border border-border-subtle bg-bg px-3 py-2 text-xs text-muted">
+            <span className="font-semibold uppercase tracking-wide">Preview</span>
+            <span className="mx-1.5 text-border">·</span>
+            <span className="text-ink">{preview}</span>
+          </p>
         </div>
 
-        <div className="flex justify-end gap-2 border-t border-border px-5 py-3">
+        <div className="flex justify-end gap-2 border-t border-border px-4 py-2.5">
           <button type="button" onClick={onClose} className="ui-btn-secondary">
             Cancel
           </button>
@@ -376,10 +382,10 @@ function RuleRow({
   const availableOps = operatorsForLeft(left);
 
   return (
-    <div className="flex items-start gap-3">
-      <div className="flex w-16 shrink-0 flex-col gap-1 pt-2">
+    <div className="grid grid-cols-[2.5rem_minmax(0,1fr)_minmax(5.5rem,7rem)_minmax(3.5rem,4.5rem)_1.5rem] items-center gap-x-1.5 rounded-md border border-transparent px-0.5 py-0.5 hover:border-border-subtle">
+      <div className="flex h-9 items-center justify-center">
         {index === 0 ? (
-          <span className="text-xs font-bold uppercase tracking-wide text-muted">
+          <span className="text-[10px] font-bold uppercase tracking-wide text-muted">
             IF
           </span>
         ) : (
@@ -388,7 +394,7 @@ function RuleRow({
             onChange={(e) =>
               onConnectorChange(e.target.value as "and" | "or")
             }
-            className="ui-input px-1 text-xs font-bold uppercase"
+            className={`${FIELD} w-full px-0.5 text-center text-[10px] font-bold uppercase`}
             aria-label="Connector to previous condition"
           >
             <option value="and">AND</option>
@@ -397,41 +403,41 @@ function RuleRow({
         )}
       </div>
 
-      <div className="grid min-w-0 flex-1 gap-2 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,0.75fr)]">
-        <LeftOperandPicker
-          operand={left}
-          onChange={(next) => onChange({ left: next })}
-        />
+      <LeftOperandPicker
+        operand={left}
+        onChange={(next) => onChange({ left: next })}
+      />
 
-        <select
-          value={condition.op}
-          onChange={(e) => onChange({ op: e.target.value as ExplorationOp })}
-          className="ui-input"
-        >
-          {availableOps.map((op) => (
-            <option key={op} value={op}>
-              {OP_LABELS[op]}
-            </option>
-          ))}
-        </select>
+      <select
+        value={condition.op}
+        onChange={(e) => onChange({ op: e.target.value as ExplorationOp })}
+        className={FIELD_OP}
+      >
+        {availableOps.map((op) => (
+          <option key={op} value={op}>
+            {OP_LABELS[op]}
+          </option>
+        ))}
+      </select>
 
-        <RightOperandPicker
-          left={left}
-          op={condition.op}
-          operand={condition.right}
-          onChange={(right) => onChange({ right })}
-        />
-      </div>
+      <RightOperandPicker
+        left={left}
+        op={condition.op}
+        operand={condition.right}
+        onChange={(right) => onChange({ right })}
+      />
 
-      {canRemove && (
+      {canRemove ? (
         <button
           type="button"
           onClick={onRemove}
-          className="shrink-0 pt-2 text-muted hover:text-ink"
+          className="flex h-9 w-full items-center justify-center text-sm text-muted hover:text-ink"
           aria-label="Remove condition"
         >
           ✕
         </button>
+      ) : (
+        <span />
       )}
     </div>
   );
@@ -444,65 +450,40 @@ function LeftOperandPicker({
   operand: ExplorationOperand;
   onChange: (operand: ExplorationOperand) => void;
 }) {
-  const selectValue =
-    operand.kind === "price"
-      ? `price:${operand.field}`
-      : operand.kind === "indicator"
-        ? `ind:${operand.indicatorType}`
-        : "ind:rsi";
+  const selectValue = operandPickerValue(operand);
 
-  const indicatorOperand =
-    operand.kind === "indicator"
-      ? operand
-      : {
-          kind: "indicator" as const,
-          indicatorType: "rsi",
-          params: defaultIndicatorParams("rsi"),
-        };
-
-  const periodKey = primaryPeriodKey(indicatorOperand.indicatorType);
-  const def = getIndicatorDefinition(indicatorOperand.indicatorType);
+  const indicatorType =
+    operand.kind === "indicator" ? operand.indicatorType : "rsi";
+  const periodKey = primaryPeriodKey(indicatorType);
+  const def = getIndicatorDefinition(indicatorType);
   const outputs = def?.outputs ?? [];
+  const isCandle = indicatorType === "candle_pattern";
   const showLinePicker =
     operand.kind === "indicator" &&
-    getIndicatorRole(operand.indicatorType) === "line_cross" &&
+    !isCandle &&
+    getIndicatorRole(indicatorType) === "line_cross" &&
     outputs.length > 1;
-
   const showSource =
-    operand.kind === "indicator" && indicatorHasSource(operand.indicatorType);
-
-  const periodDefault =
-    operand.kind === "indicator" && periodKey
-      ? defaultPeriodForIndicator(operand.indicatorType, periodKey)
-      : 14;
+    operand.kind === "indicator" &&
+    !isCandle &&
+    indicatorHasSource(indicatorType);
+  const periodDefault = periodKey
+    ? defaultPeriodForIndicator(indicatorType, periodKey)
+    : 14;
 
   return (
-    <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+    <div className="flex min-w-0 items-center gap-1 overflow-hidden">
       <select
         value={selectValue}
         onChange={(e) => {
-          const value = e.target.value;
-          if (value.startsWith("price:")) {
-            onChange({
-              kind: "price",
-              field: value.replace("price:", "") as PriceField,
-            });
-            return;
-          }
-          const type = value.replace("ind:", "");
-          onChange({
-            kind: "indicator",
-            indicatorType: type,
-            params: defaultIndicatorParams(type),
-            output: undefined,
-          });
+          onChange(parseOperandPickerValue(e.target.value));
         }}
-        className="ui-input min-w-[5.5rem] flex-1"
+        className={FIELD_IND}
       >
         {groupedIndicatorsForPicker().map((group) => (
           <optgroup key={group.category} label={group.label}>
             {group.items.map((item) => (
-              <option key={item.id} value={`ind:${item.id}`}>
+              <option key={item.id} value={item.id.startsWith("candle:") ? item.id : `ind:${item.id}`}>
                 {item.name}
               </option>
             ))}
@@ -517,7 +498,7 @@ function LeftOperandPicker({
         </optgroup>
       </select>
 
-      {operand.kind === "indicator" && periodKey && (
+      {operand.kind === "indicator" && periodKey && !isCandle && (
         <input
           type="number"
           value={Number(operand.params[periodKey] ?? periodDefault)}
@@ -530,11 +511,11 @@ function LeftOperandPicker({
                 ...operand.params,
                 [periodKey]:
                   parseInt(e.target.value, 10) ||
-                  defaultPeriodForIndicator(operand.indicatorType, periodKey),
+                  defaultPeriodForIndicator(indicatorType, periodKey),
               },
             })
           }
-          className="ui-input w-14 shrink-0 tabular-nums"
+          className={FIELD_NUM}
           aria-label="Period"
         />
       )}
@@ -548,10 +529,10 @@ function LeftOperandPicker({
               params: { ...operand.params, source: e.target.value },
             })
           }
-          className="ui-input w-[5.25rem] shrink-0"
+          className={FIELD_SRC}
           aria-label="Price source"
         >
-          {indicatorSourceOptions(operand.indicatorType).map((opt) => (
+          {indicatorSourceOptions(indicatorType).map((opt) => (
             <option key={opt.value} value={opt.value}>
               {opt.label}
             </option>
@@ -563,7 +544,7 @@ function LeftOperandPicker({
         <select
           value={operand.output ?? outputs[0]}
           onChange={(e) => onChange({ ...operand, output: e.target.value })}
-          className="ui-input w-20 shrink-0"
+          className={`${FIELD} w-16`}
           aria-label="Line"
         >
           {outputs.map((output) => (
@@ -597,7 +578,9 @@ function RightOperandPicker({
     const outputs = def?.outputs ?? [];
     const leftLine = left.output ?? outputs[0];
     const currentOutput =
-      operand.kind === "indicator" ? operand.output : outputs.find((o) => o !== leftLine);
+      operand.kind === "indicator"
+        ? operand.output
+        : outputs.find((o) => o !== leftLine);
     return (
       <select
         value={currentOutput ?? outputs[1] ?? outputs[0]}
@@ -609,7 +592,7 @@ function RightOperandPicker({
             output: e.target.value,
           })
         }
-        className="ui-input"
+        className={FIELD}
       >
         {outputs
           .filter((output) => output !== leftLine)
@@ -622,8 +605,9 @@ function RightOperandPicker({
     );
   }
 
-  if (leftRole === "oscillator") {
-    const value = operand.kind === "number" ? operand.value : 30;
+  if (leftRole === "oscillator" || leftRole === "pattern") {
+    const defaultVal = leftRole === "pattern" ? 0.5 : 30;
+    const value = operand.kind === "number" ? operand.value : defaultVal;
     return (
       <input
         type="number"
@@ -634,13 +618,18 @@ function RightOperandPicker({
         onChange={(e) =>
           onChange({ kind: "number", value: parseFloat(e.target.value) || 0 })
         }
-        className="ui-input tabular-nums"
+        className={`${FIELD} w-full tabular-nums`}
         aria-label="Threshold"
       />
     );
   }
 
-  if (left.kind === "price" || crossOp || leftRole === "overlay" || leftRole === "band") {
+  if (
+    left.kind === "price" ||
+    crossOp ||
+    leftRole === "overlay" ||
+    leftRole === "band"
+  ) {
     const selectValue =
       operand.kind === "price"
         ? `price:${operand.field}`
@@ -670,7 +659,7 @@ function RightOperandPicker({
             },
           });
         }}
-        className="ui-input"
+        className={`${FIELD} w-full`}
       >
         <optgroup label="Price">
           {PRICE_FIELD_OPTIONS.map((opt) => (
@@ -700,7 +689,7 @@ function RightOperandPicker({
       onChange={(e) =>
         onChange({ kind: "number", value: parseFloat(e.target.value) || 0 })
       }
-      className="ui-input tabular-nums"
+      className={`${FIELD} w-full tabular-nums`}
       aria-label="Value"
     />
   );
