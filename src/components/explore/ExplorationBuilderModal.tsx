@@ -16,13 +16,15 @@ import {
   createBlankRow,
   defaultIndicatorParams,
   defaultOpForLeft,
+  defaultPeriodForIndicator,
   defaultRightForLeft,
   describeBuilderState,
-  formatIndicatorLabel,
   getIndicatorRole,
   groupedIndicatorsForPicker,
   indicatorHasSource,
+  indicatorPickerLabel,
   indicatorSourceOptions,
+  INDICATOR_SHORT_NAMES,
   normalizeBuilderState,
   operatorsForLeft,
   OP_LABELS,
@@ -470,103 +472,107 @@ function LeftOperandPicker({
   const showSource =
     operand.kind === "indicator" && indicatorHasSource(operand.indicatorType);
 
+  const periodDefault =
+    operand.kind === "indicator" && periodKey
+      ? defaultPeriodForIndicator(operand.indicatorType, periodKey)
+      : 14;
+
   return (
-    <div className="flex min-w-0 flex-col gap-2">
-      <div className="flex min-w-0 gap-2">
-        <select
-          value={selectValue}
-          onChange={(e) => {
-            const value = e.target.value;
-            if (value.startsWith("price:")) {
-              onChange({
-                kind: "price",
-                field: value.replace("price:", "") as PriceField,
-              });
-              return;
-            }
-            const type = value.replace("ind:", "");
+    <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+      <select
+        value={selectValue}
+        onChange={(e) => {
+          const value = e.target.value;
+          if (value.startsWith("price:")) {
             onChange({
-              kind: "indicator",
-              indicatorType: type,
-              params: defaultIndicatorParams(type),
-              output: undefined,
+              kind: "price",
+              field: value.replace("price:", "") as PriceField,
             });
-          }}
-          className="ui-input min-w-0 flex-1"
-        >
-          {groupedIndicatorsForPicker().map((group) => (
-            <optgroup key={group.category} label={group.label}>
-              {group.items.map((item) => (
-                <option key={item.id} value={`ind:${item.id}`}>
-                  {item.name}
-                </option>
-              ))}
-            </optgroup>
-          ))}
-          <optgroup label="Price">
-            {PRICE_FIELD_OPTIONS.map((opt) => (
-              <option key={opt.value} value={`price:${opt.value}`}>
-                {opt.label}
+            return;
+          }
+          const type = value.replace("ind:", "");
+          onChange({
+            kind: "indicator",
+            indicatorType: type,
+            params: defaultIndicatorParams(type),
+            output: undefined,
+          });
+        }}
+        className="ui-input min-w-[5.5rem] flex-1"
+      >
+        {groupedIndicatorsForPicker().map((group) => (
+          <optgroup key={group.category} label={group.label}>
+            {group.items.map((item) => (
+              <option key={item.id} value={`ind:${item.id}`}>
+                {item.name}
               </option>
             ))}
           </optgroup>
-        </select>
+        ))}
+        <optgroup label="Price">
+          {PRICE_FIELD_OPTIONS.map((opt) => (
+            <option key={opt.value} value={`price:${opt.value}`}>
+              {opt.label}
+            </option>
+          ))}
+        </optgroup>
+      </select>
 
-        {operand.kind === "indicator" && periodKey && (
-          <input
-            type="number"
-            value={Number(operand.params[periodKey] ?? 14)}
-            min={2}
-            max={500}
-            onChange={(e) =>
-              onChange({
-                ...operand,
-                params: {
-                  ...operand.params,
-                  [periodKey]: parseInt(e.target.value, 10) || 14,
-                },
-              })
-            }
-            className="ui-input w-16 shrink-0 tabular-nums"
-            aria-label="Period"
-          />
-        )}
-
-        {showLinePicker && operand.kind === "indicator" && (
-          <select
-            value={operand.output ?? outputs[0]}
-            onChange={(e) => onChange({ ...operand, output: e.target.value })}
-            className="ui-input w-24 shrink-0"
-          >
-            {outputs.map((output) => (
-              <option key={output} value={output}>
-                {output}
-              </option>
-            ))}
-          </select>
-        )}
-      </div>
+      {operand.kind === "indicator" && periodKey && (
+        <input
+          type="number"
+          value={Number(operand.params[periodKey] ?? periodDefault)}
+          min={2}
+          max={500}
+          onChange={(e) =>
+            onChange({
+              ...operand,
+              params: {
+                ...operand.params,
+                [periodKey]:
+                  parseInt(e.target.value, 10) ||
+                  defaultPeriodForIndicator(operand.indicatorType, periodKey),
+              },
+            })
+          }
+          className="ui-input w-14 shrink-0 tabular-nums"
+          aria-label="Period"
+        />
+      )}
 
       {showSource && operand.kind === "indicator" && (
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-muted">Source</span>
-          <select
-            value={String(operand.params.source ?? "close")}
-            onChange={(e) =>
-              onChange({
-                ...operand,
-                params: { ...operand.params, source: e.target.value },
-              })
-            }
-            className="ui-input flex-1 text-sm"
-          >
-            {indicatorSourceOptions(operand.indicatorType).map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </select>
-        </div>
+        <select
+          value={String(operand.params.source ?? "close")}
+          onChange={(e) =>
+            onChange({
+              ...operand,
+              params: { ...operand.params, source: e.target.value },
+            })
+          }
+          className="ui-input w-[5.25rem] shrink-0"
+          aria-label="Price source"
+        >
+          {indicatorSourceOptions(operand.indicatorType).map((opt) => (
+            <option key={opt.value} value={opt.value}>
+              {opt.label}
+            </option>
+          ))}
+        </select>
+      )}
+
+      {showLinePicker && operand.kind === "indicator" && (
+        <select
+          value={operand.output ?? outputs[0]}
+          onChange={(e) => onChange({ ...operand, output: e.target.value })}
+          className="ui-input w-20 shrink-0"
+          aria-label="Line"
+        >
+          {outputs.map((output) => (
+            <option key={output} value={output}>
+              {output}
+            </option>
+          ))}
+        </select>
       )}
     </div>
   );
@@ -678,7 +684,7 @@ function RightOperandPicker({
           {["sma", "ema", "wma"].flatMap((type) =>
             [20, 50, 200].map((period) => (
               <option key={`${type}-${period}`} value={`ind:${type}:${period}`}>
-                {formatIndicatorLabel(type, { length: period })}
+                {INDICATOR_SHORT_NAMES[type] ?? type} {period}
               </option>
             )),
           )}

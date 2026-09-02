@@ -465,7 +465,7 @@ export function formatIndicatorLabel(
   let label = period !== undefined ? `${short} (${period})` : short;
   const source = params.source;
   if (source && source !== "close") {
-    label += ` · ${String(source).toUpperCase()}`;
+    label += ` · ${titleCaseSource(String(source))}`;
   }
   if (output && LINE_CROSS_TYPES.has(type)) {
     label += ` · ${output}`;
@@ -477,6 +477,15 @@ export function indicatorHasSource(type: string): boolean {
   return Boolean(getIndicatorDefinition(type)?.params.source);
 }
 
+function titleCaseSource(value: string): string {
+  return value.charAt(0).toUpperCase() + value.slice(1);
+}
+
+export function indicatorPickerLabel(type: string): string {
+  const def = getIndicatorDefinition(type);
+  return INDICATOR_SHORT_NAMES[type] ?? def?.name ?? type.toUpperCase();
+}
+
 export function indicatorSourceOptions(
   type: string,
 ): { value: string; label: string }[] {
@@ -484,8 +493,18 @@ export function indicatorSourceOptions(
   const options = def?.params.source?.options ?? ["close"];
   return options.map((value) => ({
     value,
-    label: value.toUpperCase(),
+    label: titleCaseSource(value),
   }));
+}
+
+export function defaultPeriodForIndicator(
+  type: string,
+  periodKey: ReturnType<typeof primaryPeriodKey>,
+): number {
+  if (!periodKey) return 14;
+  const def = getIndicatorDefinition(type);
+  const schema = def?.params[periodKey];
+  return Number(schema?.default ?? 14);
 }
 
 export function groupedIndicatorsForPicker(): {
@@ -499,7 +518,7 @@ export function groupedIndicatorsForPicker(): {
     const list = groups.get(item.category) ?? [];
     list.push({
       id: item.id,
-      name: formatIndicatorLabel(item.id, defaultIndicatorParams(item.id)),
+      name: indicatorPickerLabel(item.id),
     });
     groups.set(item.category, list);
   }
