@@ -26,20 +26,34 @@ import {
   INDICATOR_SHORT_NAMES,
   normalizeBuilderState,
   operatorsForLeft,
-  OP_LABELS,
   operandPickerValue,
   parseOperandPickerValue,
   primaryPeriodKey,
   PRICE_FIELD_OPTIONS,
 } from "@/lib/explore/exploration-to-pattern";
 
-/** Compact controls shared across rule rows */
+/** Compact controls — !h-9 overrides global ui-input h-11 */
 const FIELD =
-  "ui-input h-9 min-h-9 shrink-0 px-2 py-0 text-sm leading-tight";
-const FIELD_NUM = `${FIELD} w-[3.25rem] tabular-nums`;
-const FIELD_SRC = `${FIELD} w-[4.75rem]`;
-const FIELD_OP = `${FIELD} min-w-[6.5rem]`;
-const FIELD_IND = `${FIELD} min-w-[6rem] flex-1`;
+  "ui-input !h-9 !min-h-9 shrink-0 px-2 !py-0 text-sm leading-tight";
+const FIELD_NUM = `${FIELD} w-full tabular-nums`;
+const FIELD_SRC = `${FIELD} w-full`;
+const FIELD_OP = `${FIELD} w-full`;
+const FIELD_IND = `${FIELD} w-full min-w-0`;
+
+/** Shorter operator labels so selects don't truncate in the rule grid */
+const OP_LABELS_COMPACT: Record<ExplorationOp, string> = {
+  gt: "above",
+  gte: "at/above",
+  lt: "below",
+  lte: "at/below",
+  crosses_above: "cross above",
+  crosses_below: "cross below",
+};
+
+/** Shared column tracks — every row uses subgrid so columns line up */
+const RULE_GRID_COLS =
+  "grid-cols-[3.25rem_minmax(0,1fr)_8.5rem_5.5rem_1.75rem]";
+const LEFT_OPERAND_COLS = "grid-cols-[minmax(5.5rem,7.25rem)_3.25rem_4.75rem]";
 
 interface ExplorationPresetSettingsModalProps {
   open: boolean;
@@ -305,8 +319,8 @@ export function ExplorationBuilderModal({
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-3">
-          <div className="rounded-lg border border-border bg-bg/50 px-3 py-2.5">
-            <div className="space-y-1.5">
+          <div className="rounded-lg border border-border bg-bg/50 px-2.5 py-2">
+            <div className={`grid ${RULE_GRID_COLS} gap-x-2 gap-y-1`}>
               {rows.map((row, index) => (
                 <RuleRow
                   key={row.id}
@@ -330,7 +344,7 @@ export function ExplorationBuilderModal({
             <button
               type="button"
               onClick={() => setRows((prev) => [...prev, createBlankRow()])}
-              className="mt-2 text-xs font-medium text-brand-text hover:underline"
+              className="mt-1.5 pl-0.5 text-xs font-medium text-brand-text hover:underline"
             >
               + Add condition
             </button>
@@ -382,10 +396,12 @@ function RuleRow({
   const availableOps = operatorsForLeft(left);
 
   return (
-    <div className="grid grid-cols-[2.5rem_minmax(0,1fr)_minmax(5.5rem,7rem)_minmax(3.5rem,4.5rem)_1.5rem] items-center gap-x-1.5 rounded-md border border-transparent px-0.5 py-0.5 hover:border-border-subtle">
+    <div
+      className={`col-span-full grid ${RULE_GRID_COLS} grid-cols-subgrid items-center gap-x-2 rounded-md border border-transparent py-0.5 hover:border-border-subtle`}
+    >
       <div className="flex h-9 items-center justify-center">
         {index === 0 ? (
-          <span className="text-[10px] font-bold uppercase tracking-wide text-muted">
+          <span className="text-[11px] font-bold uppercase tracking-wide text-muted">
             IF
           </span>
         ) : (
@@ -394,7 +410,7 @@ function RuleRow({
             onChange={(e) =>
               onConnectorChange(e.target.value as "and" | "or")
             }
-            className={`${FIELD} w-full px-0.5 text-center text-[10px] font-bold uppercase`}
+            className={`${FIELD} !px-1 text-center text-[11px] font-bold uppercase`}
             aria-label="Connector to previous condition"
           >
             <option value="and">AND</option>
@@ -415,7 +431,7 @@ function RuleRow({
       >
         {availableOps.map((op) => (
           <option key={op} value={op}>
-            {OP_LABELS[op]}
+            {OP_LABELS_COMPACT[op]}
           </option>
         ))}
       </select>
@@ -437,7 +453,7 @@ function RuleRow({
           ✕
         </button>
       ) : (
-        <span />
+        <span className="h-9" aria-hidden />
       )}
     </div>
   );
@@ -471,8 +487,13 @@ function LeftOperandPicker({
     ? defaultPeriodForIndicator(indicatorType, periodKey)
     : 14;
 
+  const showPeriod =
+    operand.kind === "indicator" && periodKey && !isCandle && !showLinePicker;
+
   return (
-    <div className="flex min-w-0 items-center gap-1 overflow-hidden">
+    <div
+      className={`grid ${LEFT_OPERAND_COLS} min-w-0 items-center gap-1`}
+    >
       <select
         value={selectValue}
         onChange={(e) => {
@@ -498,7 +519,7 @@ function LeftOperandPicker({
         </optgroup>
       </select>
 
-      {operand.kind === "indicator" && periodKey && !isCandle && (
+      {showPeriod ? (
         <input
           type="number"
           value={Number(operand.params[periodKey] ?? periodDefault)}
@@ -518,9 +539,24 @@ function LeftOperandPicker({
           className={FIELD_NUM}
           aria-label="Period"
         />
+      ) : showLinePicker && operand.kind === "indicator" ? (
+        <select
+          value={operand.output ?? outputs[0]}
+          onChange={(e) => onChange({ ...operand, output: e.target.value })}
+          className={FIELD_NUM}
+          aria-label="Line"
+        >
+          {outputs.map((output) => (
+            <option key={output} value={output}>
+              {output}
+            </option>
+          ))}
+        </select>
+      ) : (
+        <span className="h-9" aria-hidden />
       )}
 
-      {showSource && operand.kind === "indicator" && (
+      {showSource && operand.kind === "indicator" ? (
         <select
           value={String(operand.params.source ?? "close")}
           onChange={(e) =>
@@ -538,21 +574,8 @@ function LeftOperandPicker({
             </option>
           ))}
         </select>
-      )}
-
-      {showLinePicker && operand.kind === "indicator" && (
-        <select
-          value={operand.output ?? outputs[0]}
-          onChange={(e) => onChange({ ...operand, output: e.target.value })}
-          className={`${FIELD} w-16`}
-          aria-label="Line"
-        >
-          {outputs.map((output) => (
-            <option key={output} value={output}>
-              {output}
-            </option>
-          ))}
-        </select>
+      ) : (
+        <span className="h-9" aria-hidden />
       )}
     </div>
   );
