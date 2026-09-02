@@ -8,11 +8,17 @@ import {
   type ExplorationFilterId,
 } from "@/lib/explore/exploration-presets";
 import {
+  describeBuilderState,
   describeExplorationFilter,
   describePreset,
 } from "@/lib/explore/exploration-to-pattern";
 import type { ExplorationFilter, SavedExploration } from "@/lib/explore/exploration-models";
-import { describeBuilderState } from "@/lib/explore/exploration-to-pattern";
+import {
+  explorationFilterKey,
+  presetFilterKey,
+  savedFilterKey,
+} from "@/lib/explore/exploration-filter-key";
+import { ExplorationHistoryIcon } from "@/components/explore/ExplorationRunHistoryModal";
 
 interface ExploreExplorationSelectorProps {
   filter: ExplorationFilter | null;
@@ -26,6 +32,7 @@ interface ExploreExplorationSelectorProps {
   onSelectSaved: (savedId: string) => void;
   onDeleteSaved: (savedId: string) => void;
   onOpenPresetSettings: (presetId: string, e: MouseEvent) => void;
+  onOpenHistory: (filterKey: string, filterName: string) => void;
   onOpenBuilder: () => void;
   onEditBuilder: () => void;
 }
@@ -42,6 +49,7 @@ export function ExploreExplorationSelector({
   onSelectSaved,
   onDeleteSaved,
   onOpenPresetSettings,
+  onOpenHistory,
   onOpenBuilder,
   onEditBuilder,
 }: ExploreExplorationSelectorProps) {
@@ -100,9 +108,19 @@ export function ExploreExplorationSelector({
 
       {filter && (
         <div className="mt-4 rounded-xl border border-brand/30 bg-brand/5 p-4">
-          <p className="text-sm font-medium text-ink">Active filter</p>
-          <p className="mt-1 font-semibold text-brand-text">{filter.name}</p>
-          <p className="mt-0.5 text-sm text-muted">{activeDescription}</p>
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-medium text-ink">Active filter</p>
+              <p className="mt-1 font-semibold text-brand-text">{filter.name}</p>
+              <p className="mt-0.5 text-sm text-muted">{activeDescription}</p>
+            </div>
+            <HistoryButton
+              label={`View past runs for ${filter.name}`}
+              onClick={() =>
+                onOpenHistory(explorationFilterKey(filter), filter.name)
+              }
+            />
+          </div>
         </div>
       )}
 
@@ -186,18 +204,26 @@ export function ExploreExplorationSelector({
                         </span>
                       </div>
                     </div>
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onDeleteSaved(item.id);
-                      }}
-                      className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border text-muted hover:border-danger hover:text-danger"
-                      aria-label={`Delete ${item.name}`}
-                      title="Remove from my explorations"
-                    >
-                      ✕
-                    </button>
+                    <div className="flex shrink-0 flex-col gap-1">
+                      <HistoryButton
+                        label={`Past runs for ${item.name}`}
+                        onClick={() =>
+                          onOpenHistory(savedFilterKey(item.id), item.name)
+                        }
+                      />
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDeleteSaved(item.id);
+                        }}
+                        className="flex h-8 w-8 items-center justify-center rounded-lg border border-border text-muted hover:border-danger hover:text-danger"
+                        aria-label={`Delete ${item.name}`}
+                        title="Remove from my explorations"
+                      >
+                        ✕
+                      </button>
+                    </div>
                   </div>
                 </div>
               );
@@ -268,15 +294,23 @@ export function ExploreExplorationSelector({
                     <span className="text-[11px] text-muted">{preview}</span>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={(e) => onOpenPresetSettings(preset.id, e)}
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border text-muted hover:border-brand hover:text-ink"
-                  aria-label={`Configure ${preset.name}`}
-                  title="Configure parameters"
-                >
-                  ⚙
-                </button>
+                <div className="flex shrink-0 flex-col gap-1">
+                  <HistoryButton
+                    label={`Past runs for ${preset.name}`}
+                    onClick={() =>
+                      onOpenHistory(presetFilterKey(preset.id), preset.name)
+                    }
+                  />
+                  <button
+                    type="button"
+                    onClick={(e) => onOpenPresetSettings(preset.id, e)}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg border border-border text-muted hover:border-brand hover:text-ink"
+                    aria-label={`Configure ${preset.name}`}
+                    title="Configure parameters"
+                  >
+                    ⚙
+                  </button>
+                </div>
               </div>
             </div>
           );
@@ -290,6 +324,29 @@ export function ExploreExplorationSelector({
         </p>
       )}
     </section>
+  );
+}
+
+function HistoryButton({
+  label,
+  onClick,
+}: {
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+      className="flex h-8 w-8 items-center justify-center rounded-lg border border-border text-muted hover:border-brand hover:text-ink"
+      aria-label={label}
+      title="Past runs"
+    >
+      <ExplorationHistoryIcon />
+    </button>
   );
 }
 

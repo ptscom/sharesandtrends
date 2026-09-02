@@ -106,6 +106,8 @@ export interface IndicatorScanResultRow {
 export interface IndicatorScanRun {
   id: string;
   runAt: string;
+  /** Groups runs for the same exploration filter (preset, saved, or custom) */
+  filterKey: string;
   universe: string[];
   filterName: string;
   filterDescription: string;

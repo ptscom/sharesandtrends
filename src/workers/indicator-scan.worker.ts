@@ -8,6 +8,7 @@ export interface IndicatorScanWorkerRequest {
   universe: string[];
   priceData: Record<string, OhlcvBar[]>;
   pattern: PatternDefinition;
+  filterKey: string;
   filterName: string;
   filterDescription: string;
   timeframeMode: ExploreTimeframeMode;
@@ -32,6 +33,7 @@ self.onmessage = (event: MessageEvent<IndicatorScanWorkerRequest>) => {
       universe,
       priceData,
       pattern,
+      filterKey,
       filterName,
       filterDescription,
       timeframeMode,
@@ -53,6 +55,7 @@ self.onmessage = (event: MessageEvent<IndicatorScanWorkerRequest>) => {
       universe,
       priceData,
       pattern,
+      filterKey,
       filterName,
       filterDescription,
       timeframeMode,

@@ -6,22 +6,39 @@ import type { IndicatorScanRun } from "@/lib/explore/exploration-models";
 
 interface ExploreIndicatorResultsPanelProps {
   scan: IndicatorScanRun;
+  onOpenHistory?: () => void;
 }
 
 export function ExploreIndicatorResultsPanel({
   scan,
+  onOpenHistory,
 }: ExploreIndicatorResultsPanelProps) {
   return (
     <section className="space-y-6">
       <div className="ui-panel p-6">
-        <p className="ui-eyebrow">Results</p>
-        <h2 className="ui-section-title mt-2">Exploration results</h2>
-        <p className="ui-helper mt-1">
-          {scan.filterName} · {formatTimeframeModeLabel(scan.timeframeMode)} ·{" "}
-          {scan.universe.length} symbols · {scan.results.length} match
-          {scan.results.length === 1 ? "" : "es"} · {formatRunAt(scan.runAt)}
-        </p>
-        <p className="mt-2 text-sm text-muted">{scan.filterDescription}</p>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="ui-eyebrow">Results</p>
+            <h2 className="ui-section-title mt-2">Exploration results</h2>
+            <p className="ui-helper mt-1">
+              {scan.filterName} · {formatTimeframeModeLabel(scan.timeframeMode)} ·{" "}
+              {scan.universe.length} symbols · {scan.results.length} match
+              {scan.results.length === 1 ? "" : "es"} · {formatRunAt(scan.runAt)}
+            </p>
+            <p className="mt-2 text-sm text-muted">{scan.filterDescription}</p>
+          </div>
+          {onOpenHistory && (
+            <button
+              type="button"
+              onClick={onOpenHistory}
+              className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border text-muted hover:border-brand hover:text-ink"
+              aria-label="View past runs"
+              title="Past runs"
+            >
+              <HistoryClockIcon />
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="ui-panel p-6">
@@ -76,4 +93,19 @@ function formatRunAt(iso: string): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function HistoryClockIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden>
+      <circle cx="8" cy="8" r="6.25" stroke="currentColor" strokeWidth="1.25" />
+      <path
+        d="M8 5v3.25l2 1.25"
+        stroke="currentColor"
+        strokeWidth="1.25"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
 }

@@ -7,6 +7,7 @@ import type { ScanProgressPhase } from "@/lib/engine/scan-worker-client";
 export interface IndicatorWorkerScanOptions {
   universe: string[];
   pattern: PatternDefinition;
+  filterKey: string;
   filterName: string;
   filterDescription: string;
   timeframeMode: ExploreTimeframeMode;
@@ -33,6 +34,7 @@ export async function runIndicatorScanInWorker(
   const {
     universe,
     pattern,
+    filterKey,
     filterName,
     filterDescription,
     timeframeMode,
@@ -83,6 +85,7 @@ export async function runIndicatorScanInWorker(
       universe,
       priceData,
       pattern,
+      filterKey,
       filterName,
       filterDescription,
       timeframeMode,

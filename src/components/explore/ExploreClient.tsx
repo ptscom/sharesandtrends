@@ -16,6 +16,7 @@ import {
   ExplorationBuilderModal,
   ExplorationPresetSettingsModal,
 } from "@/components/explore/ExplorationBuilderModal";
+import { ExplorationRunHistoryModal } from "@/components/explore/ExplorationRunHistoryModal";
 import { ExploreMtfStrategySelector, type MtfSlotSelection } from "@/components/explore/ExploreMtfStrategySelector";
 import { ExplorePriceCacheFooter } from "@/components/explore/ExplorePriceCacheFooter";
 import { ExploreScanResultsPanel } from "@/components/explore/ExploreScanResultsPanel";
@@ -52,6 +53,7 @@ import {
   describeExplorationFilter,
   explorationFilterToPattern,
 } from "@/lib/explore/exploration-to-pattern";
+import { explorationFilterKey } from "@/lib/explore/exploration-filter-key";
 import type { ExplorePath } from "@/lib/explore/indicator-models";
 import { patternToPreset } from "@/lib/patterns/custom";
 import { EMA_CROSS_PATTERN } from "@/lib/patterns/defaults";
@@ -83,6 +85,7 @@ import {
   listExplorations,
   saveExploration,
 } from "@/lib/storage/explorations";
+import { saveIndicatorScanRun } from "@/lib/storage/indicator-scans";
 import { listSymbols } from "@/lib/storage/prices";
 import {
   countSelectedSymbols,
@@ -131,6 +134,9 @@ export function ExploreClient() {
     useState<ExplorationFilterId>("all");
   const [presetSettingsId, setPresetSettingsId] = useState<string | null>(null);
   const [builderOpen, setBuilderOpen] = useState(false);
+  const [runHistoryOpen, setRunHistoryOpen] = useState(false);
+  const [runHistoryFilterKey, setRunHistoryFilterKey] = useState("");
+  const [runHistoryFilterName, setRunHistoryFilterName] = useState("");
   const [savedExplorations, setSavedExplorations] = useState<
     SavedExploration[]
   >([]);
@@ -350,6 +356,22 @@ export function ExploreClient() {
     },
     [activateExplorationPath, explorationTimeframeMode, reloadSavedExplorations],
   );
+
+  const openExplorationHistory = useCallback(
+    (filterKey: string, filterName: string) => {
+      setRunHistoryFilterKey(filterKey);
+      setRunHistoryFilterName(filterName);
+      setRunHistoryOpen(true);
+    },
+    [],
+  );
+
+  const viewHistoricalExplorationRun = useCallback((run: IndicatorScanRun) => {
+    setIndicatorScan(run);
+    setScan(null);
+    setLastScanPath("indicator");
+    setLabView("results");
+  }, []);
 
   const selectStrategy = useCallback(
     async (preset: StrategyPreset) => {
@@ -607,9 +629,11 @@ export function ExploreClient() {
 
       try {
         const patternForScan = explorationFilterToPattern(explorationFilter);
+        const filterKey = explorationFilterKey(explorationFilter);
         const result = await runIndicatorScanInWorker({
           universe,
           pattern: patternForScan,
+          filterKey,
           filterName: explorationFilter.name,
           filterDescription: describeExplorationFilter(explorationFilter),
           timeframeMode: explorationFilter.timeframeMode,
@@ -619,6 +643,7 @@ export function ExploreClient() {
           },
         });
 
+        await saveIndicatorScanRun(result);
         setIndicatorScan(result);
         setScan(null);
         setLastScanPath("indicator");
@@ -801,6 +826,7 @@ export function ExploreClient() {
                 onSelectSaved={selectSavedExploration}
                 onDeleteSaved={(id) => void handleDeleteSavedExploration(id)}
                 onOpenPresetSettings={openExplorationPresetSettings}
+                onOpenHistory={openExplorationHistory}
                 onOpenBuilder={() => {
                   activateExplorationPath();
                   setBuilderOpen(true);
@@ -876,7 +902,15 @@ export function ExploreClient() {
           )}
 
           {labView === "results" && lastScanPath === "indicator" && indicatorScan && (
-            <ExploreIndicatorResultsPanel scan={indicatorScan} />
+            <ExploreIndicatorResultsPanel
+              scan={indicatorScan}
+              onOpenHistory={() =>
+                openExplorationHistory(
+                  indicatorScan.filterKey,
+                  indicatorScan.filterName,
+                )
+              }
+            />
           )}
         </main>
       </div>
@@ -925,6 +959,14 @@ export function ExploreClient() {
           }}
         />
       )}
+
+      <ExplorationRunHistoryModal
+        open={runHistoryOpen}
+        filterKey={runHistoryFilterKey}
+        filterName={runHistoryFilterName}
+        onClose={() => setRunHistoryOpen(false)}
+        onSelectRun={viewHistoricalExplorationRun}
+      />
 
       <ExplorationBuilderModal
         open={builderOpen}

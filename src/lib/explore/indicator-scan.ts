@@ -12,6 +12,7 @@ export interface IndicatorScanCoreOptions {
   universe: string[];
   priceData: Record<string, OhlcvBar[]>;
   pattern: PatternDefinition;
+  filterKey: string;
   filterName: string;
   filterDescription: string;
   timeframeMode: ExploreTimeframeMode;
@@ -61,6 +62,7 @@ export function runIndicatorScanCore(
     universe,
     priceData,
     pattern,
+    filterKey,
     filterName,
     filterDescription,
     timeframeMode,
@@ -76,6 +78,7 @@ export function runIndicatorScanCore(
   return {
     id: uuidv4(),
     runAt: new Date().toISOString(),
+    filterKey: options.filterKey,
     universe,
     filterName,
     filterDescription,
