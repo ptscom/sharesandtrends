@@ -2,7 +2,10 @@
 
 import Link from "next/link";
 import { formatTimeframeModeLabel } from "@/lib/patterns/mtf-combine";
-import type { IndicatorScanRun } from "@/lib/explore/exploration-models";
+import type {
+  HorizonStats,
+  IndicatorScanRun,
+} from "@/lib/explore/exploration-models";
 
 interface ExploreIndicatorResultsPanelProps {
   scan: IndicatorScanRun;
@@ -48,18 +51,21 @@ export function ExploreIndicatorResultsPanel({
           </p>
         ) : (
           <div className="overflow-x-auto rounded-xl border border-border-subtle">
-            <table className="ui-table min-w-[480px]">
+            <table className="ui-table min-w-[720px]">
               <thead>
                 <tr>
                   <th>Symbol</th>
                   <th>Signal</th>
                   <th>Last close</th>
+                  <th>3d return</th>
+                  <th>5d return</th>
+                  <th>10d return</th>
                 </tr>
               </thead>
               <tbody>
                 {scan.results.map((row) => (
                   <tr key={row.symbol}>
-                    <td className="px-4">
+                    <td className="px-4 align-top">
                       <Link
                         href={`/symbol/${row.symbol}`}
                         className="font-mono text-sm font-semibold text-brand-text hover:underline"
@@ -67,14 +73,17 @@ export function ExploreIndicatorResultsPanel({
                         {row.symbol}
                       </Link>
                     </td>
-                    <td className="px-4">
+                    <td className="px-4 align-top">
                       <span className="ui-badge bg-brand-light text-brand-text">
                         Today
                       </span>
                     </td>
-                    <td className="px-4 tabular-nums">
+                    <td className="px-4 align-top tabular-nums">
                       {row.lastClose.toFixed(2)}
                     </td>
+                    <HorizonCell stats={row.horizons?.d3} />
+                    <HorizonCell stats={row.horizons?.d5} />
+                    <HorizonCell stats={row.horizons?.d10} />
                   </tr>
                 ))}
               </tbody>
@@ -83,6 +92,34 @@ export function ExploreIndicatorResultsPanel({
         )}
       </div>
     </section>
+  );
+}
+
+function HorizonCell({ stats }: { stats?: HorizonStats }) {
+  if (!stats || stats.trades === 0) {
+    return (
+      <td className="px-4 align-top tabular-nums text-muted">
+        <span>—</span>
+      </td>
+    );
+  }
+
+  const positive = stats.avgReturnPct >= 0;
+
+  return (
+    <td className="px-4 align-top tabular-nums">
+      <div
+        className={`text-sm font-medium ${
+          positive ? "text-success" : "text-danger"
+        }`}
+      >
+        {positive ? "+" : ""}
+        {stats.avgReturnPct.toFixed(2)}%
+      </div>
+      <div className="mt-0.5 text-[11px] text-muted">
+        {stats.winRate.toFixed(0)}% win
+      </div>
+    </td>
   );
 }
 

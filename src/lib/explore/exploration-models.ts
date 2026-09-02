@@ -96,11 +96,23 @@ export interface SavedExploration {
   updatedAt: string;
 }
 
+export interface HorizonStats {
+  avgReturnPct: number;
+  winRate: number;
+  trades: number;
+}
+
 export interface IndicatorScanResultRow {
   symbol: string;
   signalDate: string | null;
   signalToday: boolean;
   lastClose: number;
+  /** Historical backtest stats for fixed hold periods */
+  horizons?: {
+    d3: HorizonStats;
+    d5: HorizonStats;
+    d10: HorizonStats;
+  };
 }
 
 export interface IndicatorScanRun {
