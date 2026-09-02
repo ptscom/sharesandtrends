@@ -22,7 +22,6 @@ import {
   getIndicatorRole,
   groupedIndicatorsForPicker,
   indicatorHasSource,
-  indicatorPickerLabel,
   indicatorSourceOptions,
   INDICATOR_SHORT_NAMES,
   normalizeBuilderState,
