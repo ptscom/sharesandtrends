@@ -1,11 +1,15 @@
 "use client";
 
 import Link from "next/link";
+import { useMemo, useState } from "react";
 import { formatTimeframeModeLabel } from "@/lib/patterns/mtf-combine";
 import type {
   HorizonStats,
+  IndicatorScanResultRow,
   IndicatorScanRun,
 } from "@/lib/explore/exploration-models";
+
+type SortMode = "performance" | "symbol";
 
 interface ExploreIndicatorResultsPanelProps {
   scan: IndicatorScanRun;
@@ -16,6 +20,28 @@ export function ExploreIndicatorResultsPanel({
   scan,
   onOpenHistory,
 }: ExploreIndicatorResultsPanelProps) {
+  const [sortMode, setSortMode] = useState<SortMode>("performance");
+  const [symbolAsc, setSymbolAsc] = useState(true);
+
+  const sortedResults = useMemo(
+    () => sortExplorationResults(scan.results, sortMode, symbolAsc),
+    [scan.results, sortMode, symbolAsc],
+  );
+
+  const cycleSymbolSort = () => {
+    if (sortMode === "performance") {
+      setSortMode("symbol");
+      setSymbolAsc(true);
+      return;
+    }
+    if (symbolAsc) {
+      setSymbolAsc(false);
+      return;
+    }
+    setSortMode("performance");
+    setSymbolAsc(true);
+  };
+
   return (
     <section className="space-y-6">
       <div className="ui-panel p-6">
@@ -54,7 +80,35 @@ export function ExploreIndicatorResultsPanel({
             <table className="ui-table min-w-[720px]">
               <thead>
                 <tr>
-                  <th>Symbol</th>
+                  <th className="px-4">
+                    <button
+                      type="button"
+                      onClick={cycleSymbolSort}
+                      className={`inline-flex items-center gap-1 font-semibold transition hover:text-brand-text ${
+                        sortMode === "symbol" ? "text-brand-text" : ""
+                      }`}
+                      aria-label={
+                        sortMode === "performance"
+                          ? "Sort by symbol A to Z"
+                          : sortMode === "symbol" && symbolAsc
+                            ? "Sort by symbol Z to A"
+                            : "Sort by best 3d, 5d, 10d return"
+                      }
+                      title={
+                        sortMode === "performance"
+                          ? "Sort by symbol"
+                          : sortMode === "symbol" && symbolAsc
+                            ? "Symbol Z–A"
+                            : "Best fit (3d → 5d → 10d)"
+                      }
+                    >
+                      Symbol
+                      <SortArrow
+                        active={sortMode === "symbol"}
+                        asc={symbolAsc}
+                      />
+                    </button>
+                  </th>
                   <th>Signal</th>
                   <th>Last close</th>
                   <th>3d return</th>
@@ -63,7 +117,7 @@ export function ExploreIndicatorResultsPanel({
                 </tr>
               </thead>
               <tbody>
-                {scan.results.map((row) => (
+                {sortedResults.map((row) => (
                   <tr key={row.symbol}>
                     <td className="px-4 align-top">
                       <Link
@@ -95,6 +149,42 @@ export function ExploreIndicatorResultsPanel({
   );
 }
 
+function sortExplorationResults(
+  rows: IndicatorScanResultRow[],
+  sortMode: SortMode,
+  symbolAsc: boolean,
+): IndicatorScanResultRow[] {
+  const sorted = [...rows];
+
+  if (sortMode === "symbol") {
+    sorted.sort((a, b) => {
+      const cmp = a.symbol.localeCompare(b.symbol);
+      return symbolAsc ? cmp : -cmp;
+    });
+    return sorted;
+  }
+
+  sorted.sort((a, b) => {
+    const d3 = compareHorizonReturn(b, a, "d3");
+    if (d3 !== 0) return d3;
+    const d5 = compareHorizonReturn(b, a, "d5");
+    if (d5 !== 0) return d5;
+    return compareHorizonReturn(b, a, "d10");
+  });
+
+  return sorted;
+}
+
+function compareHorizonReturn(
+  a: IndicatorScanResultRow,
+  b: IndicatorScanResultRow,
+  key: "d3" | "d5" | "d10",
+): number {
+  const aReturn = a.horizons?.[key]?.avgReturnPct ?? Number.NEGATIVE_INFINITY;
+  const bReturn = b.horizons?.[key]?.avgReturnPct ?? Number.NEGATIVE_INFINITY;
+  return aReturn - bReturn;
+}
+
 function HorizonCell({ stats }: { stats?: HorizonStats }) {
   if (!stats || stats.trades === 0) {
     return (
@@ -117,9 +207,40 @@ function HorizonCell({ stats }: { stats?: HorizonStats }) {
         {stats.avgReturnPct.toFixed(2)}%
       </div>
       <div className="mt-0.5 text-[11px] text-muted">
-        {stats.winRate.toFixed(0)}% win
+        {stats.winRate.toFixed(0)}% ({stats.trades})
       </div>
     </td>
+  );
+}
+
+function SortArrow({ active, asc }: { active: boolean; asc: boolean }) {
+  return (
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 12 12"
+      fill="none"
+      className={`shrink-0 ${active ? "text-brand-text" : "text-muted"}`}
+      aria-hidden
+    >
+      {asc ? (
+        <path
+          d="M6 2.5v7M6 2.5L3.5 5M6 2.5L8.5 5"
+          stroke="currentColor"
+          strokeWidth="1.25"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      ) : (
+        <path
+          d="M6 9.5v-7M6 9.5L3.5 7M6 9.5L8.5 7"
+          stroke="currentColor"
+          strokeWidth="1.25"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      )}
+    </svg>
   );
 }
 
