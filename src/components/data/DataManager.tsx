@@ -2,8 +2,9 @@
 
 import { useCallback, useState } from "react";
 import { DEFAULT_WATCHLIST } from "@/lib/data/default-universe";
-import { mergePriceBars } from "@/lib/storage/prices";
-import type { OhlcvBar } from "@/lib/types";
+import { fetchPriceBars } from "@/lib/data/fetch-prices-client";
+import { findStaleSymbols, type StaleSymbolJob } from "@/lib/data/stale-symbols";
+import { listSymbolInventory, mergePriceBars } from "@/lib/storage/prices";
 import { StoredDataInventory } from "./StoredDataInventory";
 
 interface FetchResult {
@@ -12,9 +13,12 @@ interface FetchResult {
   error?: string;
 }
 
+const FETCH_DELAY_MS = 250;
+
 export function DataManager() {
   const [symbols, setSymbols] = useState(DEFAULT_WATCHLIST.join(", "));
   const [loading, setLoading] = useState(false);
+  const [fixing, setFixing] = useState(false);
   const [progress, setProgress] = useState({ done: 0, total: 0 });
   const [results, setResults] = useState<FetchResult[]>([]);
   const [customSymbol, setCustomSymbol] = useState("");
@@ -24,52 +28,149 @@ export function DataManager() {
     setInventoryRefreshKey((key) => key + 1);
   }, []);
 
-  const fetchSymbol = useCallback(async (symbol: string): Promise<FetchResult> => {
-    try {
-      const res = await fetch(`/api/prices/${symbol}?range=10y`);
-      const data = await res.json();
-      if (!res.ok) {
-        return { symbol, count: 0, error: data.error ?? "Failed" };
-      }
-      await mergePriceBars(symbol, data.bars as OhlcvBar[]);
-      return { symbol, count: data.count as number };
-    } catch (e) {
-      return {
-        symbol,
-        count: 0,
-        error: e instanceof Error ? e.message : "Failed",
-      };
-    }
-  }, []);
-
-  const runFetch = useCallback(
-    async (list: string[]) => {
+  const runFetchJob = useCallback(
+    async (
+      jobs: Array<{
+        symbol: string;
+        options: { range?: string; from?: string; to?: string };
+      }>,
+    ) => {
       setLoading(true);
       setResults([]);
-      setProgress({ done: 0, total: list.length });
+      setProgress({ done: 0, total: jobs.length });
       const out: FetchResult[] = [];
 
-      for (let i = 0; i < list.length; i++) {
-        const symbol = list[i]!.trim().toUpperCase();
-        if (!symbol) continue;
-        const result = await fetchSymbol(symbol);
-        out.push(result);
+      for (let i = 0; i < jobs.length; i++) {
+        const { symbol, options } = jobs[i]!;
+        const fetched = await fetchPriceBars(symbol, options);
+        if (fetched.error) {
+          out.push({ symbol, count: 0, error: fetched.error });
+        } else {
+          await mergePriceBars(symbol, fetched.bars);
+          out.push({ symbol, count: fetched.count });
+        }
+
         setResults([...out]);
-        setProgress({ done: i + 1, total: list.length });
-        await new Promise((r) => setTimeout(r, 300));
+        setProgress({ done: i + 1, total: jobs.length });
+        if (i < jobs.length - 1) {
+          await new Promise((r) => setTimeout(r, FETCH_DELAY_MS));
+        }
       }
 
       setLoading(false);
       refreshInventory();
     },
-    [fetchSymbol, refreshInventory],
+    [refreshInventory],
   );
+
+  const runDownload = useCallback(
+    (list: string[]) =>
+      runFetchJob(
+        list
+          .map((s) => s.trim().toUpperCase())
+          .filter(Boolean)
+          .map((symbol) => ({ symbol, options: { range: "10y" } })),
+      ),
+    [runFetchJob],
+  );
+
+  const runFixJob = useCallback(
+    async (jobs: StaleSymbolJob[]) => {
+      const fetchOne = async (job: StaleSymbolJob): Promise<FetchResult> => {
+        const fetched = job.fullDownload
+          ? await fetchPriceBars(job.symbol, { range: "10y" })
+          : await fetchPriceBars(job.symbol, {
+              from: job.fetchFrom,
+              to: job.fetchTo,
+            });
+
+        if (fetched.error) {
+          return { symbol: job.symbol, count: 0, error: fetched.error };
+        }
+
+        await mergePriceBars(job.symbol, fetched.bars);
+        return { symbol: job.symbol, count: fetched.count };
+      };
+
+      setFixing(true);
+      setLoading(true);
+      setResults([]);
+      setProgress({ done: 0, total: jobs.length });
+      const out: FetchResult[] = [];
+
+      for (let i = 0; i < jobs.length; i++) {
+        const job = jobs[i]!;
+        out.push(await fetchOne(job));
+        setResults([...out]);
+        setProgress({ done: i + 1, total: jobs.length });
+        if (i < jobs.length - 1) {
+          await new Promise((r) => setTimeout(r, FETCH_DELAY_MS));
+        }
+      }
+
+      const failedJobs = jobs.filter(
+        (job) => out.find((row) => row.symbol === job.symbol)?.error,
+      );
+      if (failedJobs.length > 0) {
+        setProgress({ done: 0, total: failedJobs.length });
+        for (let i = 0; i < failedJobs.length; i++) {
+          const job = failedJobs[i]!;
+          const retry = await fetchOne(job);
+          const index = out.findIndex((row) => row.symbol === retry.symbol);
+          if (index >= 0) out[index] = retry;
+          setResults([...out]);
+          setProgress({ done: i + 1, total: failedJobs.length });
+          if (i < failedJobs.length - 1) {
+            await new Promise((r) => setTimeout(r, FETCH_DELAY_MS));
+          }
+        }
+      }
+
+      setLoading(false);
+      setFixing(false);
+      refreshInventory();
+    },
+    [refreshInventory],
+  );
+
+  const runFixData = useCallback(async () => {
+    const inventory = await listSymbolInventory();
+    const analysis = findStaleSymbols(inventory);
+
+    if (analysis.stale.length === 0) {
+      window.alert("All symbols already end on the latest date in your list.");
+      return;
+    }
+
+    const preview = analysis.stale
+      .slice(0, 5)
+      .map((job) => job.symbol)
+      .join(", ");
+    const suffix =
+      analysis.stale.length > 5
+        ? ` and ${analysis.stale.length - 5} more`
+        : "";
+
+    if (
+      !window.confirm(
+        `${analysis.stale.length} symbol(s) end before ${analysis.referenceLatest}. Re-download missing data for: ${preview}${suffix}?`,
+      )
+    ) {
+      return;
+    }
+
+    await runFixJob(analysis.stale);
+  }, [runFixJob]);
+
+  const busy = loading || fixing;
 
   return (
     <div className="space-y-8">
       <StoredDataInventory
         refreshKey={inventoryRefreshKey}
         onChanged={refreshInventory}
+        onFixData={() => void runFixData()}
+        fixing={fixing}
       />
 
       <section className="ui-panel p-6">
@@ -93,18 +194,18 @@ export function DataManager() {
         <div className="mt-4 flex flex-wrap gap-3">
           <button
             type="button"
-            disabled={loading}
+            disabled={busy}
             onClick={() =>
-              runFetch(symbols.split(",").map((s) => s.trim()).filter(Boolean))
+              runDownload(symbols.split(",").map((s) => s.trim()).filter(Boolean))
             }
             className="ui-btn-primary disabled:opacity-50"
           >
-            {loading ? "Downloading…" : "Download to browser"}
+            {loading && !fixing ? "Downloading…" : "Download to browser"}
           </button>
           <button
             type="button"
-            disabled={loading}
-            onClick={() => runFetch(DEFAULT_WATCHLIST)}
+            disabled={busy}
+            onClick={() => runDownload(DEFAULT_WATCHLIST)}
             className="ui-btn-secondary disabled:opacity-50"
           >
             Quick: default watchlist ({DEFAULT_WATCHLIST.length})
@@ -113,7 +214,8 @@ export function DataManager() {
 
         {loading && (
           <p className="ui-helper mt-4">
-            Progress: {progress.done} / {progress.total}
+            {fixing ? "Fixing data" : "Progress"}: {progress.done} /{" "}
+            {progress.total}
           </p>
         )}
       </section>
@@ -130,8 +232,8 @@ export function DataManager() {
           />
           <button
             type="button"
-            disabled={loading || !customSymbol}
-            onClick={() => runFetch([customSymbol])}
+            disabled={busy || !customSymbol}
+            onClick={() => runDownload([customSymbol])}
             className="ui-btn-primary disabled:opacity-50"
           >
             Fetch
@@ -141,7 +243,9 @@ export function DataManager() {
 
       {results.length > 0 && (
         <section className="ui-panel p-6">
-          <h2 className="ui-section-title">Download results</h2>
+          <h2 className="ui-section-title">
+            {fixing ? "Fix data results" : "Download results"}
+          </h2>
           <div className="mt-4 max-h-80 overflow-auto">
             <table className="w-full text-left text-sm">
               <thead>
