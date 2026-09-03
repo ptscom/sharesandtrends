@@ -10,10 +10,13 @@ import {
   listSymbolInventory,
   type SymbolInventoryRow,
 } from "@/lib/storage/prices";
+import { findStaleSymbols } from "@/lib/data/stale-symbols";
 
 interface StoredDataInventoryProps {
   refreshKey: number;
   onChanged?: () => void;
+  onFixData?: () => void;
+  fixing?: boolean;
 }
 
 function formatDate(value: string | null): string {
@@ -29,6 +32,8 @@ function formatUpdated(value: string | null): string {
 export function StoredDataInventory({
   refreshKey,
   onChanged,
+  onFixData,
+  fixing = false,
 }: StoredDataInventoryProps) {
   const [rows, setRows] = useState<SymbolInventoryRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -71,6 +76,9 @@ export function StoredDataInventory({
     const toDates = rows
       .map((row) => row.toDate)
       .filter((d): d is string => Boolean(d));
+    const latest =
+      toDates.length > 0 ? toDates.reduce((a, b) => (a > b ? a : b)) : null;
+    const staleAnalysis = findStaleSymbols(rows);
     return {
       symbolCount: rows.length,
       totalBars,
@@ -78,8 +86,8 @@ export function StoredDataInventory({
         fromDates.length > 0
           ? fromDates.reduce((a, b) => (a < b ? a : b))
           : null,
-      latest:
-        toDates.length > 0 ? toDates.reduce((a, b) => (a > b ? a : b)) : null,
+      latest,
+      staleCount: staleAnalysis.stale.length,
     };
   }, [rows]);
 
@@ -265,10 +273,22 @@ export function StoredDataInventory({
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
+          {summary.staleCount > 0 && onFixData && (
+            <button
+              type="button"
+              onClick={onFixData}
+              disabled={loading || busy !== null || fixing}
+              className="ui-btn-primary disabled:opacity-50"
+            >
+              {fixing
+                ? "Fixing data…"
+                : `Fix data (${summary.staleCount} behind)`}
+            </button>
+          )}
           <button
             type="button"
             onClick={() => void loadInventory()}
-            disabled={loading || busy !== null}
+            disabled={loading || busy !== null || fixing}
             className="ui-btn-secondary disabled:opacity-50"
           >
             Refresh
@@ -296,7 +316,7 @@ export function StoredDataInventory({
         </div>
       </div>
 
-      <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
         <SummaryStat label="Symbols" value={summary.symbolCount.toString()} />
         <SummaryStat
           label="Total bars"
@@ -304,7 +324,20 @@ export function StoredDataInventory({
         />
         <SummaryStat label="Earliest" value={formatDate(summary.earliest)} />
         <SummaryStat label="Latest" value={formatDate(summary.latest)} />
+        <SummaryStat
+          label="Behind latest"
+          value={summary.staleCount.toString()}
+        />
       </div>
+
+      {summary.staleCount > 0 && (
+        <p className="ui-helper mt-4 rounded-xl border border-brand/20 bg-brand/5 px-4 py-3">
+          {summary.staleCount} symbol{summary.staleCount === 1 ? "" : "s"} end
+          before the latest date ({formatDate(summary.latest)}). Use{" "}
+          <strong>Fix data</strong> to re-download the missing range for each
+          symbol and retry any failures.
+        </p>
+      )}
 
       {error && (
         <p className="mt-4 rounded-xl bg-danger-light px-4 py-3 text-sm text-danger">
@@ -346,9 +379,18 @@ export function StoredDataInventory({
               </tr>
             </thead>
             <tbody>
-              {rows.map((row) => (
+              {rows.map((row) => {
+                const isStale =
+                  summary.latest !== null &&
+                  (row.toDate === null || row.toDate < summary.latest);
+
+                return (
                 <Fragment key={row.symbol}>
-                  <tr className="border-b border-border/40">
+                  <tr
+                    className={`border-b border-border/40 ${
+                      isStale ? "bg-brand/5" : ""
+                    }`}
+                  >
                     <td className="py-3 pr-2">
                       <input
                         type="checkbox"
@@ -364,7 +406,15 @@ export function StoredDataInventory({
                     </td>
                     <td className="py-3 pr-4">{row.barCount.toLocaleString()}</td>
                     <td className="py-3 pr-4">{formatDate(row.fromDate)}</td>
-                    <td className="py-3 pr-4">{formatDate(row.toDate)}</td>
+                    <td className="py-3 pr-4">
+                      <span
+                        className={
+                          isStale ? "font-medium text-brand-text" : undefined
+                        }
+                      >
+                        {formatDate(row.toDate)}
+                      </span>
+                    </td>
                     <td className="py-3 pr-4 text-muted">
                       {formatUpdated(row.lastUpdated)}
                     </td>
@@ -457,7 +507,8 @@ export function StoredDataInventory({
                     </tr>
                   )}
                 </Fragment>
-              ))}
+              );
+              })}
             </tbody>
           </table>
         </div>
