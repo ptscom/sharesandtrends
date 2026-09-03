@@ -14,11 +14,15 @@ type SortMode = "performance" | "symbol";
 interface ExploreIndicatorResultsPanelProps {
   scan: IndicatorScanRun;
   onOpenHistory?: () => void;
+  onBack?: () => void;
+  backLabel?: string;
 }
 
 export function ExploreIndicatorResultsPanel({
   scan,
   onOpenHistory,
+  onBack,
+  backLabel = "Back to consolidated report",
 }: ExploreIndicatorResultsPanelProps) {
   const [sortMode, setSortMode] = useState<SortMode>("performance");
   const [symbolAsc, setSymbolAsc] = useState(true);
@@ -47,6 +51,15 @@ export function ExploreIndicatorResultsPanel({
       <div className="ui-panel p-6">
         <div className="flex items-start justify-between gap-3">
           <div>
+            {onBack && (
+              <button
+                type="button"
+                onClick={onBack}
+                className="mb-3 text-sm font-medium text-brand-text hover:underline"
+              >
+                ← {backLabel}
+              </button>
+            )}
             <p className="ui-eyebrow">Results</p>
             <h2 className="ui-section-title mt-2">Exploration results</h2>
             <p className="ui-helper mt-1">

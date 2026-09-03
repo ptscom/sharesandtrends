@@ -143,3 +143,12 @@ export function summarizeExplorationFilter(
   if (!filter) return "Not configured";
   return filter.name;
 }
+
+export function summarizeExplorationFilters(
+  filters: Record<string, ExplorationFilter>,
+): string {
+  const entries = Object.values(filters);
+  if (entries.length === 0) return "Not configured";
+  if (entries.length === 1) return entries[0]!.name;
+  return `${entries.length} explorations selected`;
+}

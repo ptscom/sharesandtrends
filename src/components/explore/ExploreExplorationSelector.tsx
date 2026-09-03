@@ -21,15 +21,14 @@ import {
 import { ExplorationHistoryIcon } from "@/components/explore/ExplorationRunHistoryModal";
 
 interface ExploreExplorationSelectorProps {
-  filter: ExplorationFilter | null;
-  selectedPresetId: string | null;
+  selectedFilters: Record<string, ExplorationFilter>;
   savedExplorations: SavedExploration[];
   query: string;
   categoryFilter: ExplorationFilterId;
   onQueryChange: (query: string) => void;
   onCategoryChange: (filter: ExplorationFilterId) => void;
-  onSelectPreset: (presetId: string) => void;
-  onSelectSaved: (savedId: string) => void;
+  onTogglePreset: (presetId: string) => void;
+  onToggleSaved: (savedId: string) => void;
   onDeleteSaved: (savedId: string) => void;
   onOpenPresetSettings: (presetId: string, e: MouseEvent) => void;
   onOpenHistory: (filterKey: string, filterName: string) => void;
@@ -38,15 +37,14 @@ interface ExploreExplorationSelectorProps {
 }
 
 export function ExploreExplorationSelector({
-  filter,
-  selectedPresetId,
+  selectedFilters,
   savedExplorations,
   query,
   categoryFilter,
   onQueryChange,
   onCategoryChange,
-  onSelectPreset,
-  onSelectSaved,
+  onTogglePreset,
+  onToggleSaved,
   onDeleteSaved,
   onOpenPresetSettings,
   onOpenHistory,
@@ -54,6 +52,7 @@ export function ExploreExplorationSelector({
   onEditBuilder,
 }: ExploreExplorationSelectorProps) {
   const q = query.trim().toLowerCase();
+  const selectedCount = Object.keys(selectedFilters).length;
   const presets = EXPLORATION_PRESETS.filter((preset) => {
     if (categoryFilter === "custom") return false;
     if (categoryFilter !== "all" && preset.category !== categoryFilter) {
@@ -81,9 +80,8 @@ export function ExploreExplorationSelector({
     );
   });
 
-  const activeDescription = filter ? describeExplorationFilter(filter) : null;
-  const isCustom = filter?.source === "builder";
-  const isSavedCustom = Boolean(filter?.savedId);
+  const selectedList = Object.values(selectedFilters);
+  const editingCustom = selectedList.find((item) => item.source === "builder");
 
   return (
     <section className="ui-panel p-6">
@@ -92,35 +90,47 @@ export function ExploreExplorationSelector({
           <p className="ui-eyebrow">Step 2</p>
           <h2 className="ui-section-title mt-2">Build exploration filter</h2>
           <p className="ui-helper mt-1">
-            Pick a preset exploration or build a custom filter. One filter scans
-            the universe and returns a single results table.
+            Select one or more explorations to run together. You&apos;ll get a
+            consolidated report first, then drill into each exploration&apos;s
+            symbol table.
           </p>
         </div>
         <button
           type="button"
-          onClick={isCustom ? onEditBuilder : onOpenBuilder}
+          onClick={editingCustom ? onEditBuilder : onOpenBuilder}
           className="ui-btn-secondary flex items-center gap-2"
         >
           <BuilderIcon />
-          {isCustom ? "Edit custom filter" : "Build custom"}
+          {editingCustom ? "Edit custom filter" : "Build custom"}
         </button>
       </div>
 
-      {filter && (
+      {selectedCount > 0 && (
         <div className="mt-4 rounded-xl border border-brand/30 bg-brand/5 p-4">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0 flex-1">
-              <p className="text-sm font-medium text-ink">Active filter</p>
-              <p className="mt-1 font-semibold text-brand-text">{filter.name}</p>
-              <p className="mt-0.5 text-sm text-muted">{activeDescription}</p>
-            </div>
-            <HistoryButton
-              label={`View past runs for ${filter.name}`}
-              onClick={() =>
-                onOpenHistory(explorationFilterKey(filter), filter.name)
-              }
-            />
-          </div>
+          <p className="text-sm font-medium text-ink">
+            {selectedCount} exploration{selectedCount === 1 ? "" : "s"} selected
+          </p>
+          <ul className="mt-2 space-y-2">
+            {selectedList.map((filter) => (
+              <li
+                key={explorationFilterKey(filter)}
+                className="flex items-start justify-between gap-3"
+              >
+                <div className="min-w-0">
+                  <p className="font-semibold text-brand-text">{filter.name}</p>
+                  <p className="mt-0.5 text-sm text-muted">
+                    {describeExplorationFilter(filter)}
+                  </p>
+                </div>
+                <HistoryButton
+                  label={`View past runs for ${filter.name}`}
+                  onClick={() =>
+                    onOpenHistory(explorationFilterKey(filter), filter.name)
+                  }
+                />
+              </li>
+            ))}
+          </ul>
         </div>
       )}
 
@@ -153,8 +163,8 @@ export function ExploreExplorationSelector({
           </p>
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {saved.map((item) => {
-              const isSelected =
-                isSavedCustom && filter?.savedId === item.id;
+              const filterKey = savedFilterKey(item.id);
+              const isSelected = Boolean(selectedFilters[filterKey]);
               const preview = describeBuilderState(item.builder);
               const style = explorationCategoryStyle("Custom");
 
@@ -170,22 +180,21 @@ export function ExploreExplorationSelector({
                   <div className="flex items-start gap-2.5">
                     <button
                       type="button"
-                      onClick={() => onSelectSaved(item.id)}
-                      className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
+                      onClick={() => onToggleSaved(item.id)}
+                      className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
                         isSelected
-                          ? "border-brand bg-brand"
+                          ? "border-brand bg-brand text-white"
                           : "border-border bg-surface"
                       }`}
-                      aria-label={`Select ${item.name}`}
+                      aria-label={`${isSelected ? "Deselect" : "Select"} ${item.name}`}
+                      aria-pressed={isSelected}
                     >
-                      {isSelected && (
-                        <span className="h-1.5 w-1.5 rounded-full bg-white" />
-                      )}
+                      {isSelected && <CheckIcon />}
                     </button>
                     <div className="min-w-0 flex-1">
                       <button
                         type="button"
-                        onClick={() => onSelectSaved(item.id)}
+                        onClick={() => onToggleSaved(item.id)}
                         className="text-left"
                       >
                         <p className="font-medium text-ink">{item.name}</p>
@@ -235,15 +244,15 @@ export function ExploreExplorationSelector({
       {categoryFilter !== "custom" && (
       <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {presets.map((preset) => {
+          const filterKey = presetFilterKey(preset.id);
+          const isSelected = Boolean(selectedFilters[filterKey]);
           const style = explorationCategoryStyle(preset.category);
-          const isSelected =
-            !isCustom &&
-            selectedPresetId === preset.id &&
-            filter !== null;
+          const selectedFilter = selectedFilters[filterKey];
           const preview = describePreset(
             preset,
-            filter?.source === "preset" && filter.presetId === preset.id
-              ? (filter.params ?? {})
+            selectedFilter?.source === "preset" &&
+              selectedFilter.presetId === preset.id
+              ? (selectedFilter.params ?? {})
               : Object.fromEntries(
                   preset.params.map((p) => [p.key, p.default]),
                 ),
@@ -261,22 +270,21 @@ export function ExploreExplorationSelector({
               <div className="flex items-start gap-2.5">
                 <button
                   type="button"
-                  onClick={() => onSelectPreset(preset.id)}
-                  className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${
+                  onClick={() => onTogglePreset(preset.id)}
+                  className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
                     isSelected
-                      ? "border-brand bg-brand"
+                      ? "border-brand bg-brand text-white"
                       : "border-border bg-surface"
                   }`}
-                  aria-label={`Select ${preset.name}`}
+                  aria-label={`${isSelected ? "Deselect" : "Select"} ${preset.name}`}
+                  aria-pressed={isSelected}
                 >
-                  {isSelected && (
-                    <span className="h-1.5 w-1.5 rounded-full bg-white" />
-                  )}
+                  {isSelected && <CheckIcon />}
                 </button>
                 <div className="min-w-0 flex-1">
                   <button
                     type="button"
-                    onClick={() => onSelectPreset(preset.id)}
+                    onClick={() => onTogglePreset(preset.id)}
                     className="text-left"
                   >
                     <p className="font-medium text-ink">{preset.name}</p>
@@ -324,6 +332,20 @@ export function ExploreExplorationSelector({
         </p>
       )}
     </section>
+  );
+}
+
+function CheckIcon() {
+  return (
+    <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden>
+      <path
+        d="M2 5.2 4.1 7.3 8 3.4"
+        stroke="currentColor"
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }
 

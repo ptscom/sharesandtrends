@@ -63,9 +63,10 @@ export function ExploreWorkflowSidebar({
         <>
           <p className="text-sm font-medium text-ink">How it works</p>
           <p className="mt-1 text-xs leading-relaxed text-body">
-            Pick symbols, then scan with an exploration filter or a strategy —
-            not both. Exploration scans show today&apos;s signal matches in one
-            table. Strategy scans rank symbols by backtest performance.
+            Pick symbols, then scan with one or more exploration filters or a
+            strategy — not both. Multi-exploration scans show a consolidated
+            report first, then per-exploration symbol tables. Strategy scans rank
+            symbols by backtest performance.
           </p>
         </>
       }

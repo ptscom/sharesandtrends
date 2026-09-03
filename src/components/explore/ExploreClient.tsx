@@ -11,6 +11,7 @@ import {
   type MouseEvent,
 } from "react";
 import { ExploreIndicatorResultsPanel } from "@/components/explore/ExploreIndicatorResultsPanel";
+import { ExploreConsolidatedResultsPanel } from "@/components/explore/ExploreConsolidatedResultsPanel";
 import { ExploreExplorationSelector } from "@/components/explore/ExploreExplorationSelector";
 import {
   ExplorationBuilderModal,
@@ -42,7 +43,7 @@ import type {
 } from "@/lib/explore/exploration-models";
 import {
   defaultParamsForPreset,
-  summarizeExplorationFilter,
+  summarizeExplorationFilters,
 } from "@/lib/explore/exploration-models";
 import {
   DEFAULT_EXPLORATION_PRESET_ID,
@@ -53,7 +54,11 @@ import {
   describeExplorationFilter,
   explorationFilterToPattern,
 } from "@/lib/explore/exploration-to-pattern";
-import { explorationFilterKey } from "@/lib/explore/exploration-filter-key";
+import {
+  explorationFilterKey,
+  presetFilterKey,
+  savedFilterKey,
+} from "@/lib/explore/exploration-filter-key";
 import type { ExplorePath } from "@/lib/explore/indicator-models";
 import { patternToPreset } from "@/lib/patterns/custom";
 import { EMA_CROSS_PATTERN } from "@/lib/patterns/defaults";
@@ -125,10 +130,18 @@ export function ExploreClient() {
   const [explorePath, setExplorePath] = useState<ExplorePath | null>(null);
   const [explorationTimeframeMode, setExplorationTimeframeMode] =
     useState<ExploreTimeframeMode>("1D");
-  const [explorationFilter, setExplorationFilter] =
-    useState<ExplorationFilter | null>(null);
-  const [selectedExplorationPresetId, setSelectedExplorationPresetId] =
-    useState<string | null>(DEFAULT_EXPLORATION_PRESET_ID);
+  const [selectedExplorationFilters, setSelectedExplorationFilters] =
+    useState<Record<string, ExplorationFilter>>(() => {
+      const preset = getExplorationPreset(DEFAULT_EXPLORATION_PRESET_ID)!;
+      const filter = {
+        source: "preset" as const,
+        name: preset.name,
+        timeframeMode: "1D" as ExploreTimeframeMode,
+        presetId: preset.id,
+        params: defaultParamsForPreset(preset),
+      };
+      return { [presetFilterKey(preset.id)]: filter };
+    });
   const [explorationQuery, setExplorationQuery] = useState("");
   const [explorationCategoryFilter, setExplorationCategoryFilter] =
     useState<ExplorationFilterId>("all");
@@ -140,9 +153,15 @@ export function ExploreClient() {
   const [savedExplorations, setSavedExplorations] = useState<
     SavedExploration[]
   >([]);
-  const [indicatorScan, setIndicatorScan] = useState<IndicatorScanRun | null>(
-    null,
-  );
+  const [indicatorScanBatch, setIndicatorScanBatch] = useState<
+    IndicatorScanRun[] | null
+  >(null);
+  const [explorationResultsView, setExplorationResultsView] = useState<
+    "consolidated" | "detail"
+  >("consolidated");
+  const [activeIndicatorScanId, setActiveIndicatorScanId] = useState<
+    string | null
+  >(null);
   const [lastScanPath, setLastScanPath] = useState<ExplorePath | null>(null);
 
   const [selectedId, setSelectedId] = useState("ema-cross");
@@ -228,7 +247,7 @@ export function ExploreClient() {
   const explorationSummary =
     explorePath === "strategy"
       ? "Not used"
-      : summarizeExplorationFilter(explorationFilter);
+      : summarizeExplorationFilters(selectedExplorationFilters);
 
   const scanSummary = `${minWinRate}% win · ${minTrades}+ trades${
     signalTodayOnly ? " · signal today" : ""
@@ -239,9 +258,21 @@ export function ExploreClient() {
       ? `Exploration: ${explorationSummary}`
       : strategyName;
 
+  const activeIndicatorScan = useMemo(() => {
+    if (!indicatorScanBatch || !activeIndicatorScanId) return null;
+    return (
+      indicatorScanBatch.find((run) => run.id === activeIndicatorScanId) ?? null
+    );
+  }, [indicatorScanBatch, activeIndicatorScanId]);
+
   const resultCount =
     lastScanPath === "indicator"
-      ? (indicatorScan?.results.length ?? 0)
+      ? explorationResultsView === "detail" && activeIndicatorScan
+        ? activeIndicatorScan.results.length
+        : (indicatorScanBatch?.reduce(
+            (sum, run) => sum + run.results.length,
+            0,
+          ) ?? 0)
       : (scan?.results.length ?? 0);
 
   const resolvePresetPattern = useCallback(
@@ -257,45 +288,47 @@ export function ExploreClient() {
 
   const activateStrategyPath = useCallback(() => {
     setExplorePath("strategy");
-    setExplorationFilter(null);
-    setSelectedExplorationPresetId(null);
+    setSelectedExplorationFilters({});
   }, []);
 
-  const activateExplorationPath = useCallback(
-    (filter?: ExplorationFilter) => {
-      setExplorePath("indicator");
-      if (filter) {
-        setExplorationFilter(filter);
-      } else if (!explorationFilter) {
-        const next = createDefaultExplorationFilter(explorationTimeframeMode);
-        setExplorationFilter(next);
-        setSelectedExplorationPresetId(DEFAULT_EXPLORATION_PRESET_ID);
-      }
-    },
-    [explorationFilter, explorationTimeframeMode],
-  );
+  const activateExplorationPath = useCallback(() => {
+    setExplorePath("indicator");
+    setSelectedExplorationFilters((prev) => {
+      if (Object.keys(prev).length > 0) return prev;
+      const preset = getExplorationPreset(DEFAULT_EXPLORATION_PRESET_ID)!;
+      const filter = createDefaultExplorationFilter(explorationTimeframeMode);
+      return { [presetFilterKey(preset.id)]: filter };
+    });
+  }, [explorationTimeframeMode]);
 
-  const selectExplorationPreset = useCallback(
+  const toggleExplorationPreset = useCallback(
     (presetId: string) => {
       const preset = getExplorationPreset(presetId);
       if (!preset) return;
 
-      const existingParams =
-        explorationFilter?.source === "preset" &&
-        explorationFilter.presetId === presetId
-          ? explorationFilter.params
-          : defaultParamsForPreset(preset);
+      const key = presetFilterKey(presetId);
+      setExplorePath("indicator");
 
-      activateExplorationPath({
-        source: "preset",
-        name: preset.name,
-        timeframeMode: explorationTimeframeMode,
-        presetId,
-        params: existingParams ?? defaultParamsForPreset(preset),
+      setSelectedExplorationFilters((prev) => {
+        if (prev[key]) {
+          const next = { ...prev };
+          delete next[key];
+          return next;
+        }
+
+        return {
+          ...prev,
+          [key]: {
+            source: "preset",
+            name: preset.name,
+            timeframeMode: explorationTimeframeMode,
+            presetId,
+            params: defaultParamsForPreset(preset),
+          },
+        };
       });
-      setSelectedExplorationPresetId(presetId);
     },
-    [activateExplorationPath, explorationFilter, explorationTimeframeMode],
+    [explorationTimeframeMode],
   );
 
   const reloadSavedExplorations = useCallback(async () => {
@@ -303,33 +336,48 @@ export function ExploreClient() {
     setSavedExplorations(list);
   }, []);
 
-  const selectSavedExploration = useCallback(
+  const toggleSavedExploration = useCallback(
     (savedId: string) => {
       const saved = savedExplorations.find((item) => item.id === savedId);
       if (!saved) return;
 
-      activateExplorationPath({
-        source: "builder",
-        name: saved.name,
-        savedId: saved.id,
-        timeframeMode: explorationTimeframeMode,
-        builder: saved.builder,
+      const key = savedFilterKey(savedId);
+      setExplorePath("indicator");
+
+      setSelectedExplorationFilters((prev) => {
+        if (prev[key]) {
+          const next = { ...prev };
+          delete next[key];
+          return next;
+        }
+        return {
+          ...prev,
+          [key]: {
+            source: "builder",
+            name: saved.name,
+            savedId: saved.id,
+            timeframeMode: explorationTimeframeMode,
+            builder: saved.builder,
+          },
+        };
       });
-      setSelectedExplorationPresetId(null);
     },
-    [activateExplorationPath, explorationTimeframeMode, savedExplorations],
+    [explorationTimeframeMode, savedExplorations],
   );
 
   const handleDeleteSavedExploration = useCallback(
     async (savedId: string) => {
       await deleteExploration(savedId);
       setSavedExplorations((prev) => prev.filter((item) => item.id !== savedId));
-      if (explorationFilter?.savedId === savedId) {
-        setExplorationFilter(null);
-        setSelectedExplorationPresetId(DEFAULT_EXPLORATION_PRESET_ID);
-      }
+      const key = savedFilterKey(savedId);
+      setSelectedExplorationFilters((prev) => {
+        if (!prev[key]) return prev;
+        const next = { ...prev };
+        delete next[key];
+        return next;
+      });
     },
-    [explorationFilter?.savedId],
+    [],
   );
 
   const handleAddToExploration = useCallback(
@@ -344,17 +392,21 @@ export function ExploreClient() {
         builder,
       });
       await reloadSavedExplorations();
-      activateExplorationPath({
-        source: "builder",
-        name: saved.name,
-        savedId: saved.id,
-        timeframeMode: explorationTimeframeMode,
-        builder: saved.builder,
-      });
-      setSelectedExplorationPresetId(null);
+      const key = savedFilterKey(saved.id);
+      setExplorePath("indicator");
+      setSelectedExplorationFilters((prev) => ({
+        ...prev,
+        [key]: {
+          source: "builder",
+          name: saved.name,
+          savedId: saved.id,
+          timeframeMode: explorationTimeframeMode,
+          builder: saved.builder,
+        },
+      }));
       setBuilderOpen(false);
     },
-    [activateExplorationPath, explorationTimeframeMode, reloadSavedExplorations],
+    [explorationTimeframeMode, reloadSavedExplorations],
   );
 
   const openExplorationHistory = useCallback(
@@ -367,7 +419,9 @@ export function ExploreClient() {
   );
 
   const viewHistoricalExplorationRun = useCallback((run: IndicatorScanRun) => {
-    setIndicatorScan(run);
+    setIndicatorScanBatch([run]);
+    setActiveIndicatorScanId(run.id);
+    setExplorationResultsView("detail");
     setScan(null);
     setLastScanPath("indicator");
     setLabView("results");
@@ -481,9 +535,13 @@ export function ExploreClient() {
   }, [searchParams]);
 
   useEffect(() => {
-    setExplorationFilter((prev) =>
-      prev ? { ...prev, timeframeMode: explorationTimeframeMode } : prev,
-    );
+    setSelectedExplorationFilters((prev) => {
+      const next: Record<string, ExplorationFilter> = {};
+      for (const [key, filter] of Object.entries(prev)) {
+        next[key] = { ...filter, timeframeMode: explorationTimeframeMode };
+      }
+      return next;
+    });
   }, [explorationTimeframeMode]);
 
   const openStrategySettings = (id: string, e: MouseEvent) => {
@@ -512,8 +570,9 @@ export function ExploreClient() {
   const openExplorationPresetSettings = (presetId: string, e: MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
-    if (selectedExplorationPresetId !== presetId) {
-      selectExplorationPreset(presetId);
+    const key = presetFilterKey(presetId);
+    if (!selectedExplorationFilters[key]) {
+      toggleExplorationPreset(presetId);
     }
     setPresetSettingsId(presetId);
   };
@@ -616,8 +675,9 @@ export function ExploreClient() {
     }
 
     if (explorePath === "indicator") {
-      if (!explorationFilter) {
-        setError("Select or build an exploration filter.");
+      const filters = Object.values(selectedExplorationFilters);
+      if (filters.length === 0) {
+        setError("Select at least one exploration filter.");
         setLabView("setup");
         setSetupStep("indicators");
         return;
@@ -625,26 +685,39 @@ export function ExploreClient() {
 
       setScanning(true);
       setScanPhase("scanning");
-      setScanProgress({ done: 0, total: universe.length });
+      setScanProgress({ done: 0, total: universe.length * filters.length });
 
       try {
-        const patternForScan = explorationFilterToPattern(explorationFilter);
-        const filterKey = explorationFilterKey(explorationFilter);
-        const result = await runIndicatorScanInWorker({
-          universe,
-          pattern: patternForScan,
-          filterKey,
-          filterName: explorationFilter.name,
-          filterDescription: describeExplorationFilter(explorationFilter),
-          timeframeMode: explorationFilter.timeframeMode,
-          onProgress: (done, total, phase) => {
-            setScanPhase(phase);
-            setScanProgress({ done, total });
-          },
-        });
+        const runs: IndicatorScanRun[] = [];
 
-        await saveIndicatorScanRun(result);
-        setIndicatorScan(result);
+        for (let index = 0; index < filters.length; index++) {
+          const filter = filters[index]!;
+          const patternForScan = explorationFilterToPattern(filter);
+          const filterKey = explorationFilterKey(filter);
+          const result = await runIndicatorScanInWorker({
+            universe,
+            pattern: patternForScan,
+            filterKey,
+            filterName: filter.name,
+            filterDescription: describeExplorationFilter(filter),
+            timeframeMode: filter.timeframeMode,
+            onProgress: (done, total, phase) => {
+              setScanPhase(phase);
+              const completedExplorations = index;
+              setScanProgress({
+                done: completedExplorations * universe.length + done,
+                total: universe.length * filters.length,
+              });
+            },
+          });
+
+          await saveIndicatorScanRun(result);
+          runs.push(result);
+        }
+
+        setIndicatorScanBatch(runs);
+        setActiveIndicatorScanId(null);
+        setExplorationResultsView("consolidated");
         setScan(null);
         setLastScanPath("indicator");
         setLabView("results");
@@ -699,7 +772,7 @@ export function ExploreClient() {
 
       await saveScanRun(result);
       setScan(result);
-      setIndicatorScan(null);
+      setIndicatorScanBatch(null);
       setLastScanPath("strategy");
       setLabView("results");
     } catch (err) {
@@ -713,7 +786,7 @@ export function ExploreClient() {
     storedSymbols,
     useAllStored,
     explorePath,
-    explorationFilter,
+    selectedExplorationFilters,
     buildPattern,
     timeframeMode,
     mtfSlots,
@@ -740,7 +813,8 @@ export function ExploreClient() {
     (symbolCount > 0 || storedSymbols.length > 0) &&
     explorePath !== null &&
     (explorePath === "strategy" ||
-      (explorePath === "indicator" && explorationFilter !== null));
+      (explorePath === "indicator" &&
+        Object.keys(selectedExplorationFilters).length > 0));
 
   const presetForSettings = presetSettingsId
     ? getExplorationPreset(presetSettingsId)
@@ -815,15 +889,14 @@ export function ExploreClient() {
                 onChange={setExplorationTimeframeMode}
               />
               <ExploreExplorationSelector
-                filter={explorationFilter}
-                selectedPresetId={selectedExplorationPresetId}
+                selectedFilters={selectedExplorationFilters}
                 savedExplorations={savedExplorations}
                 query={explorationQuery}
                 categoryFilter={explorationCategoryFilter}
                 onQueryChange={setExplorationQuery}
                 onCategoryChange={setExplorationCategoryFilter}
-                onSelectPreset={selectExplorationPreset}
-                onSelectSaved={selectSavedExploration}
+                onTogglePreset={toggleExplorationPreset}
+                onToggleSaved={toggleSavedExploration}
                 onDeleteSaved={(id) => void handleDeleteSavedExploration(id)}
                 onOpenPresetSettings={openExplorationPresetSettings}
                 onOpenHistory={openExplorationHistory}
@@ -901,17 +974,41 @@ export function ExploreClient() {
             <ExploreScanResultsPanel scan={scan} />
           )}
 
-          {labView === "results" && lastScanPath === "indicator" && indicatorScan && (
-            <ExploreIndicatorResultsPanel
-              scan={indicatorScan}
-              onOpenHistory={() =>
-                openExplorationHistory(
-                  indicatorScan.filterKey,
-                  indicatorScan.filterName,
-                )
-              }
-            />
-          )}
+          {labView === "results" &&
+            lastScanPath === "indicator" &&
+            indicatorScanBatch &&
+            explorationResultsView === "consolidated" && (
+              <ExploreConsolidatedResultsPanel
+                runs={indicatorScanBatch}
+                onSelectRun={(scanId) => {
+                  setActiveIndicatorScanId(scanId);
+                  setExplorationResultsView("detail");
+                }}
+              />
+            )}
+
+          {labView === "results" &&
+            lastScanPath === "indicator" &&
+            explorationResultsView === "detail" &&
+            activeIndicatorScan && (
+              <ExploreIndicatorResultsPanel
+                scan={activeIndicatorScan}
+                onBack={
+                  indicatorScanBatch && indicatorScanBatch.length > 1
+                    ? () => {
+                        setExplorationResultsView("consolidated");
+                        setActiveIndicatorScanId(null);
+                      }
+                    : undefined
+                }
+                onOpenHistory={() =>
+                  openExplorationHistory(
+                    activeIndicatorScan.filterKey,
+                    activeIndicatorScan.filterName,
+                  )
+                }
+              />
+            )}
         </main>
       </div>
 
@@ -937,24 +1034,33 @@ export function ExploreClient() {
           open={Boolean(presetSettingsId)}
           presetName={presetForSettings.name}
           params={
-            explorationFilter?.source === "preset" &&
-            explorationFilter.presetId === presetForSettings.id &&
-            explorationFilter.params
-              ? explorationFilter.params
-              : defaultParamsForPreset(presetForSettings)
+            presetForSettings
+              ? selectedExplorationFilters[presetFilterKey(presetForSettings.id)]
+                  ?.source === "preset" &&
+                selectedExplorationFilters[presetFilterKey(presetForSettings.id)]
+                  ?.params
+                ? selectedExplorationFilters[
+                    presetFilterKey(presetForSettings.id)
+                  ]!.params!
+                : defaultParamsForPreset(presetForSettings)
+              : {}
           }
           paramDefs={presetForSettings.params}
           description={presetForSettings.description}
           onClose={() => setPresetSettingsId(null)}
           onSave={(params) => {
-            activateExplorationPath({
-              source: "preset",
-              name: presetForSettings.name,
-              timeframeMode: explorationTimeframeMode,
-              presetId: presetForSettings.id,
-              params,
-            });
-            setSelectedExplorationPresetId(presetForSettings.id);
+            const key = presetFilterKey(presetForSettings.id);
+            setExplorePath("indicator");
+            setSelectedExplorationFilters((prev) => ({
+              ...prev,
+              [key]: {
+                source: "preset",
+                name: presetForSettings.name,
+                timeframeMode: explorationTimeframeMode,
+                presetId: presetForSettings.id,
+                params,
+              },
+            }));
             setPresetSettingsId(null);
           }}
         />
@@ -970,17 +1076,24 @@ export function ExploreClient() {
 
       <ExplorationBuilderModal
         open={builderOpen}
-        initial={
-          explorationFilter?.source === "builder"
-            ? (explorationFilter.builder ?? null)
-            : null
-        }
-        initialName={
-          explorationFilter?.source === "builder"
-            ? explorationFilter.name
-            : undefined
-        }
-        editingSavedId={explorationFilter?.savedId ?? null}
+        initial={(() => {
+          const custom = Object.values(selectedExplorationFilters).find(
+            (filter) => filter.source === "builder",
+          );
+          return custom?.builder ?? null;
+        })()}
+        initialName={(() => {
+          const custom = Object.values(selectedExplorationFilters).find(
+            (filter) => filter.source === "builder",
+          );
+          return custom?.name;
+        })()}
+        editingSavedId={(() => {
+          const custom = Object.values(selectedExplorationFilters).find(
+            (filter) => filter.source === "builder" && filter.savedId,
+          );
+          return custom?.savedId ?? null;
+        })()}
         onClose={() => setBuilderOpen(false)}
         onAdd={(name, builder, savedId) =>
           void handleAddToExploration(name, builder, savedId)
