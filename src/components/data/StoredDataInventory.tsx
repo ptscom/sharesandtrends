@@ -2,6 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import {
+  backfillSymbolSummaries,
   countBarsInRange,
   deleteAllPriceData,
   deletePriceBarsInRange,
@@ -10,6 +11,8 @@ import {
   listSymbolInventory,
   type SymbolInventoryRow,
 } from "@/lib/storage/prices";
+
+const PAGE_SIZE = 50;
 
 interface StoredDataInventoryProps {
   refreshKey: number;
@@ -41,6 +44,12 @@ export function StoredDataInventory({
   const [rangeCount, setRangeCount] = useState<number | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(0);
+  const [backfillProgress, setBackfillProgress] = useState<{
+    done: number;
+    total: number;
+  } | null>(null);
 
   const loadInventory = useCallback(async () => {
     setLoading(true);
@@ -52,9 +61,21 @@ export function StoredDataInventory({
         const symbols = new Set(inventory.map((row) => row.symbol));
         return new Set([...prev].filter((symbol) => symbols.has(symbol)));
       });
+      setLoading(false);
+
+      const needsBackfill = inventory.some((row) => row.needsBackfill);
+      if (!needsBackfill) return;
+
+      const total = inventory.filter((row) => row.needsBackfill).length;
+      setBackfillProgress({ done: 0, total });
+      await backfillSymbolSummaries((done, total) => {
+        setBackfillProgress(total > 0 ? { done, total } : null);
+      });
+      const refreshed = await listSymbolInventory();
+      setRows(refreshed);
+      setBackfillProgress(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load stored data");
-    } finally {
       setLoading(false);
     }
   }, []);
@@ -83,8 +104,28 @@ export function StoredDataInventory({
     };
   }, [rows]);
 
-  const allSelected = rows.length > 0 && selected.size === rows.length;
-  const someSelected = selected.size > 0 && !allSelected;
+  const filteredRows = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return rows;
+    return rows.filter((row) => row.symbol.toLowerCase().includes(q));
+  }, [rows, search]);
+
+  const pageCount = Math.max(1, Math.ceil(filteredRows.length / PAGE_SIZE));
+  const currentPage = Math.min(page, pageCount - 1);
+  const pageRows = useMemo(() => {
+    const start = currentPage * PAGE_SIZE;
+    return filteredRows.slice(start, start + PAGE_SIZE);
+  }, [filteredRows, currentPage]);
+
+  useEffect(() => {
+    setPage(0);
+  }, [search]);
+
+  const allSelected =
+    filteredRows.length > 0 &&
+    filteredRows.every((row) => selected.has(row.symbol));
+  const someSelected =
+    filteredRows.some((row) => selected.has(row.symbol)) && !allSelected;
 
   const toggleSymbol = (symbol: string) => {
     setSelected((prev) => {
@@ -97,10 +138,18 @@ export function StoredDataInventory({
 
   const toggleSelectAll = () => {
     if (allSelected) {
-      setSelected(new Set());
+      setSelected((prev) => {
+        const next = new Set(prev);
+        for (const row of filteredRows) next.delete(row.symbol);
+        return next;
+      });
       return;
     }
-    setSelected(new Set(rows.map((row) => row.symbol)));
+    setSelected((prev) => {
+      const next = new Set(prev);
+      for (const row of filteredRows) next.add(row.symbol);
+      return next;
+    });
   };
 
   const handleDeleteSelected = async () => {
@@ -306,6 +355,13 @@ export function StoredDataInventory({
         <SummaryStat label="Latest" value={formatDate(summary.latest)} />
       </div>
 
+      {backfillProgress && (
+        <p className="ui-helper mt-4">
+          Indexing stored symbols… {backfillProgress.done} /{" "}
+          {backfillProgress.total}
+        </p>
+      )}
+
       {error && (
         <p className="mt-4 rounded-xl bg-danger-light px-4 py-3 text-sm text-danger">
           {error}
@@ -320,33 +376,49 @@ export function StoredDataInventory({
           local database.
         </p>
       ) : (
-        <div className="mt-6 overflow-x-auto">
-          <table className="ui-table min-w-[48rem]">
-            <thead>
-              <tr className="border-b border-border text-muted">
-                <th className="w-10 py-2 pr-2">
-                  <input
-                    type="checkbox"
-                    checked={allSelected}
-                    ref={(el) => {
-                      if (el) el.indeterminate = someSelected;
-                    }}
-                    onChange={toggleSelectAll}
-                    disabled={busy !== null}
-                    aria-label="Select all symbols"
-                    className="h-4 w-4 rounded border-border"
-                  />
-                </th>
-                <th className="py-2 pr-4">Symbol</th>
-                <th className="py-2 pr-4">Bars</th>
-                <th className="py-2 pr-4">From</th>
-                <th className="py-2 pr-4">To</th>
-                <th className="py-2 pr-4">Last updated</th>
-                <th className="py-2">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((row) => (
+        <>
+          <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Search symbols…"
+              className="ui-input max-w-md"
+            />
+            <p className="text-sm text-muted">
+              Showing {pageRows.length} of {filteredRows.length}
+              {filteredRows.length !== rows.length
+                ? ` (filtered from ${rows.length})`
+                : ""}
+            </p>
+          </div>
+
+          <div className="mt-4 overflow-x-auto">
+            <table className="ui-table min-w-[48rem]">
+              <thead>
+                <tr className="border-b border-border text-muted">
+                  <th className="w-10 py-2 pr-2">
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      ref={(el) => {
+                        if (el) el.indeterminate = someSelected;
+                      }}
+                      onChange={toggleSelectAll}
+                      disabled={busy !== null || filteredRows.length === 0}
+                      aria-label="Select all visible symbols"
+                      className="h-4 w-4 rounded border-border"
+                    />
+                  </th>
+                  <th className="py-2 pr-4">Symbol</th>
+                  <th className="py-2 pr-4">Bars</th>
+                  <th className="py-2 pr-4">From</th>
+                  <th className="py-2 pr-4">To</th>
+                  <th className="py-2 pr-4">Last updated</th>
+                  <th className="py-2">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pageRows.map((row) => (
                 <Fragment key={row.symbol}>
                   <tr className="border-b border-border/40">
                     <td className="py-3 pr-2">
@@ -362,9 +434,15 @@ export function StoredDataInventory({
                     <td className="py-3 pr-4 font-mono font-semibold">
                       {row.symbol}
                     </td>
-                    <td className="py-3 pr-4">{row.barCount.toLocaleString()}</td>
-                    <td className="py-3 pr-4">{formatDate(row.fromDate)}</td>
-                    <td className="py-3 pr-4">{formatDate(row.toDate)}</td>
+                    <td className="py-3 pr-4">
+                      {row.needsBackfill ? "…" : row.barCount.toLocaleString()}
+                    </td>
+                    <td className="py-3 pr-4">
+                      {row.needsBackfill ? "…" : formatDate(row.fromDate)}
+                    </td>
+                    <td className="py-3 pr-4">
+                      {row.needsBackfill ? "…" : formatDate(row.toDate)}
+                    </td>
                     <td className="py-3 pr-4 text-muted">
                       {formatUpdated(row.lastUpdated)}
                     </td>
@@ -461,6 +539,31 @@ export function StoredDataInventory({
             </tbody>
           </table>
         </div>
+
+          {pageCount > 1 && (
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+              <button
+                type="button"
+                disabled={currentPage === 0 || busy !== null}
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+                className="ui-btn-secondary disabled:opacity-50"
+              >
+                Previous
+              </button>
+              <p className="text-sm text-muted">
+                Page {currentPage + 1} of {pageCount}
+              </p>
+              <button
+                type="button"
+                disabled={currentPage >= pageCount - 1 || busy !== null}
+                onClick={() => setPage((p) => Math.min(pageCount - 1, p + 1))}
+                className="ui-btn-secondary disabled:opacity-50"
+              >
+                Next
+              </button>
+            </div>
+          )}
+        </>
       )}
     </section>
   );

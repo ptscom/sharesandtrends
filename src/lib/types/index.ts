@@ -16,6 +16,10 @@ export interface SymbolMeta {
   name?: string;
   sector?: string;
   lastUpdated?: string;
+  /** Denormalized from price bars for fast inventory listing */
+  barCount?: number;
+  fromDate?: string | null;
+  toDate?: string | null;
 }
 
 export interface IndicatorDef {

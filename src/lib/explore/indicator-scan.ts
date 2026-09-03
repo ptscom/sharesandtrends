@@ -1,30 +1,63 @@
 import { v4 as uuidv4 } from "uuid";
-import type { OhlcvBar } from "@/lib/types";
-import { hasSignalToday } from "@/lib/engine/backtest";
+import type { OhlcvBar, PatternDefinition } from "@/lib/types";
+import { hasSignalToday, runBacktest } from "@/lib/engine/backtest";
 import { prepareScanBarsAndPattern } from "@/lib/engine/scan-timeframe";
 import type { ExploreTimeframeMode } from "@/lib/patterns/mtf-combine";
-import {
-  indicatorItemToPattern,
-  type ExploreIndicatorItem,
-  type IndicatorScanGroup,
-  type IndicatorScanResultRow,
-  type IndicatorScanRun,
-} from "@/lib/explore/indicator-models";
+import type {
+  HorizonStats,
+  IndicatorScanResultRow,
+  IndicatorScanRun,
+} from "@/lib/explore/exploration-models";
+
+function backtestHorizonStats(
+  bars: OhlcvBar[],
+  pattern: PatternDefinition,
+  holdDays: number,
+): HorizonStats {
+  const result = runBacktest("", bars, {
+    ...pattern,
+    backtest: {
+      entryOn: pattern.backtest.entryOn,
+      exitOn: "fixed_hold",
+      holdDays,
+    },
+  });
+  return {
+    avgReturnPct: result.stats.avgReturnPct,
+    winRate: result.stats.winRate,
+    trades: result.stats.trades,
+  };
+}
+
+function backtestHorizons(
+  bars: OhlcvBar[],
+  pattern: PatternDefinition,
+): IndicatorScanResultRow["horizons"] {
+  return {
+    d3: backtestHorizonStats(bars, pattern, 3),
+    d5: backtestHorizonStats(bars, pattern, 5),
+    d10: backtestHorizonStats(bars, pattern, 10),
+  };
+}
 
 export interface IndicatorScanCoreOptions {
   universe: string[];
   priceData: Record<string, OhlcvBar[]>;
-  items: ExploreIndicatorItem[];
+  pattern: PatternDefinition;
+  filterKey: string;
+  filterName: string;
+  filterDescription: string;
+  timeframeMode: ExploreTimeframeMode;
 }
 
-function scanItemForUniverse(
+function scanPatternForUniverse(
   universe: string[],
   priceData: Record<string, OhlcvBar[]>,
-  item: ExploreIndicatorItem,
+  pattern: PatternDefinition,
+  timeframeMode: ExploreTimeframeMode,
 ): IndicatorScanResultRow[] {
-  const pattern = indicatorItemToPattern(item);
   const tfMode: ExploreTimeframeMode =
-    item.timeframeMode === "mtf" ? "1D" : item.timeframeMode;
+    timeframeMode === "mtf" ? "1D" : timeframeMode;
 
   const results: IndicatorScanResultRow[] = [];
 
@@ -47,6 +80,7 @@ function scanItemForUniverse(
       signalDate,
       signalToday,
       lastClose: bars[bars.length - 1]?.close ?? 0,
+      horizons: backtestHorizons(bars, scanPattern),
     });
   }
 
@@ -57,20 +91,31 @@ function scanItemForUniverse(
 export function runIndicatorScanCore(
   options: IndicatorScanCoreOptions,
 ): IndicatorScanRun {
-  const { universe, priceData, items } = options;
-  const enabled = items.filter((item) => item.enabled);
+  const {
+    universe,
+    priceData,
+    pattern,
+    filterKey,
+    filterName,
+    filterDescription,
+    timeframeMode,
+  } = options;
 
-  const groups: IndicatorScanGroup[] = enabled.map((item) => ({
-    itemId: item.id,
-    itemName: item.name,
-    timeframeMode: item.timeframeMode,
-    results: scanItemForUniverse(universe, priceData, item),
-  }));
+  const results = scanPatternForUniverse(
+    universe,
+    priceData,
+    pattern,
+    timeframeMode,
+  );
 
   return {
     id: uuidv4(),
     runAt: new Date().toISOString(),
+    filterKey: options.filterKey,
     universe,
-    groups,
+    filterName,
+    filterDescription,
+    timeframeMode,
+    results,
   };
 }
