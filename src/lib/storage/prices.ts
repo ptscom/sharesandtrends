@@ -44,6 +44,36 @@ export function clearPriceCache(): void {
   cacheLastUpdatedAt = null;
 }
 
+function barsSummary(bars: OhlcvBar[]): {
+  barCount: number;
+  fromDate: string | null;
+  toDate: string | null;
+} {
+  if (bars.length === 0) {
+    return { barCount: 0, fromDate: null, toDate: null };
+  }
+  return {
+    barCount: bars.length,
+    fromDate: bars[0]!.date,
+    toDate: bars[bars.length - 1]!.date,
+  };
+}
+
+async function writeSymbolMeta(
+  symbol: string,
+  bars: OhlcvBar[],
+): Promise<void> {
+  const upper = symbol.toUpperCase();
+  const existing = await getDb().symbols.get(upper);
+  await getDb().symbols.put({
+    symbol: upper,
+    name: existing?.name,
+    sector: existing?.sector,
+    lastUpdated: new Date().toISOString(),
+    ...barsSummary(bars),
+  });
+}
+
 export async function savePriceBars(
   symbol: string,
   bars: OhlcvBar[],
@@ -55,10 +85,7 @@ export async function savePriceBars(
     bars,
     updatedAt: new Date().toISOString(),
   });
-  await database.symbols.put({
-    symbol: upper,
-    lastUpdated: new Date().toISOString(),
-  });
+  await writeSymbolMeta(upper, bars);
   writeCache(upper, bars);
 }
 
@@ -155,23 +182,49 @@ export interface SymbolInventoryRow {
   fromDate: string | null;
   toDate: string | null;
   lastUpdated: string | null;
+  needsBackfill?: boolean;
 }
 
 export async function listSymbolInventory(): Promise<SymbolInventoryRow[]> {
   const metas = await listSymbols();
-  const rows = await Promise.all(
-    metas.map(async (meta) => {
-      const bars = await getPriceBars(meta.symbol);
-      return {
-        symbol: meta.symbol,
-        barCount: bars.length,
-        fromDate: bars[0]?.date ?? null,
-        toDate: bars[bars.length - 1]?.date ?? null,
-        lastUpdated: meta.lastUpdated ?? null,
-      };
-    }),
-  );
-  return rows.sort((a, b) => a.symbol.localeCompare(b.symbol));
+  return metas
+    .map((meta) => ({
+      symbol: meta.symbol,
+      barCount: meta.barCount ?? 0,
+      fromDate: meta.fromDate ?? null,
+      toDate: meta.toDate ?? null,
+      lastUpdated: meta.lastUpdated ?? null,
+      needsBackfill: meta.barCount === undefined,
+    }))
+    .sort((a, b) => a.symbol.localeCompare(b.symbol));
+}
+
+const BACKFILL_BATCH = 20;
+
+/** One-time index build for symbols saved before metadata was denormalized. */
+export async function backfillSymbolSummaries(
+  onProgress?: (done: number, total: number) => void,
+): Promise<void> {
+  const metas = await listSymbols();
+  const pending = metas.filter((m) => m.barCount === undefined);
+  const total = pending.length;
+  if (total === 0) {
+    onProgress?.(0, 0);
+    return;
+  }
+
+  for (let i = 0; i < pending.length; i += BACKFILL_BATCH) {
+    const batch = pending.slice(i, i + BACKFILL_BATCH);
+    await Promise.all(
+      batch.map(async (meta) => {
+        const record = await getDb().prices.get(meta.symbol);
+        const bars = record?.bars ?? [];
+        writeCache(meta.symbol, bars);
+        await writeSymbolMeta(meta.symbol, bars);
+      }),
+    );
+    onProgress?.(Math.min(i + batch.length, total), total);
+  }
 }
 
 /** Remove bars with dates in [fromDate, toDate] inclusive. Returns bars removed. */
