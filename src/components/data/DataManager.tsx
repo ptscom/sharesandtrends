@@ -2,128 +2,66 @@
 
 import { useCallback, useState } from "react";
 import { DEFAULT_WATCHLIST } from "@/lib/data/default-universe";
-import { fetchPriceBars } from "@/lib/data/fetch-prices-client";
-import { findStaleSymbols, type StaleSymbolJob } from "@/lib/data/stale-symbols";
-import { listSymbolInventory, mergePriceBars } from "@/lib/storage/prices";
+import {
+  defaultUpdateFromDate,
+  defaultUpdateToDate,
+  runFetchJobs,
+  type FetchJob,
+  type FetchJobResult,
+} from "@/lib/data/fetch-prices-client";
+import { findStaleSymbols } from "@/lib/data/stale-symbols";
+import { listSymbolInventory, listSymbols } from "@/lib/storage/prices";
 import { StoredDataInventory } from "./StoredDataInventory";
-
-interface FetchResult {
-  symbol: string;
-  count: number;
-  error?: string;
-}
-
-const FETCH_DELAY_MS = 250;
 
 export function DataManager() {
   const [symbols, setSymbols] = useState(DEFAULT_WATCHLIST.join(", "));
   const [loading, setLoading] = useState(false);
   const [fixing, setFixing] = useState(false);
   const [progress, setProgress] = useState({ done: 0, total: 0 });
-  const [results, setResults] = useState<FetchResult[]>([]);
+  const [results, setResults] = useState<FetchJobResult[]>([]);
   const [customSymbol, setCustomSymbol] = useState("");
   const [inventoryRefreshKey, setInventoryRefreshKey] = useState(0);
+
+  const [updateFrom, setUpdateFrom] = useState(defaultUpdateFromDate);
+  const [updateTo, setUpdateTo] = useState(defaultUpdateToDate);
+  const [updateScope, setUpdateScope] = useState<"all" | "custom">("all");
+  const [updateSymbols, setUpdateSymbols] = useState("");
+  const [lastJobMode, setLastJobMode] = useState<"download" | "update" | "fix">(
+    "download",
+  );
 
   const refreshInventory = useCallback(() => {
     setInventoryRefreshKey((key) => key + 1);
   }, []);
 
-  const runFetchJob = useCallback(
-    async (
-      jobs: Array<{
-        symbol: string;
-        options: { range?: string; from?: string; to?: string };
-      }>,
-    ) => {
+  const runJobBatch = useCallback(
+    async (jobs: FetchJob[], mode: "download" | "update" | "fix") => {
       setLoading(true);
+      setFixing(mode === "fix");
+      setLastJobMode(mode);
       setResults([]);
       setProgress({ done: 0, total: jobs.length });
-      const out: FetchResult[] = [];
 
-      for (let i = 0; i < jobs.length; i++) {
-        const { symbol, options } = jobs[i]!;
-        const fetched = await fetchPriceBars(symbol, options);
-        if (fetched.error) {
-          out.push({ symbol, count: 0, error: fetched.error });
-        } else {
-          await mergePriceBars(symbol, fetched.bars);
-          out.push({ symbol, count: fetched.count });
+      const out = await runFetchJobs(jobs, {
+        onProgress: (done, total) => setProgress({ done, total }),
+      });
+      setResults(out);
+
+      const failed = out.filter((row) => row.error);
+      if (failed.length > 0) {
+        const retryJobs = jobs.filter((job) =>
+          failed.some((row) => row.symbol === job.symbol),
+        );
+        setProgress({ done: 0, total: retryJobs.length });
+        const retried = await runFetchJobs(retryJobs, {
+          onProgress: (done, total) => setProgress({ done, total }),
+        });
+        const merged = [...out];
+        for (const row of retried) {
+          const index = merged.findIndex((item) => item.symbol === row.symbol);
+          if (index >= 0) merged[index] = row;
         }
-
-        setResults([...out]);
-        setProgress({ done: i + 1, total: jobs.length });
-        if (i < jobs.length - 1) {
-          await new Promise((r) => setTimeout(r, FETCH_DELAY_MS));
-        }
-      }
-
-      setLoading(false);
-      refreshInventory();
-    },
-    [refreshInventory],
-  );
-
-  const runDownload = useCallback(
-    (list: string[]) =>
-      runFetchJob(
-        list
-          .map((s) => s.trim().toUpperCase())
-          .filter(Boolean)
-          .map((symbol) => ({ symbol, options: { range: "10y" } })),
-      ),
-    [runFetchJob],
-  );
-
-  const runFixJob = useCallback(
-    async (jobs: StaleSymbolJob[]) => {
-      const fetchOne = async (job: StaleSymbolJob): Promise<FetchResult> => {
-        const fetched = job.fullDownload
-          ? await fetchPriceBars(job.symbol, { range: "10y" })
-          : await fetchPriceBars(job.symbol, {
-              from: job.fetchFrom,
-              to: job.fetchTo,
-            });
-
-        if (fetched.error) {
-          return { symbol: job.symbol, count: 0, error: fetched.error };
-        }
-
-        await mergePriceBars(job.symbol, fetched.bars);
-        return { symbol: job.symbol, count: fetched.count };
-      };
-
-      setFixing(true);
-      setLoading(true);
-      setResults([]);
-      setProgress({ done: 0, total: jobs.length });
-      const out: FetchResult[] = [];
-
-      for (let i = 0; i < jobs.length; i++) {
-        const job = jobs[i]!;
-        out.push(await fetchOne(job));
-        setResults([...out]);
-        setProgress({ done: i + 1, total: jobs.length });
-        if (i < jobs.length - 1) {
-          await new Promise((r) => setTimeout(r, FETCH_DELAY_MS));
-        }
-      }
-
-      const failedJobs = jobs.filter(
-        (job) => out.find((row) => row.symbol === job.symbol)?.error,
-      );
-      if (failedJobs.length > 0) {
-        setProgress({ done: 0, total: failedJobs.length });
-        for (let i = 0; i < failedJobs.length; i++) {
-          const job = failedJobs[i]!;
-          const retry = await fetchOne(job);
-          const index = out.findIndex((row) => row.symbol === retry.symbol);
-          if (index >= 0) out[index] = retry;
-          setResults([...out]);
-          setProgress({ done: i + 1, total: failedJobs.length });
-          if (i < failedJobs.length - 1) {
-            await new Promise((r) => setTimeout(r, FETCH_DELAY_MS));
-          }
-        }
+        setResults(merged);
       }
 
       setLoading(false);
@@ -133,36 +71,98 @@ export function DataManager() {
     [refreshInventory],
   );
 
+  const runDownload = useCallback(
+    (list: string[]) =>
+      runJobBatch(
+        list
+          .map((s) => s.trim().toUpperCase())
+          .filter(Boolean)
+          .map((symbol) => ({ symbol, options: { range: "10y" } })),
+        "download",
+      ),
+    [runJobBatch],
+  );
+
+  const runUpdate = useCallback(async () => {
+    if (!updateFrom || !updateTo || updateFrom > updateTo) return;
+
+    let list: string[];
+    if (updateScope === "all") {
+      const stored = await listSymbols();
+      list = stored.map((s) => s.symbol);
+      if (list.length === 0) return;
+    } else {
+      list = updateSymbols
+        .split(",")
+        .map((s) => s.trim().toUpperCase())
+        .filter(Boolean);
+      if (list.length === 0) return;
+    }
+
+    await runJobBatch(
+      list.map((symbol) => ({
+        symbol,
+        options: { from: updateFrom, to: updateTo },
+      })),
+      "update",
+    );
+  }, [updateFrom, updateTo, updateScope, updateSymbols, runJobBatch]);
+
   const runFixData = useCallback(async () => {
     const inventory = await listSymbolInventory();
     const analysis = findStaleSymbols(inventory);
 
-    if (analysis.stale.length === 0) {
+    if (!analysis.plan) {
       window.alert("All symbols already end on the latest date in your list.");
       return;
     }
 
-    const preview = analysis.stale
+    const { plan } = analysis;
+    const preview = [...plan.rangeSymbols, ...plan.fullDownloadSymbols]
       .slice(0, 5)
-      .map((job) => job.symbol)
       .join(", ");
-    const suffix =
-      analysis.stale.length > 5
-        ? ` and ${analysis.stale.length - 5} more`
+    const totalStale = plan.rangeSymbols.length + plan.fullDownloadSymbols.length;
+    const suffix = totalStale > 5 ? ` and ${totalStale - 5} more` : "";
+
+    const rangeNote =
+      plan.rangeSymbols.length > 0
+        ? `fetch ${plan.fetchFrom} → ${plan.fetchTo} for ${plan.rangeSymbols.length} symbol(s)`
         : "";
+    const fullNote =
+      plan.fullDownloadSymbols.length > 0
+        ? `full download for ${plan.fullDownloadSymbols.length} empty symbol(s)`
+        : "";
+    const actionNote = [rangeNote, fullNote].filter(Boolean).join("; ");
 
     if (
       !window.confirm(
-        `${analysis.stale.length} symbol(s) end before ${analysis.referenceLatest}. Re-download missing data for: ${preview}${suffix}?`,
+        `${totalStale} symbol(s) end before ${plan.referenceLatest}. ${actionNote}: ${preview}${suffix}?`,
       )
     ) {
       return;
     }
 
-    await runFixJob(analysis.stale);
-  }, [runFixJob]);
+    const jobs: FetchJob[] = [
+      ...plan.rangeSymbols.map((symbol) => ({
+        symbol,
+        options: { from: plan.fetchFrom, to: plan.fetchTo },
+      })),
+      ...plan.fullDownloadSymbols.map((symbol) => ({
+        symbol,
+        options: { range: "10y" },
+      })),
+    ];
+
+    await runJobBatch(jobs, "fix");
+  }, [runJobBatch]);
 
   const busy = loading || fixing;
+  const resultsTitle =
+    lastJobMode === "fix"
+      ? "Fix data results"
+      : lastJobMode === "update"
+        ? "Update results"
+        : "Download results";
 
   return (
     <div className="space-y-8">
@@ -172,6 +172,83 @@ export function DataManager() {
         onFixData={() => void runFixData()}
         fixing={fixing}
       />
+
+      <section className="ui-panel p-6">
+        <p className="ui-eyebrow">Update</p>
+        <h2 className="ui-section-title mt-2">Update existing data</h2>
+        <p className="ui-helper mt-2">
+          Fetch a date range and merge into stored symbols. Use this for daily
+          updates. Overlapping dates are overwritten with the latest download.
+        </p>
+
+        <div className="mt-6 flex flex-wrap items-end gap-4">
+          <label className="block">
+            <span className="ui-field-label">From</span>
+            <input
+              type="date"
+              value={updateFrom}
+              onChange={(e) => setUpdateFrom(e.target.value)}
+              className="ui-input mt-1 w-auto min-w-[10rem]"
+            />
+          </label>
+          <label className="block">
+            <span className="ui-field-label">To</span>
+            <input
+              type="date"
+              value={updateTo}
+              onChange={(e) => setUpdateTo(e.target.value)}
+              className="ui-input mt-1 w-auto min-w-[10rem]"
+            />
+          </label>
+        </div>
+
+        <div className="mt-4 flex flex-wrap gap-4">
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="radio"
+              name="updateScope"
+              checked={updateScope === "all"}
+              onChange={() => setUpdateScope("all")}
+            />
+            All stored symbols
+          </label>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="radio"
+              name="updateScope"
+              checked={updateScope === "custom"}
+              onChange={() => setUpdateScope("custom")}
+            />
+            Custom list
+          </label>
+        </div>
+
+        {updateScope === "custom" && (
+          <div className="mt-4">
+            <label className="ui-field-label">Symbols (comma-separated)</label>
+            <textarea
+              value={updateSymbols}
+              onChange={(e) => setUpdateSymbols(e.target.value)}
+              rows={3}
+              className="ui-input mt-2 font-mono"
+              placeholder="AAPL, MSFT, RELIANCE.NS"
+            />
+          </div>
+        )}
+
+        <div className="mt-4">
+          <button
+            type="button"
+            disabled={
+              busy || !updateFrom || !updateTo || updateFrom > updateTo
+            }
+            onClick={() => void runUpdate()}
+            className="ui-btn-primary disabled:opacity-50"
+          >
+            {loading && !fixing ? "Updating…" : "Update data"}
+          </button>
+        </div>
+      </section>
 
       <section className="ui-panel p-6">
         <p className="ui-eyebrow">Download</p>
@@ -211,13 +288,6 @@ export function DataManager() {
             Quick: default watchlist ({DEFAULT_WATCHLIST.length})
           </button>
         </div>
-
-        {loading && (
-          <p className="ui-helper mt-4">
-            {fixing ? "Fixing data" : "Progress"}: {progress.done} /{" "}
-            {progress.total}
-          </p>
-        )}
       </section>
 
       <section className="ui-panel p-6">
@@ -241,11 +311,15 @@ export function DataManager() {
         </div>
       </section>
 
+      {loading && (
+        <p className="ui-helper">
+          {fixing ? "Fixing data" : "Progress"}: {progress.done} / {progress.total}
+        </p>
+      )}
+
       {results.length > 0 && (
         <section className="ui-panel p-6">
-          <h2 className="ui-section-title">
-            {fixing ? "Fix data results" : "Download results"}
-          </h2>
+          <h2 className="ui-section-title">{resultsTitle}</h2>
           <div className="mt-4 max-h-80 overflow-auto">
             <table className="w-full text-left text-sm">
               <thead>

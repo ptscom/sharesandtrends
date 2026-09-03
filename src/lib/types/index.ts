@@ -16,6 +16,9 @@ export interface SymbolMeta {
   name?: string;
   sector?: string;
   lastUpdated?: string;
+  barCount?: number;
+  fromDate?: string | null;
+  toDate?: string | null;
 }
 
 export interface IndicatorDef {

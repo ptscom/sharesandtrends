@@ -2,6 +2,7 @@
 
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import {
+  backfillSymbolSummaries,
   countBarsInRange,
   deleteAllPriceData,
   deletePriceBarsInRange,
@@ -46,6 +47,10 @@ export function StoredDataInventory({
   const [rangeCount, setRangeCount] = useState<number | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [backfillProgress, setBackfillProgress] = useState<{
+    done: number;
+    total: number;
+  } | null>(null);
 
   const loadInventory = useCallback(async () => {
     setLoading(true);
@@ -57,9 +62,21 @@ export function StoredDataInventory({
         const symbols = new Set(inventory.map((row) => row.symbol));
         return new Set([...prev].filter((symbol) => symbols.has(symbol)));
       });
+      setLoading(false);
+
+      const needsBackfill = inventory.some((row) => row.needsBackfill);
+      if (!needsBackfill) return;
+
+      const total = inventory.filter((row) => row.needsBackfill).length;
+      setBackfillProgress({ done: 0, total });
+      await backfillSymbolSummaries((done, total) => {
+        setBackfillProgress(total > 0 ? { done, total } : null);
+      });
+      const refreshed = await listSymbolInventory();
+      setRows(refreshed);
+      setBackfillProgress(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load stored data");
-    } finally {
       setLoading(false);
     }
   }, []);
@@ -87,7 +104,10 @@ export function StoredDataInventory({
           ? fromDates.reduce((a, b) => (a < b ? a : b))
           : null,
       latest,
-      staleCount: staleAnalysis.stale.length,
+      staleCount: staleAnalysis.staleCount,
+      fixRange: staleAnalysis.plan
+        ? `${staleAnalysis.plan.fetchFrom} → ${staleAnalysis.plan.fetchTo}`
+        : null,
     };
   }, [rows]);
 
@@ -334,8 +354,22 @@ export function StoredDataInventory({
         <p className="ui-helper mt-4 rounded-xl border border-brand/20 bg-brand/5 px-4 py-3">
           {summary.staleCount} symbol{summary.staleCount === 1 ? "" : "s"} end
           before the latest date in your list ({formatDate(summary.latest)}).
-          Use <strong>Fix data</strong> to re-fetch only the missing days for
-          each one and retry failures.
+          Fix data will re-fetch{" "}
+          {summary.fixRange ? (
+            <>
+              <strong>{summary.fixRange}</strong> for all lagging symbols
+            </>
+          ) : (
+            "missing ranges"
+          )}{" "}
+          and retry failures once.
+        </p>
+      )}
+
+      {backfillProgress && (
+        <p className="ui-helper mt-4">
+          Indexing stored symbols… {backfillProgress.done} /{" "}
+          {backfillProgress.total}
         </p>
       )}
 

@@ -1,25 +1,22 @@
 import type { SymbolInventoryRow } from "@/lib/storage/prices";
 
-export interface StaleSymbolJob {
-  symbol: string;
-  currentToDate: string | null;
+export interface StaleSymbolFixPlan {
+  referenceLatest: string;
   fetchFrom: string;
   fetchTo: string;
-  fullDownload: boolean;
+  /** Symbols with some history — one shared date range fetch */
+  rangeSymbols: string[];
+  /** Symbols with no stored bars — full history download */
+  fullDownloadSymbols: string[];
 }
 
 export interface StaleSymbolAnalysis {
   referenceLatest: string | null;
-  stale: StaleSymbolJob[];
+  plan: StaleSymbolFixPlan | null;
+  staleCount: number;
 }
 
-function addDays(date: string, days: number): string {
-  const next = new Date(`${date}T12:00:00Z`);
-  next.setUTCDate(next.getUTCDate() + days);
-  return next.toISOString().slice(0, 10);
-}
-
-/** Symbols whose last bar is before the newest date in the inventory. */
+/** Symbols behind the newest To date in the inventory. */
 export function findStaleSymbols(
   rows: SymbolInventoryRow[],
 ): StaleSymbolAnalysis {
@@ -31,39 +28,45 @@ export function findStaleSymbols(
     toDates.length > 0 ? toDates.reduce((a, b) => (a > b ? a : b)) : null;
 
   if (!referenceLatest) {
-    return { referenceLatest: null, stale: [] };
+    return { referenceLatest: null, plan: null, staleCount: 0 };
   }
 
-  const stale: StaleSymbolJob[] = [];
+  const stale = rows.filter(
+    (row) => row.toDate === null || row.toDate < referenceLatest,
+  );
 
-  for (const row of rows) {
-    if (!row.toDate) {
-      stale.push({
-        symbol: row.symbol,
-        currentToDate: null,
-        fetchFrom: "",
-        fetchTo: referenceLatest,
-        fullDownload: true,
-      });
-      continue;
-    }
-
-    if (row.toDate >= referenceLatest) continue;
-
-    const fetchFrom = addDays(row.toDate, 1);
-    if (fetchFrom > referenceLatest) continue;
-
-    stale.push({
-      symbol: row.symbol,
-      currentToDate: row.toDate,
-      fetchFrom,
-      fetchTo: referenceLatest,
-      fullDownload: false,
-    });
+  if (stale.length === 0) {
+    return { referenceLatest, plan: null, staleCount: 0 };
   }
+
+  const fullDownloadSymbols = stale
+    .filter((row) => !row.toDate)
+    .map((row) => row.symbol)
+    .sort();
+
+  const rangeSymbols = stale
+    .filter((row) => row.toDate && row.toDate < referenceLatest)
+    .map((row) => row.symbol)
+    .sort();
+
+  const staleToDates = stale
+    .map((row) => row.toDate)
+    .filter((date): date is string => Boolean(date));
+
+  const fetchFrom =
+    staleToDates.length > 0
+      ? staleToDates.reduce((a, b) => (a < b ? a : b))
+      : referenceLatest;
 
   return {
     referenceLatest,
-    stale: stale.sort((a, b) => a.symbol.localeCompare(b.symbol)),
+    staleCount: stale.length,
+    plan: {
+      referenceLatest,
+      fetchFrom,
+      fetchTo: referenceLatest,
+      rangeSymbols,
+      fullDownloadSymbols,
+    },
   };
 }
