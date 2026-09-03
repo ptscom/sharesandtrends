@@ -1,11 +1,16 @@
-import type { OhlcvBar } from "@/lib/types";
+import type { OhlcvBar, PatternDefinition } from "@/lib/types";
 import { getPriceBarsBatch } from "@/lib/storage/prices";
-import type { ExploreIndicatorItem, IndicatorScanRun } from "@/lib/explore/indicator-models";
+import type { IndicatorScanRun } from "@/lib/explore/exploration-models";
+import type { ExploreTimeframeMode } from "@/lib/patterns/mtf-combine";
 import type { ScanProgressPhase } from "@/lib/engine/scan-worker-client";
 
 export interface IndicatorWorkerScanOptions {
   universe: string[];
-  items: ExploreIndicatorItem[];
+  pattern: PatternDefinition;
+  filterKey: string;
+  filterName: string;
+  filterDescription: string;
+  timeframeMode: ExploreTimeframeMode;
   onProgress?: (done: number, total: number, phase: ScanProgressPhase) => void;
 }
 
@@ -26,7 +31,15 @@ function getWorker(): Worker {
 export async function runIndicatorScanInWorker(
   options: IndicatorWorkerScanOptions,
 ): Promise<IndicatorScanRun> {
-  const { universe, items, onProgress } = options;
+  const {
+    universe,
+    pattern,
+    filterKey,
+    filterName,
+    filterDescription,
+    timeframeMode,
+    onProgress,
+  } = options;
 
   const priceData = await getPriceBarsBatch(universe, (done, total) => {
     if (done < total) {
@@ -71,7 +84,11 @@ export async function runIndicatorScanInWorker(
       requestId,
       universe,
       priceData,
-      items,
+      pattern,
+      filterKey,
+      filterName,
+      filterDescription,
+      timeframeMode,
     });
   });
 }

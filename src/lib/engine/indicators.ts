@@ -1,20 +1,31 @@
 import {
+  ADL,
   ADX,
   ATR,
+  AwesomeOscillator,
   BollingerBands,
   CCI,
   EMA,
+  ForceIndex,
   KeltnerChannels,
+  KST,
   MACD,
   MFI,
   OBV,
   PSAR,
   ROC,
   RSI,
+  SD,
   SMA,
   Stochastic,
+  StochasticRSI,
   TRIX,
+  VWAP,
+  WEMA,
+  WMA,
   WilliamsR,
+  Highest,
+  Lowest,
 } from "technicalindicators";
 import type { IndicatorDef, IndicatorSeries, OhlcvBar } from "@/lib/types";
 import { alignHigherTimeframe, barsToSource, resampleBars } from "./resample";
@@ -203,7 +214,7 @@ function computeOnBars(
     }
     case "roc": {
       const length = Number(params.length ?? 20);
-      const roc = ROC.calculate({ period: length, values: closes });
+      const roc = ROC.calculate({ period: length, values: input });
       result[def.alias] = padStart(roc, bars.length);
       break;
     }
@@ -239,7 +250,7 @@ function computeOnBars(
     case "trix": {
       const length = Number(params.length ?? 15);
       const signalPeriod = Number(params.signal ?? 9);
-      const trix = TRIX.calculate({ period: length, values: closes });
+      const trix = TRIX.calculate({ period: length, values: input });
       const padded = padStart(trix, bars.length) as number[];
       const signal = padStart(
         SMA.calculate({
@@ -285,23 +296,23 @@ function computeOnBars(
     }
     case "momentum": {
       const length = Number(params.length ?? 126);
-      result[def.alias] = closes.map((c, i) => {
+      result[def.alias] = input.map((c, i) => {
         if (i < length) return null;
-        const prev = closes[i - length];
-        return prev ? ((c / prev - 1) * 100) : null;
+        const prev = input[i - length];
+        return prev ? (c / prev - 1) * 100 : null;
       });
       break;
     }
     case "zscore": {
       const length = Number(params.length ?? 20);
-      const sma = SMA.calculate({ period: length, values: closes });
+      const sma = SMA.calculate({ period: length, values: input });
       const pad = bars.length - sma.length;
       const nulls = Array(pad).fill(null);
       const means = [...nulls, ...sma];
-      result[def.alias] = closes.map((c, i) => {
+      result[def.alias] = input.map((c, i) => {
         const mean = means[i];
         if (mean == null || i < length - 1) return null;
-        const slice = closes.slice(i - length + 1, i + 1);
+        const slice = input.slice(i - length + 1, i + 1);
         const variance =
           slice.reduce((sum, v) => sum + (v - mean) ** 2, 0) / length;
         const std = Math.sqrt(variance);
@@ -313,7 +324,7 @@ function computeOnBars(
       const length = Number(params.length ?? 20);
       const pct = Number(params.pct ?? 3);
       const sma = padStart(
-        SMA.calculate({ period: length, values: closes }),
+        SMA.calculate({ period: length, values: input }),
         bars.length,
       );
       result[`${def.alias}_middle`] = sma;
@@ -342,6 +353,135 @@ function computeOnBars(
         bodyRatioMax: bodyRatio,
         shadowRatioMin: shadowRatio,
       });
+      break;
+    }
+    case "wma": {
+      const length = Number(params.length ?? 20);
+      result[def.alias] = padStart(
+        WMA.calculate({ period: length, values: input }),
+        bars.length,
+      );
+      break;
+    }
+    case "wema": {
+      const length = Number(params.length ?? 14);
+      result[def.alias] = padStart(
+        WEMA.calculate({ period: length, values: input }),
+        bars.length,
+      );
+      break;
+    }
+    case "stoch_rsi": {
+      const rsiPeriod = Number(params.rsiPeriod ?? 14);
+      const stochasticPeriod = Number(params.stochasticPeriod ?? 14);
+      const kPeriod = Number(params.kPeriod ?? 3);
+      const dPeriod = Number(params.dPeriod ?? 3);
+      const stochRsi = StochasticRSI.calculate({
+        values: input,
+        rsiPeriod,
+        stochasticPeriod,
+        kPeriod,
+        dPeriod,
+      });
+      const pad = bars.length - stochRsi.length;
+      const nulls = Array(pad).fill(null);
+      result[`${def.alias}_stochRSI`] = [
+        ...nulls,
+        ...stochRsi.map((s) => s.stochRSI ?? null),
+      ];
+      result[`${def.alias}_k`] = [
+        ...nulls,
+        ...stochRsi.map((s) => s.k ?? null),
+      ];
+      result[`${def.alias}_d`] = [
+        ...nulls,
+        ...stochRsi.map((s) => s.d ?? null),
+      ];
+      result[def.alias] = result[`${def.alias}_stochRSI`];
+      break;
+    }
+    case "awesome_oscillator": {
+      const fastPeriod = Number(params.fastPeriod ?? 5);
+      const slowPeriod = Number(params.slowPeriod ?? 34);
+      const ao = AwesomeOscillator.calculate({
+        high: highs,
+        low: lows,
+        fastPeriod,
+        slowPeriod,
+      });
+      result[def.alias] = padStart(ao, bars.length);
+      break;
+    }
+    case "force_index": {
+      const length = Number(params.length ?? 13);
+      const fi = ForceIndex.calculate({
+        close: closes,
+        volume: volumes,
+        period: length,
+      });
+      result[def.alias] = padStart(fi, bars.length);
+      break;
+    }
+    case "vwap": {
+      const vwap = VWAP.calculate({
+        high: highs,
+        low: lows,
+        close: closes,
+        volume: volumes,
+      });
+      result[def.alias] = padStart(vwap, bars.length);
+      break;
+    }
+    case "kst": {
+      const signalPeriod = Number(params.signalPeriod ?? 9);
+      const kst = KST.calculate({
+        values: input,
+        ROCPer1: 10,
+        ROCPer2: 15,
+        ROCPer3: 20,
+        ROCPer4: 30,
+        SMAROCPer1: 10,
+        SMAROCPer2: 10,
+        SMAROCPer3: 10,
+        SMAROCPer4: 15,
+        signalPeriod,
+      });
+      const pad = bars.length - kst.length;
+      const nulls = Array(pad).fill(null);
+      result[`${def.alias}_kst`] = [...nulls, ...kst.map((k) => k.kst ?? null)];
+      result[`${def.alias}_signal`] = [
+        ...nulls,
+        ...kst.map((k) => k.signal ?? null),
+      ];
+      result[def.alias] = result[`${def.alias}_kst`];
+      break;
+    }
+    case "adl": {
+      const adl = ADL.calculate({
+        high: highs,
+        low: lows,
+        close: closes,
+        volume: volumes,
+      });
+      result[def.alias] = padStart(adl, bars.length);
+      break;
+    }
+    case "stddev": {
+      const length = Number(params.length ?? 20);
+      const sd = SD.calculate({ period: length, values: input });
+      result[def.alias] = padStart(sd, bars.length);
+      break;
+    }
+    case "highest": {
+      const length = Number(params.length ?? 20);
+      const highest = Highest.calculate({ period: length, values: input });
+      result[def.alias] = padStart(highest, bars.length);
+      break;
+    }
+    case "lowest": {
+      const length = Number(params.length ?? 20);
+      const lowest = Lowest.calculate({ period: length, values: input });
+      result[def.alias] = padStart(lowest, bars.length);
       break;
     }
     default:

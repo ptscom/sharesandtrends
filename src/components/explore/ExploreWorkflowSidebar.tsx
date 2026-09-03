@@ -25,7 +25,7 @@ interface ExploreWorkflowSidebarProps {
 
 const STEPS: { id: ExploreSetupStep; label: string; number: number }[] = [
   { id: "symbols", label: "Select symbols", number: 1 },
-  { id: "indicators", label: "Select indicators", number: 2 },
+  { id: "indicators", label: "Exploration filter", number: 2 },
   { id: "strategy", label: "Select strategy", number: 3 },
   { id: "scan", label: "Scan settings", number: 4 },
 ];
@@ -63,9 +63,10 @@ export function ExploreWorkflowSidebar({
         <>
           <p className="text-sm font-medium text-ink">How it works</p>
           <p className="mt-1 text-xs leading-relaxed text-body">
-            Pick symbols, then scan with indicators or a strategy — not both.
-            Indicator scans show signal matches per indicator. Strategy scans
-            rank symbols by backtest performance.
+            Pick symbols, then scan with one or more exploration filters or a
+            strategy — not both. Multi-exploration scans show a consolidated
+            report first, then per-exploration symbol tables. Strategy scans rank
+            symbols by backtest performance.
           </p>
         </>
       }
