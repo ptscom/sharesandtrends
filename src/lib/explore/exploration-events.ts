@@ -3,7 +3,6 @@ import { evaluateOptional, evaluateSeries } from "@/lib/engine/evaluate";
 import { prepareScanBarsAndPattern } from "@/lib/engine/scan-timeframe";
 import type { HorizonStats } from "@/lib/explore/exploration-models";
 import type { HorizonKey } from "@/lib/explore/exploration-snapshot";
-import { backtestHorizons } from "@/lib/explore/indicator-scan";
 import type { OhlcvBar, PatternDefinition } from "@/lib/types";
 import type { ExploreTimeframeMode } from "@/lib/patterns/mtf-combine";
 
@@ -93,6 +92,46 @@ export function listExplorationEvents(
   return events;
 }
 
+function horizonStatsFromEvents(
+  events: ExplorationEvent[],
+  key: HorizonKey,
+): HorizonStats {
+  const returns = events
+    .map((event) => event.horizons[key].returnPct)
+    .filter((value): value is number => value !== null);
+
+  if (returns.length === 0) {
+    return { avgReturnPct: 0, winRate: 0, trades: 0 };
+  }
+
+  const wins = returns.filter((value) => value > 0).length;
+  const avg =
+    returns.reduce((sum, value) => sum + value, 0) / returns.length;
+
+  return {
+    avgReturnPct: avg,
+    winRate: (wins / returns.length) * 100,
+    trades: returns.length,
+  };
+}
+
+export function summarizeEventHorizons(
+  events: ExplorationEvent[],
+): ExplorationSymbolHistory["horizons"] {
+  return {
+    d3: horizonStatsFromEvents(events, "d3"),
+    d5: horizonStatsFromEvents(events, "d5"),
+    d10: horizonStatsFromEvents(events, "d10"),
+  };
+}
+
+export function computeExplorationHorizons(
+  bars: OhlcvBar[],
+  pattern: PatternDefinition,
+): ExplorationSymbolHistory["horizons"] {
+  return summarizeEventHorizons(listExplorationEvents(bars, pattern));
+}
+
 export function buildExplorationSymbolHistory(
   dailyBars: OhlcvBar[],
   pattern: PatternDefinition,
@@ -105,18 +144,9 @@ export function buildExplorationSymbolHistory(
   );
 
   const events = listExplorationEvents(bars, scanPattern);
-  const horizons = backtestHorizons(bars, scanPattern) ?? {
-    d3: { avgReturnPct: 0, winRate: 0, trades: 0 },
-    d5: { avgReturnPct: 0, winRate: 0, trades: 0 },
-    d10: { avgReturnPct: 0, winRate: 0, trades: 0 },
-  };
 
   return {
     events,
-    horizons: {
-      d3: horizons.d3,
-      d5: horizons.d5,
-      d10: horizons.d10,
-    },
+    horizons: summarizeEventHorizons(events),
   };
 }

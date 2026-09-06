@@ -168,9 +168,11 @@ export function ExplorationSymbolDetail({
           <p className="ui-eyebrow">Historical performance</p>
           <h2 className="ui-section-title mt-2">Forward returns after signal</h2>
           <p className="ui-helper mt-1">
-            Each row is a past date when this exploration triggered. Returns are
-            measured from the signal-day close to the close N trading days later
-            (same 3d / 5d / 10d horizons as the results table).
+            Each row is a past date when this exploration newly triggered.
+            Returns are measured from the signal-day close to the close N
+            trading days later. Summary cards above average the same per-signal
+            returns shown in the table (signals without enough future data are
+            excluded from each horizon).
           </p>
 
           <div className="mt-5 grid gap-3 sm:grid-cols-3">
