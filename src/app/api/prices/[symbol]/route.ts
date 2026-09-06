@@ -27,9 +27,18 @@ export async function GET(
   const { searchParams } = new URL(request.url);
   const range = searchParams.get("range") ?? "10y";
   const interval = searchParams.get("interval") ?? "1d";
+  const from = searchParams.get("from");
+  const to = searchParams.get("to");
 
   const upper = symbol.toUpperCase();
-  const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(upper)}?interval=${interval}&range=${range}`;
+  let url: string;
+  if (from && to) {
+    const period1 = Math.floor(new Date(`${from}T00:00:00Z`).getTime() / 1000);
+    const period2 = Math.floor(new Date(`${to}T23:59:59Z`).getTime() / 1000);
+    url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(upper)}?interval=${interval}&period1=${period1}&period2=${period2}`;
+  } else {
+    url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(upper)}?interval=${interval}&range=${range}`;
+  }
 
   try {
     const response = await fetch(url, {

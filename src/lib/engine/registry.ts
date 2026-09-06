@@ -148,6 +148,12 @@ export const INDICATOR_REGISTRY: IndicatorDefinition[] = [
     category: "momentum",
     params: {
       length: { type: "int", default: 20, min: 2, max: 300, label: "Period" },
+      source: {
+        type: "enum",
+        default: "close",
+        options: ["open", "high", "low", "close"],
+        label: "Source",
+      },
     },
     outputs: ["roc"],
   },
@@ -184,6 +190,12 @@ export const INDICATOR_REGISTRY: IndicatorDefinition[] = [
     params: {
       length: { type: "int", default: 15, min: 2, max: 50, label: "Period" },
       signal: { type: "int", default: 9, min: 2, max: 30, label: "Signal" },
+      source: {
+        type: "enum",
+        default: "close",
+        options: ["open", "high", "low", "close"],
+        label: "Source",
+      },
     },
     outputs: ["trix", "signal"],
   },
@@ -222,6 +234,12 @@ export const INDICATOR_REGISTRY: IndicatorDefinition[] = [
     category: "momentum",
     params: {
       length: { type: "int", default: 126, min: 5, max: 300, label: "Lookback" },
+      source: {
+        type: "enum",
+        default: "close",
+        options: ["open", "high", "low", "close"],
+        label: "Source",
+      },
     },
     outputs: ["momentum"],
   },
@@ -231,6 +249,12 @@ export const INDICATOR_REGISTRY: IndicatorDefinition[] = [
     category: "mean_reversion",
     params: {
       length: { type: "int", default: 20, min: 5, max: 200, label: "Lookback" },
+      source: {
+        type: "enum",
+        default: "close",
+        options: ["open", "high", "low", "close"],
+        label: "Source",
+      },
     },
     outputs: ["zscore"],
   },
@@ -241,6 +265,12 @@ export const INDICATOR_REGISTRY: IndicatorDefinition[] = [
     params: {
       length: { type: "int", default: 20, min: 5, max: 200, label: "SMA Period" },
       pct: { type: "float", default: 3, min: 0.5, max: 15, label: "Envelope %" },
+      source: {
+        type: "enum",
+        default: "close",
+        options: ["open", "high", "low", "close"],
+        label: "Source",
+      },
     },
     outputs: ["middle", "upper", "lower"],
   },
@@ -252,6 +282,147 @@ export const INDICATOR_REGISTRY: IndicatorDefinition[] = [
       length: { type: "int", default: 20, min: 2, max: 100, label: "Period" },
     },
     outputs: ["volume_sma"],
+  },
+  {
+    id: "wma",
+    name: "Weighted Moving Average",
+    category: "overlap",
+    params: {
+      length: { type: "int", default: 20, min: 1, max: 500, label: "Period" },
+      source: {
+        type: "enum",
+        default: "close",
+        options: ["open", "high", "low", "close", "volume"],
+        label: "Source",
+      },
+    },
+    outputs: ["wma"],
+  },
+  {
+    id: "wema",
+    name: "Wilder Smoothing (WEMA)",
+    category: "overlap",
+    params: {
+      length: { type: "int", default: 14, min: 1, max: 500, label: "Period" },
+      source: {
+        type: "enum",
+        default: "close",
+        options: ["open", "high", "low", "close", "volume"],
+        label: "Source",
+      },
+    },
+    outputs: ["wema"],
+  },
+  {
+    id: "stoch_rsi",
+    name: "Stochastic RSI",
+    category: "momentum",
+    params: {
+      rsiPeriod: { type: "int", default: 14, min: 2, max: 50, label: "RSI Period" },
+      stochasticPeriod: { type: "int", default: 14, min: 2, max: 50, label: "Stoch Period" },
+      kPeriod: { type: "int", default: 3, min: 1, max: 20, label: "%K" },
+      dPeriod: { type: "int", default: 3, min: 1, max: 20, label: "%D" },
+      source: {
+        type: "enum",
+        default: "close",
+        options: ["open", "high", "low", "close"],
+        label: "Source",
+      },
+    },
+    outputs: ["stochRSI", "k", "d"],
+  },
+  {
+    id: "awesome_oscillator",
+    name: "Awesome Oscillator",
+    category: "momentum",
+    params: {
+      fastPeriod: { type: "int", default: 5, min: 2, max: 50, label: "Fast" },
+      slowPeriod: { type: "int", default: 34, min: 5, max: 100, label: "Slow" },
+    },
+    outputs: ["ao"],
+  },
+  {
+    id: "force_index",
+    name: "Force Index",
+    category: "volume",
+    params: {
+      length: { type: "int", default: 13, min: 1, max: 50, label: "Period" },
+    },
+    outputs: ["force_index"],
+  },
+  {
+    id: "vwap",
+    name: "VWAP",
+    category: "volume",
+    params: {},
+    outputs: ["vwap"],
+  },
+  {
+    id: "kst",
+    name: "Know Sure Thing (KST)",
+    category: "momentum",
+    params: {
+      signalPeriod: { type: "int", default: 9, min: 2, max: 30, label: "Signal" },
+      source: {
+        type: "enum",
+        default: "close",
+        options: ["open", "high", "low", "close"],
+        label: "Source",
+      },
+    },
+    outputs: ["kst", "signal"],
+  },
+  {
+    id: "adl",
+    name: "Accumulation / Distribution",
+    category: "volume",
+    params: {},
+    outputs: ["adl"],
+  },
+  {
+    id: "stddev",
+    name: "Standard Deviation",
+    category: "volatility",
+    params: {
+      length: { type: "int", default: 20, min: 2, max: 200, label: "Period" },
+      source: {
+        type: "enum",
+        default: "close",
+        options: ["open", "high", "low", "close"],
+        label: "Source",
+      },
+    },
+    outputs: ["stddev"],
+  },
+  {
+    id: "highest",
+    name: "Highest High",
+    category: "price",
+    params: {
+      length: { type: "int", default: 20, min: 2, max: 300, label: "Period" },
+      source: {
+        type: "enum",
+        default: "high",
+        options: ["open", "high", "low", "close"],
+        label: "Source",
+      },
+    },
+    outputs: ["highest"],
+  },
+  {
+    id: "lowest",
+    name: "Lowest Low",
+    category: "price",
+    params: {
+      length: { type: "int", default: 20, min: 2, max: 300, label: "Period" },
+      source: {
+        type: "enum",
+        default: "low",
+        options: ["open", "high", "low", "close"],
+        label: "Source",
+      },
+    },
+    outputs: ["lowest"],
   },
   {
     id: "candle_pattern",
