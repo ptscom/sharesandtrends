@@ -4,6 +4,7 @@ import { hasSignalToday, runBacktest } from "@/lib/engine/backtest";
 import { prepareScanBarsAndPattern } from "@/lib/engine/scan-timeframe";
 import type { ExploreTimeframeMode } from "@/lib/patterns/mtf-combine";
 import type {
+  ExplorationFilter,
   HorizonStats,
   IndicatorScanResultRow,
   IndicatorScanRun,
@@ -29,7 +30,7 @@ function backtestHorizonStats(
   };
 }
 
-function backtestHorizons(
+export function backtestHorizons(
   bars: OhlcvBar[],
   pattern: PatternDefinition,
 ): IndicatorScanResultRow["horizons"] {
@@ -48,6 +49,7 @@ export interface IndicatorScanCoreOptions {
   filterName: string;
   filterDescription: string;
   timeframeMode: ExploreTimeframeMode;
+  filter?: ExplorationFilter;
 }
 
 function scanPatternForUniverse(
@@ -99,6 +101,7 @@ export function runIndicatorScanCore(
     filterName,
     filterDescription,
     timeframeMode,
+    filter,
   } = options;
 
   const results = scanPatternForUniverse(
@@ -116,6 +119,7 @@ export function runIndicatorScanCore(
     filterName,
     filterDescription,
     timeframeMode,
+    filter,
     results,
   };
 }

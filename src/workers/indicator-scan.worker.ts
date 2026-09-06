@@ -1,4 +1,5 @@
 import { runIndicatorScanCore } from "@/lib/explore/indicator-scan";
+import type { ExplorationFilter } from "@/lib/explore/exploration-models";
 import type { OhlcvBar, PatternDefinition } from "@/lib/types";
 import type { ExploreTimeframeMode } from "@/lib/patterns/mtf-combine";
 
@@ -12,6 +13,7 @@ export interface IndicatorScanWorkerRequest {
   filterName: string;
   filterDescription: string;
   timeframeMode: ExploreTimeframeMode;
+  filter?: ExplorationFilter;
 }
 
 export type IndicatorScanWorkerResponse =
@@ -37,6 +39,7 @@ self.onmessage = (event: MessageEvent<IndicatorScanWorkerRequest>) => {
       filterName,
       filterDescription,
       timeframeMode,
+      filter,
     } = msg;
 
     const chunk = Math.max(1, Math.floor(universe.length / 20));
@@ -59,6 +62,7 @@ self.onmessage = (event: MessageEvent<IndicatorScanWorkerRequest>) => {
       filterName,
       filterDescription,
       timeframeMode,
+      filter,
     });
 
     const done: IndicatorScanWorkerResponse = { type: "done", requestId, scan };

@@ -152,6 +152,8 @@ export interface IndicatorScanRun {
   filterName: string;
   filterDescription: string;
   timeframeMode: ExploreTimeframeMode;
+  /** Snapshot of the exploration filter used for this run (for symbol drill-down) */
+  filter?: ExplorationFilter;
   results: IndicatorScanResultRow[];
 }
 
