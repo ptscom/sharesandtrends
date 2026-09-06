@@ -8,8 +8,10 @@ import type {
   ExplorationConditionRow,
   ExplorationOp,
   ExplorationOperand,
+  ExplorationPriorContext,
   PriceField,
 } from "@/lib/explore/exploration-models";
+import { createDefaultPriorContext } from "@/lib/explore/exploration-models";
 import {
   coerceConditionForLeft,
   createBlankCondition,
@@ -204,6 +206,9 @@ export function ExplorationBuilderModal({
 }: ExplorationBuilderModalProps) {
   const [name, setName] = useState("Custom exploration");
   const [rows, setRows] = useState<ExplorationConditionRow[]>([]);
+  const [priorContext, setPriorContext] = useState<ExplorationPriorContext>(
+    createDefaultPriorContext(),
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -217,6 +222,7 @@ export function ExplorationBuilderModal({
         condition: { ...row.condition },
       })),
     );
+    setPriorContext(normalized.priorContext ?? createDefaultPriorContext());
   }, [open, initial, initialName]);
 
   useEffect(() => {
@@ -290,11 +296,11 @@ export function ExplorationBuilderModal({
 
   const handleAdd = () => {
     if (rows.length === 0) return;
-    onAdd(name, { rows }, editingSavedId ?? undefined);
+    onAdd(name, { rows, priorContext }, editingSavedId ?? undefined);
     onClose();
   };
 
-  const preview = describeBuilderState({ rows });
+  const preview = describeBuilderState({ rows, priorContext });
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center">
@@ -359,6 +365,95 @@ export function ExplorationBuilderModal({
             >
               + Add condition
             </button>
+          </div>
+
+          <div className="mt-4 rounded-lg border border-border bg-bg/50 px-3 py-3">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-ink">Prior context</p>
+                <p className="mt-0.5 text-xs text-muted">
+                  Require a streak of bars before today&apos;s signal (optional)
+                </p>
+              </div>
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  checked={priorContext.enabled}
+                  onChange={(e) =>
+                    setPriorContext((prev) => ({
+                      ...prev,
+                      enabled: e.target.checked,
+                    }))
+                  }
+                  className="h-4 w-4 rounded border-border"
+                />
+                Enable
+              </label>
+            </div>
+
+            {priorContext.enabled && (
+              <div
+                className={`mt-3 grid w-fit max-w-full ${RULE_GRID_COLS} ${RULE_GRID_GAP} items-center`}
+              >
+                <span className="text-center text-[11px] font-bold uppercase tracking-wide text-muted">
+                  FOR
+                </span>
+                <LeftOperandFields
+                  operand={priorContext.operand}
+                  onChange={(operand) =>
+                    setPriorContext((prev) => ({ ...prev, operand }))
+                  }
+                />
+                <select
+                  value={priorContext.compare}
+                  onChange={(e) =>
+                    setPriorContext((prev) => ({
+                      ...prev,
+                      compare: e.target.value as "below" | "above",
+                    }))
+                  }
+                  className={FIELD_OP}
+                  aria-label="Prior comparison"
+                >
+                  <option value="below">below</option>
+                  <option value="above">above</option>
+                </select>
+                <input
+                  type="number"
+                  value={priorContext.level}
+                  onChange={(e) =>
+                    setPriorContext((prev) => ({
+                      ...prev,
+                      level: Number.parseFloat(e.target.value) || 0,
+                    }))
+                  }
+                  className={FIELD_NUM}
+                  aria-label="Level"
+                />
+                <label className="col-span-2 flex items-center gap-2 text-sm text-body">
+                  <span className="shrink-0 text-muted">for</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={500}
+                    value={priorContext.minBars}
+                    onChange={(e) =>
+                      setPriorContext((prev) => ({
+                        ...prev,
+                        minBars: Math.max(
+                          1,
+                          Number.parseInt(e.target.value, 10) || 1,
+                        ),
+                      }))
+                    }
+                    className={`${FIELD_NUM} w-20`}
+                    aria-label="Minimum trading days"
+                  />
+                  <span className="text-muted">+ trading days</span>
+                </label>
+                <span className="h-9" aria-hidden />
+              </div>
+            )}
           </div>
 
           <p className="mt-2 rounded-lg border border-border-subtle bg-bg px-3 py-2 text-xs text-muted">

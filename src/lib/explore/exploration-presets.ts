@@ -143,6 +143,49 @@ function buildOscillatorLevel(
   };
 }
 
+function buildStreakBreakoutOscillator(
+  indicatorType: string,
+  alias: string,
+  outputKey: string,
+  params: Record<string, number | string>,
+  timeframeMode: ExploreTimeframeMode,
+  name: string,
+  defaultThreshold: number,
+): PatternDefinition {
+  const period = Number(params.period ?? 14);
+  const threshold = Number(params.threshold ?? defaultThreshold);
+  const minDays = Number(params.minDays ?? 100);
+  const op = String(params.op ?? "crosses_above") as Expression["op"];
+  const priorCompare = String(params.priorCompare ?? "below");
+  const streakOp =
+    priorCompare === "above" ? "streak_above" : "streak_below";
+
+  const indicatorParams: Record<string, number | string> = { length: period };
+  if (indicatorType === "cci") {
+    indicatorParams.constant = 0.015;
+  }
+
+  return {
+    name,
+    indicators: [
+      {
+        alias,
+        type: indicatorType,
+        params: indicatorParams,
+        timeframe: toTf(timeframeMode),
+      },
+    ],
+    entry: expr(op, outputKey, threshold),
+    filters: {
+      op: streakOp,
+      left: { ref: outputKey },
+      right: { value: threshold },
+      minBars: minDays,
+    },
+    backtest: { entryOn: "close", exitOn: "opposite_signal" },
+  };
+}
+
 function buildLineCross(
   indicatorType: string,
   params: Record<string, number | string>,
@@ -255,6 +298,20 @@ const LEVEL_COMPARE_OPTIONS = [
 const CROSS_COMPARE_OPTIONS = [
   { value: "crosses_above", label: "Crosses above" },
   { value: "crosses_below", label: "Crosses below" },
+];
+
+const MIN_DAYS_PARAM: ExplorationParamDef = {
+  key: "minDays",
+  label: "Min days prior",
+  type: "int",
+  default: 100,
+  min: 1,
+  max: 500,
+};
+
+const PRIOR_COMPARE_OPTIONS = [
+  { value: "below", label: "Below level" },
+  { value: "above", label: "Above level" },
 ];
 
 const PERIOD_PARAM: ExplorationParamDef = {
@@ -842,6 +899,51 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
       const period = Number(params.period ?? 14);
       const op = String(params.op ?? "crosses_above");
       return `RSI(${period}) ${opLabel(op).toLowerCase()} 50`;
+    },
+  },
+  {
+    id: "exp-rsi-breakout-after-consolidation",
+    name: "RSI Breakout After Consolidation",
+    category: "Momentum",
+    kind: "streak_breakout",
+    description:
+      "RSI crosses above a level after staying below it for many consecutive days",
+    params: [
+      { key: "period", label: "Period", type: "int", default: 14, min: 2, max: 100 },
+      { key: "threshold", label: "Level", type: "float", default: 60, min: 0, max: 100 },
+      MIN_DAYS_PARAM,
+      {
+        key: "priorCompare",
+        label: "Prior stretch",
+        type: "enum",
+        default: "below",
+        options: PRIOR_COMPARE_OPTIONS,
+      },
+      {
+        key: "op",
+        label: "Trigger",
+        type: "enum",
+        default: "crosses_above",
+        options: CROSS_COMPARE_OPTIONS,
+      },
+    ],
+    buildPattern: (params, tf) =>
+      buildStreakBreakoutOscillator(
+        "rsi",
+        "rsi",
+        "rsi",
+        params,
+        tf,
+        "RSI Breakout After Consolidation",
+        60,
+      ),
+    describe: (params) => {
+      const period = Number(params.period ?? 14);
+      const threshold = Number(params.threshold ?? 60);
+      const minDays = Number(params.minDays ?? 100);
+      const op = String(params.op ?? "crosses_above");
+      const priorCompare = String(params.priorCompare ?? "below");
+      return `RSI(${period}) ${priorCompare} ${threshold} for ${minDays}+ days, then ${opLabel(op).toLowerCase()} ${threshold}`;
     },
   },
   {

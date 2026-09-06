@@ -93,6 +93,26 @@ export function evaluateExpression(
       if ([l0, r0, l1, r1].some((v) => v === null)) return false;
       return l0! >= r0! && l1! < r1!;
     }
+    case "streak_below": {
+      const minBars = readMinBarsArg(expr);
+      if (minBars <= 0 || index < minBars) return false;
+      for (let j = index - minBars; j < index; j++) {
+        const value = resolveValue(ctx, expr.left, j);
+        const level = resolveValue(ctx, expr.right, j);
+        if (value === null || level === null || value >= level) return false;
+      }
+      return true;
+    }
+    case "streak_above": {
+      const minBars = readMinBarsArg(expr);
+      if (minBars <= 0 || index < minBars) return false;
+      for (let j = index - minBars; j < index; j++) {
+        const value = resolveValue(ctx, expr.left, j);
+        const level = resolveValue(ctx, expr.right, j);
+        if (value === null || level === null || value <= level) return false;
+      }
+      return true;
+    }
     default:
       return false;
   }
@@ -111,4 +131,15 @@ export function evaluateOptional(
 ): boolean[] {
   if (!expr) return ctx.dates.map(() => true);
   return evaluateSeries(ctx, expr);
+}
+
+function readMinBarsArg(expr: Expression): number {
+  if (typeof expr.minBars === "number" && expr.minBars > 0) {
+    return Math.floor(expr.minBars);
+  }
+  const raw = expr.args?.[0];
+  if (raw && "value" in raw && typeof raw.value === "number") {
+    return Math.floor(raw.value);
+  }
+  return 0;
 }

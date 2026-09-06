@@ -40,10 +40,37 @@ export interface ExplorationConditionRow {
 
 export interface ExplorationBuilderState {
   rows: ExplorationConditionRow[];
+  /** Optional streak/duration rule evaluated before the signal bar */
+  priorContext?: ExplorationPriorContext;
   /** @deprecated Legacy flat list — migrated via normalizeBuilderState() */
   logic?: "and" | "or";
   /** @deprecated Legacy flat list — migrated via normalizeBuilderState() */
   conditions?: ExplorationCondition[];
+}
+
+export type PriorContextCompare = "below" | "above";
+
+/** Series must stay above/below a level for minBars ending the day before the signal */
+export interface ExplorationPriorContext {
+  enabled: boolean;
+  minBars: number;
+  compare: PriorContextCompare;
+  level: number;
+  operand: ExplorationOperand;
+}
+
+export function createDefaultPriorContext(): ExplorationPriorContext {
+  return {
+    enabled: false,
+    minBars: 100,
+    compare: "below",
+    level: 60,
+    operand: {
+      kind: "indicator",
+      indicatorType: "rsi",
+      params: { length: 14, source: "close" },
+    },
+  };
 }
 
 export interface ExplorationParamDef {
@@ -61,7 +88,8 @@ export type ExplorationPresetKind =
   | "overlay_vs_overlay"
   | "oscillator_level"
   | "line_cross"
-  | "price_vs_band";
+  | "price_vs_band"
+  | "streak_breakout";
 
 export interface ExplorationPreset {
   id: string;

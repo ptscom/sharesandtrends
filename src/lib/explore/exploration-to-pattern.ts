@@ -11,15 +11,17 @@ import type {
 } from "@/lib/types";
 import { CANDLE_PATTERN_CATALOG } from "@/lib/patterns/candle-catalog";
 import { getExplorationPreset } from "@/lib/explore/exploration-presets";
-import type {
-  ExplorationBuilderState,
-  ExplorationCondition,
-  ExplorationConditionRow,
-  ExplorationFilter,
-  ExplorationOperand,
-  ExplorationOp,
-  ExplorationPreset,
-  PriceField,
+import {
+  createDefaultPriorContext,
+  type ExplorationBuilderState,
+  type ExplorationCondition,
+  type ExplorationConditionRow,
+  type ExplorationFilter,
+  type ExplorationOperand,
+  type ExplorationOp,
+  type ExplorationPreset,
+  type ExplorationPriorContext,
+  type PriceField,
 } from "@/lib/explore/exploration-models";
 
 const PRICE_FIELDS = ["open", "high", "low", "close"] as const;
@@ -86,33 +88,67 @@ function operandToRef(
   return resolveOutputKey(def, alias, operand.output);
 }
 
+function registerIndicatorOperand(
+  operand: ExplorationOperand,
+  indicators: IndicatorDef[],
+  aliasMap: Map<string, string>,
+  timeframeMode: ExploreTimeframeMode,
+  index: { current: number },
+): void {
+  if (operand.kind !== "indicator") return;
+  const key = indicatorInstanceKey(operand);
+  if (aliasMap.has(key)) return;
+  const alias = `e${index.current}`;
+  index.current += 1;
+  aliasMap.set(key, alias);
+  indicators.push({
+    alias,
+    type: operand.indicatorType,
+    params: operand.params,
+    timeframe: toTimeframe(timeframeMode),
+  });
+}
+
 function collectIndicators(
   conditions: ExplorationCondition[],
   timeframeMode: ExploreTimeframeMode,
+  extraOperands: ExplorationOperand[] = [],
 ): { indicators: IndicatorDef[]; aliasMap: Map<string, string> } {
   const indicators: IndicatorDef[] = [];
   const aliasMap = new Map<string, string>();
-  const tf = toTimeframe(timeframeMode);
-  let index = 0;
+  const index = { current: 0 };
 
   for (const condition of conditions) {
     for (const operand of [condition.left, condition.right]) {
-      if (operand.kind !== "indicator") continue;
-      const key = indicatorInstanceKey(operand);
-      if (aliasMap.has(key)) continue;
-      const alias = `e${index}`;
-      index += 1;
-      aliasMap.set(key, alias);
-      indicators.push({
-        alias,
-        type: operand.indicatorType,
-        params: operand.params,
-        timeframe: tf,
-      });
+      registerIndicatorOperand(operand, indicators, aliasMap, timeframeMode, index);
     }
   }
 
+  for (const operand of extraOperands) {
+    registerIndicatorOperand(operand, indicators, aliasMap, timeframeMode, index);
+  }
+
   return { indicators, aliasMap };
+}
+
+function buildPriorContextExpression(
+  prior: ExplorationPriorContext,
+  aliasMap: Map<string, string>,
+): Expression {
+  const seriesRef = operandToRef(prior.operand, aliasMap);
+  const op = prior.compare === "below" ? "streak_below" : "streak_above";
+  return {
+    op,
+    left: { ref: seriesRef },
+    right: { value: prior.level },
+    minBars: prior.minBars,
+  };
+}
+
+function describePriorContext(prior: ExplorationPriorContext): string {
+  const series = describeOperand(prior.operand);
+  const compare = prior.compare === "below" ? "below" : "above";
+  return `${series} ${compare} ${prior.level} for ${prior.minBars}+ days before signal`;
 }
 
 function conditionToExpression(
@@ -164,8 +200,10 @@ function buildLogicExpression(
 export function normalizeBuilderState(
   builder: ExplorationBuilderState,
 ): ExplorationBuilderState {
+  const priorContext = builder.priorContext ?? createDefaultPriorContext();
+
   if (builder.rows?.length) {
-    return builder;
+    return { rows: builder.rows, priorContext };
   }
 
   if (builder.conditions?.length) {
@@ -176,6 +214,7 @@ export function normalizeBuilderState(
         connector: index === 0 ? undefined : logic,
         condition,
       })),
+      priorContext,
     };
   }
 
@@ -186,6 +225,7 @@ export function normalizeBuilderState(
         condition: createBlankCondition(),
       },
     ],
+    priorContext,
   };
 }
 
@@ -208,13 +248,23 @@ export function builderStateToPattern(
   }
 
   const conditions = normalized.rows.map((row) => row.condition);
-  const { indicators, aliasMap } = collectIndicators(conditions, timeframeMode);
+  const prior = normalized.priorContext;
+  const extraOperands =
+    prior?.enabled ? [prior.operand] : [];
+  const { indicators, aliasMap } = collectIndicators(
+    conditions,
+    timeframeMode,
+    extraOperands,
+  );
   const entry = buildLogicExpression(normalized.rows, aliasMap);
+  const filters =
+    prior?.enabled ? buildPriorContextExpression(prior, aliasMap) : undefined;
 
   return {
     name,
     indicators,
     entry,
+    filters,
     backtest: { entryOn: "close", exitOn: "opposite_signal" },
   };
 }
@@ -223,7 +273,7 @@ export function describeBuilderState(builder: ExplorationBuilderState): string {
   const normalized = normalizeBuilderState(builder);
   if (normalized.rows.length === 0) return "No conditions";
 
-  return normalized.rows
+  const trigger = normalized.rows
     .map((row, index) => {
       const part = describeCondition(row.condition);
       if (index === 0) return part;
@@ -231,6 +281,12 @@ export function describeBuilderState(builder: ExplorationBuilderState): string {
       return `${join} ${part}`;
     })
     .join(" ");
+
+  if (normalized.priorContext?.enabled) {
+    return `${trigger} · Prior: ${describePriorContext(normalized.priorContext)}`;
+  }
+
+  return trigger;
 }
 
 function describeOperand(operand: ExplorationOperand): string {

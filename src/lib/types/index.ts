@@ -40,13 +40,17 @@ export type ExpressionOp =
   | "gte"
   | "lte"
   | "crosses_above"
-  | "crosses_below";
+  | "crosses_below"
+  | "streak_below"
+  | "streak_above";
 
 export interface Expression {
   op: ExpressionOp;
   left?: ValueRef | Expression;
   right?: ValueRef | Expression;
   args?: Expression[];
+  /** Consecutive bars required for streak_below / streak_above */
+  minBars?: number;
 }
 
 export interface BacktestConfig {
