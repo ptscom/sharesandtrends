@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
+import { ExplorationSnapshotSettings } from "@/components/explore/ExplorationSnapshotSettings";
+import { formatExplorationSignalDate } from "@/lib/explore/exploration-snapshot";
 import { formatTimeframeModeLabel } from "@/lib/patterns/mtf-combine";
 import type {
   HorizonStats,
@@ -140,10 +142,8 @@ export function ExploreIndicatorResultsPanel({
                         {row.symbol}
                       </Link>
                     </td>
-                    <td className="px-4 align-top">
-                      <span className="ui-badge bg-brand-light text-brand-text">
-                        Today
-                      </span>
+                    <td className="px-4 align-top text-sm text-body">
+                      {formatExplorationSignalDate(row)}
                     </td>
                     <td className="px-4 align-top tabular-nums">
                       {row.lastClose.toFixed(2)}
@@ -156,6 +156,10 @@ export function ExploreIndicatorResultsPanel({
               </tbody>
             </table>
           </div>
+        )}
+
+        {scan.results.length > 0 && (
+          <ExplorationSnapshotSettings scan={scan} rows={sortedResults} />
         )}
       </div>
     </section>
