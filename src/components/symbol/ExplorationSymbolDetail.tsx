@@ -15,9 +15,10 @@ import type {
 } from "@/lib/explore/exploration-models";
 import { resolveExplorationPatternFromScan } from "@/lib/explore/resolve-exploration-scan";
 import { formatTimeframeModeLabel } from "@/lib/patterns/mtf-combine";
+import { prepareScanBarsAndPattern } from "@/lib/engine/scan-timeframe";
 import { getIndicatorScanRun } from "@/lib/storage/indicator-scans";
 import { getPriceBars } from "@/lib/storage/prices";
-import type { OhlcvBar, SignalPoint } from "@/lib/types";
+import type { OhlcvBar, PatternDefinition, SignalPoint } from "@/lib/types";
 
 export function ExplorationSymbolDetail({
   symbol,
@@ -28,6 +29,7 @@ export function ExplorationSymbolDetail({
 }) {
   const [bars, setBars] = useState<OhlcvBar[]>([]);
   const [scan, setScan] = useState<IndicatorScanRun | null>(null);
+  const [pattern, setPattern] = useState<PatternDefinition | null>(null);
   const [events, setEvents] = useState<ExplorationEvent[]>([]);
   const [horizons, setHorizons] = useState<{
     d3: HorizonStats;
@@ -62,6 +64,7 @@ export function ExplorationSymbolDetail({
       }
 
       setScan(scanRun);
+      setPattern(resolvedPattern);
       setBars(data);
 
       if (data.length > 0) {
@@ -79,15 +82,29 @@ export function ExplorationSymbolDetail({
     })();
   }, [symbol, explorationScanId]);
 
+  const chartBars = useMemo(() => {
+    if (!pattern || !scan || bars.length === 0) return bars.slice(-252);
+    const timeframeMode =
+      scan.timeframeMode === "mtf" ? "1D" : scan.timeframeMode;
+    const { bars: scanBars } = prepareScanBarsAndPattern(
+      bars,
+      pattern,
+      timeframeMode,
+    );
+    return scanBars.slice(-252);
+  }, [bars, pattern, scan]);
+
   const chartSignals = useMemo<SignalPoint[]>(() => {
-    const recent = events.slice(-40);
-    return recent.map((event) => ({
-      date: event.signalDate,
-      type: "entry" as const,
-      side: "long" as const,
-      price: event.entryPrice,
-    }));
-  }, [events]);
+    const dates = new Set(chartBars.map((bar) => bar.date));
+    return events
+      .filter((event) => dates.has(event.signalDate))
+      .map((event) => ({
+        date: event.signalDate,
+        type: "entry" as const,
+        side: "long" as const,
+        price: event.entryPrice,
+      }));
+  }, [events, chartBars]);
 
   if (bars.length === 0) {
     return (
@@ -150,11 +167,12 @@ export function ExplorationSymbolDetail({
       <section className="ui-panel p-6">
         <h2 className="ui-section-title">Price chart</h2>
         <p className="ui-helper mt-1">
-          Recent exploration signals (last {Math.min(events.length, 40)} shown)
+          Exploration entry signals in the last {chartBars.length} bars (
+          {chartSignals.length} shown)
         </p>
         <div className="mt-4">
           <PriceChart
-            bars={bars.slice(-252)}
+            bars={chartBars}
             signals={chartSignals}
             emaFast={[]}
             emaSlow={[]}
