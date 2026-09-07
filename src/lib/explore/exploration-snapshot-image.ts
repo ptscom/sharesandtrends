@@ -1,30 +1,35 @@
 import type { IndicatorScanRun, IndicatorScanResultRow } from "@/lib/explore/exploration-models";
 import {
+  buildSnapshotRowExtras,
+  formatSnapshotClose,
+  type SnapshotRowExtras,
+} from "@/lib/explore/exploration-snapshot-data";
+import {
   enabledSnapshotColumns,
   formatExplorationSignalDate,
   formatHorizonForSnapshot,
   type SnapshotColumnFilter,
 } from "@/lib/explore/exploration-snapshot";
 
-/** Matches site tokens from globals.css */
 const C = {
   ink: "#102a43",
   body: "#5f7184",
   muted: "#8190a0",
+  headerBlue: "#4b78b8",
   border: "#e8e3dc",
   borderSubtle: "#f0ece6",
   surface: "#ffffff",
-  bg: "#faf8f4",
-  bgWarm: "#f3efe8",
-  bgTop: "#fdfbf7",
-  brand: "#f59e0b",
+  outerTop: "#eef4fb",
+  outerBottom: "#f7f9fc",
   brandText: "#c96f00",
-  brandLight: "#fff4dd",
+  brand: "#f59e0b",
+  brandBadgeBg: "#fff7ed",
+  brandBadgeBorder: "#fde4c4",
+  tableHeaderBg: "#fef6eb",
   success: "#159a68",
-  successLight: "#eaf7f1",
   danger: "#e05252",
-  dangerLight: "#fdeeee",
-  headerInk: "#0f2438",
+  dotEmpty: "#e2e8f0",
+  shadow: "rgba(16, 42, 67, 0.08)",
 };
 
 const FONT =
@@ -42,25 +47,36 @@ export async function renderExplorationSnapshotPng(
 ): Promise<Blob> {
   const { scan, rows, columns } = options;
   const outputColumns = enabledSnapshotColumns(columns);
+  const rowExtras = await buildSnapshotRowExtras(scan, rows);
   const scale = 2;
 
-  const pad = 16;
-  const headerBlock = 58;
-  const gapAfterHeader = 12;
-  const rowHeight = 48;
-  const tableHeaderHeight = 36;
-  const tableRadius = 10;
+  const outerPad = 14;
+  const cardPad = 20;
+  const headerBlock = 78;
+  const gapAfterHeader = 14;
+  const rowHeight = 54;
+  const tableHeaderHeight = 34;
+  const cardRadius = 14;
+  const showLast5 = true;
 
-  const colSymbol = 108;
-  const colSignal = 98;
-  const colClose = 72;
-  const colHorizon = 108;
+  const colSymbol = 148;
+  const colSignal = 108;
+  const colClose = 88;
+  const colHorizon = 98;
+  const colLast5 = 72;
 
   const tableWidth =
-    colSymbol + colSignal + colClose + outputColumns.length * colHorizon;
-  const width = tableWidth + pad * 2;
-  const height =
-    pad + headerBlock + gapAfterHeader + tableHeaderHeight + rows.length * rowHeight + pad;
+    colSymbol +
+    colSignal +
+    colClose +
+    outputColumns.length * colHorizon +
+    (showLast5 ? colLast5 : 0);
+
+  const cardWidth = tableWidth + cardPad * 2;
+  const width = cardWidth + outerPad * 2;
+  const cardHeight =
+    cardPad + headerBlock + gapAfterHeader + tableHeaderHeight + rows.length * rowHeight + cardPad;
+  const height = cardHeight + outerPad * 2;
 
   const canvas = document.createElement("canvas");
   canvas.width = width * scale;
@@ -70,144 +86,58 @@ export async function renderExplorationSnapshotPng(
 
   ctx.scale(scale, scale);
 
-  drawBackground(ctx, width, height);
+  drawOuterBackground(ctx, width, height);
 
-  const contentX = pad;
-  let y = pad;
+  const cardX = outerPad;
+  const cardY = outerPad;
+  drawCard(ctx, cardX, cardY, cardWidth, cardHeight, cardRadius);
 
-  // Eyebrow
-  ctx.fillStyle = C.brandText;
-  ctx.font = `600 9px ${FONT}`;
-  ctx.letterSpacing = "0.12em";
-  ctx.fillText("EXPLORATION", contentX, y + 9);
-  ctx.letterSpacing = "0px";
+  const contentX = cardX + cardPad;
+  let y = cardY + cardPad;
 
-  // Title
-  y += 16;
-  ctx.fillStyle = C.ink;
-  ctx.font = `700 21px ${FONT}`;
-  ctx.fillText(scan.filterName, contentX, y + 20);
-
-  // Run time only
-  y += 28;
-  ctx.fillStyle = C.muted;
-  ctx.font = `400 12px ${FONT}`;
-  ctx.fillText(formatRunDate(scan.runAt), contentX, y + 12);
-
-  y += gapAfterHeader + 8;
+  drawHeader(ctx, scan, rows.length, contentX, y, cardWidth - cardPad * 2);
+  y += headerBlock + gapAfterHeader;
 
   const tableX = contentX;
   const tableW = tableWidth;
   const tableTop = y;
+  const tableH = tableHeaderHeight + rows.length * rowHeight;
 
-  // Table shell
-  ctx.save();
-  roundRect(ctx, tableX, tableTop, tableW, tableHeaderHeight + rows.length * rowHeight, tableRadius);
-  ctx.clip();
-  ctx.fillStyle = C.surface;
-  ctx.fillRect(tableX, tableTop, tableW, tableHeaderHeight + rows.length * rowHeight);
-
-  // Table header
-  ctx.fillStyle = C.headerInk;
-  ctx.fillRect(tableX, tableTop, tableW, tableHeaderHeight);
-
-  ctx.fillStyle = "rgba(255, 255, 255, 0.92)";
-  ctx.font = `600 9px ${FONT}`;
-  ctx.letterSpacing = "0.08em";
-  let x = tableX + 10;
-  const headerTextY = tableTop + 23;
-  ctx.fillText("SYMBOL", x, headerTextY);
-  x += colSymbol;
-  ctx.fillText("SIGNAL", x, headerTextY);
-  x += colSignal;
-  ctx.fillText("CLOSE", x, headerTextY);
-  x += colClose;
-  for (const column of outputColumns) {
-    ctx.fillText(column.label.toUpperCase(), x, headerTextY);
-    x += colHorizon;
-  }
-  ctx.letterSpacing = "0px";
-
-  y = tableTop + tableHeaderHeight;
-
-  rows.forEach((row, index) => {
-    const rowBg = index % 2 === 0 ? C.surface : C.bg;
-    ctx.fillStyle = rowBg;
-    ctx.fillRect(tableX, y, tableW, rowHeight);
-
-    if (index > 0) {
-      ctx.strokeStyle = C.borderSubtle;
-      ctx.lineWidth = 1;
-      ctx.beginPath();
-      ctx.moveTo(tableX + 8, y);
-      ctx.lineTo(tableX + tableW - 8, y);
-      ctx.stroke();
-    }
-
-    let cellX = tableX + 10;
-    const cellY = y + 22;
-
-    ctx.fillStyle = C.ink;
-    ctx.font = `600 12px ${MONO}`;
-    ctx.fillText(row.symbol, cellX, cellY);
-
-    cellX += colSymbol;
-    ctx.font = `400 11px ${FONT}`;
-    ctx.fillStyle = C.body;
-    ctx.fillText(formatExplorationSignalDate(row), cellX, cellY);
-
-    cellX += colSignal;
-    ctx.fillStyle = C.ink;
-    ctx.font = `500 12px ${MONO}`;
-    ctx.fillText(row.lastClose.toFixed(2), cellX, cellY);
-
-    cellX += colClose;
-    for (const column of outputColumns) {
-      const stats = row.horizons?.[column.key];
-      const formatted = formatHorizonForSnapshot(stats);
-      const positive = (stats?.avgReturnPct ?? 0) >= 0;
-      const hasReturn = formatted.returnLine !== "—";
-
-      if (hasReturn) {
-        drawReturnPill(
-          ctx,
-          cellX,
-          y + 10,
-          colHorizon - 8,
-          28,
-          formatted.returnLine,
-          positive,
-        );
-        if (formatted.winLine) {
-          ctx.fillStyle = C.muted;
-          ctx.font = `400 9px ${FONT}`;
-          ctx.fillText(formatted.winLine, cellX + 2, y + 40);
-        }
-      } else {
-        ctx.fillStyle = C.muted;
-        ctx.font = `500 12px ${MONO}`;
-        ctx.fillText("—", cellX, cellY);
-      }
-
-      cellX += colHorizon;
-    }
-
-    y += rowHeight;
-  });
-
-  ctx.restore();
-
-  // Table border
-  ctx.strokeStyle = C.border;
-  ctx.lineWidth = 1;
-  roundRect(
+  drawTableHeader(
     ctx,
     tableX,
     tableTop,
     tableW,
-    tableHeaderHeight + rows.length * rowHeight,
-    tableRadius,
+    tableHeaderHeight,
+    outputColumns,
+    showLast5,
+    { colSymbol, colSignal, colClose, colHorizon, colLast5 },
   );
+
+  y = tableTop + tableHeaderHeight;
+
+  rows.forEach((row, index) => {
+    drawTableRow(
+      ctx,
+      row,
+      rowExtras.get(row.symbol),
+      tableX,
+      y,
+      tableW,
+      rowHeight,
+      index,
+      outputColumns,
+      showLast5,
+      { colSymbol, colSignal, colClose, colHorizon, colLast5 },
+    );
+    y += rowHeight;
+  });
+
+  ctx.strokeStyle = C.borderSubtle;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(tableX, tableTop + tableH);
+  ctx.lineTo(tableX + tableW, tableTop + tableH);
   ctx.stroke();
 
   return new Promise((resolve, reject) => {
@@ -222,61 +152,307 @@ export async function renderExplorationSnapshotPng(
   });
 }
 
-function drawBackground(
+function drawOuterBackground(
   ctx: CanvasRenderingContext2D,
   width: number,
   height: number,
 ): void {
-  const base = ctx.createLinearGradient(0, 0, 0, height);
-  base.addColorStop(0, C.bgTop);
-  base.addColorStop(0.45, C.bg);
-  base.addColorStop(1, C.bgWarm);
-  ctx.fillStyle = base;
-  ctx.fillRect(0, 0, width, height);
-
-  const glow = ctx.createRadialGradient(
-    width * 0.08,
-    0,
-    0,
-    width * 0.08,
-    0,
-    width * 0.55,
-  );
-  glow.addColorStop(0, "rgba(245, 158, 11, 0.14)");
-  glow.addColorStop(1, "transparent");
-  ctx.fillStyle = glow;
-  ctx.fillRect(0, 0, width, height);
-
-  const accent = ctx.createRadialGradient(
-    width * 0.95,
-    height * 0.05,
-    0,
-    width * 0.95,
-    height * 0.05,
-    width * 0.4,
-  );
-  accent.addColorStop(0, "rgba(117, 102, 200, 0.07)");
-  accent.addColorStop(1, "transparent");
-  ctx.fillStyle = accent;
+  const grad = ctx.createLinearGradient(0, 0, 0, height);
+  grad.addColorStop(0, C.outerTop);
+  grad.addColorStop(1, C.outerBottom);
+  ctx.fillStyle = grad;
   ctx.fillRect(0, 0, width, height);
 }
 
-function drawReturnPill(
+function drawCard(
   ctx: CanvasRenderingContext2D,
   x: number,
   y: number,
   w: number,
   h: number,
-  text: string,
-  positive: boolean,
+  r: number,
 ): void {
-  ctx.fillStyle = positive ? C.successLight : C.dangerLight;
-  roundRect(ctx, x, y, w, h, 6);
+  ctx.save();
+  ctx.shadowColor = C.shadow;
+  ctx.shadowBlur = 18;
+  ctx.shadowOffsetY = 4;
+  ctx.fillStyle = C.surface;
+  roundRect(ctx, x, y, w, h, r);
+  ctx.fill();
+  ctx.restore();
+
+  ctx.strokeStyle = C.borderSubtle;
+  ctx.lineWidth = 1;
+  roundRect(ctx, x, y, w, h, r);
+  ctx.stroke();
+}
+
+function drawHeader(
+  ctx: CanvasRenderingContext2D,
+  scan: IndicatorScanRun,
+  symbolCount: number,
+  x: number,
+  y: number,
+  contentWidth: number,
+): void {
+  ctx.fillStyle = C.brandText;
+  ctx.font = `700 10px ${FONT}`;
+  ctx.fillText("EXPLORATION", x, y + 10);
+
+  ctx.fillStyle = C.ink;
+  ctx.font = `700 24px ${FONT}`;
+  ctx.fillText(scan.filterName, x, y + 38);
+
+  ctx.fillStyle = C.headerBlue;
+  ctx.font = `400 13px ${FONT}`;
+  ctx.fillText(formatRunDate(scan.runAt), x, y + 58);
+
+  const badgeW = 148;
+  const badgeH = 54;
+  const badgeX = x + contentWidth - badgeW;
+  const badgeY = y + 2;
+
+  ctx.fillStyle = C.brandBadgeBg;
+  ctx.strokeStyle = C.brandBadgeBorder;
+  ctx.lineWidth = 1;
+  roundRect(ctx, badgeX, badgeY, badgeW, badgeH, 10);
+  ctx.fill();
+  ctx.stroke();
+
+  drawMiniBarIcon(ctx, badgeX + 12, badgeY + 14);
+
+  ctx.fillStyle = C.ink;
+  ctx.font = `700 13px ${FONT}`;
+  ctx.fillText(
+    `${symbolCount} symbol${symbolCount === 1 ? "" : "s"}`,
+    badgeX + 34,
+    badgeY + 24,
+  );
+
+  ctx.fillStyle = C.headerBlue;
+  ctx.font = `400 11px ${FONT}`;
+  ctx.fillText("Showing latest signals", badgeX + 34, badgeY + 40);
+}
+
+function drawMiniBarIcon(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+): void {
+  const heights = [10, 16, 12];
+  const widths = 4;
+  const gap = 3;
+  heights.forEach((h, index) => {
+    ctx.fillStyle = index === 1 ? C.brand : "#fbbf24";
+    roundRect(ctx, x + index * (widths + gap), y + (18 - h), widths, h, 1.5);
+    ctx.fill();
+  });
+}
+
+function drawTableHeader(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  outputColumns: SnapshotColumnFilter[],
+  showLast5: boolean,
+  cols: {
+    colSymbol: number;
+    colSignal: number;
+    colClose: number;
+    colHorizon: number;
+    colLast5: number;
+  },
+): void {
+  ctx.fillStyle = C.tableHeaderBg;
+  ctx.fillRect(x, y, w, h);
+
+  ctx.fillStyle = C.headerBlue;
+  ctx.font = `600 10px ${FONT}`;
+
+  let cellX = x + 12;
+  const textY = y + 21;
+
+  drawHeaderLabel(ctx, "SYMBOL", cellX, textY, true);
+  cellX += cols.colSymbol;
+  drawHeaderLabel(ctx, "SIGNAL DATE", cellX, textY, true);
+  cellX += cols.colSignal;
+  drawHeaderLabel(ctx, "CLOSE", cellX, textY, true);
+  cellX += cols.colClose;
+
+  for (const column of outputColumns) {
+    drawHeaderLabel(ctx, column.label.toUpperCase(), cellX, textY, true);
+    cellX += cols.colHorizon;
+  }
+
+  if (showLast5) {
+    drawHeaderLabel(ctx, "LAST 5", cellX, textY, false);
+  }
+
+  ctx.strokeStyle = C.borderSubtle;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(x, y + h);
+  ctx.lineTo(x + w, y + h);
+  ctx.stroke();
+}
+
+function drawHeaderLabel(
+  ctx: CanvasRenderingContext2D,
+  label: string,
+  x: number,
+  y: number,
+  withSort: boolean,
+): void {
+  ctx.fillText(label, x, y);
+  if (withSort) {
+    drawSortGlyph(ctx, x + ctx.measureText(label).width + 4, y - 8);
+  }
+}
+
+function drawSortGlyph(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+): void {
+  ctx.fillStyle = "#a8bdd8";
+  ctx.beginPath();
+  ctx.moveTo(x + 3, y);
+  ctx.lineTo(x + 6, y + 4);
+  ctx.lineTo(x, y + 4);
+  ctx.closePath();
   ctx.fill();
 
+  ctx.beginPath();
+  ctx.moveTo(x, y + 6);
+  ctx.lineTo(x + 6, y + 6);
+  ctx.lineTo(x + 3, y + 10);
+  ctx.closePath();
+  ctx.fill();
+}
+
+function drawTableRow(
+  ctx: CanvasRenderingContext2D,
+  row: IndicatorScanResultRow,
+  extras: SnapshotRowExtras | undefined,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  index: number,
+  outputColumns: SnapshotColumnFilter[],
+  showLast5: boolean,
+  cols: {
+    colSymbol: number;
+    colSignal: number;
+    colClose: number;
+    colHorizon: number;
+    colLast5: number;
+  },
+): void {
+  if (index > 0) {
+    ctx.strokeStyle = C.borderSubtle;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(x + 10, y);
+    ctx.lineTo(x + w - 10, y);
+    ctx.stroke();
+  }
+
+  let cellX = x + 12;
+
+  ctx.fillStyle = C.ink;
+  ctx.font = `700 12px ${MONO}`;
+  ctx.fillText(row.symbol, cellX, y + 22);
+
+  ctx.fillStyle = C.headerBlue;
+  ctx.font = `400 11px ${FONT}`;
+  const subtitle = extras?.subtitle ?? row.symbol;
+  ctx.fillText(truncateText(ctx, subtitle, cols.colSymbol - 8), cellX, y + 38);
+
+  cellX += cols.colSymbol;
+  ctx.fillStyle = C.body;
+  ctx.font = `400 12px ${FONT}`;
+  ctx.fillText(formatExplorationSignalDate(row), cellX, y + 30);
+
+  cellX += cols.colSignal;
+  ctx.fillStyle = C.ink;
+  ctx.font = `600 13px ${MONO}`;
+  ctx.fillText(formatSnapshotClose(row.lastClose), cellX, y + 30);
+
+  cellX += cols.colClose;
+  for (const column of outputColumns) {
+    drawHorizonCell(ctx, row.horizons?.[column.key], cellX, y, cols.colHorizon);
+    cellX += cols.colHorizon;
+  }
+
+  if (showLast5) {
+    drawLast5Dots(ctx, extras?.last5 ?? [], cellX + 4, y + 22);
+  }
+}
+
+function drawHorizonCell(
+  ctx: CanvasRenderingContext2D,
+  stats: { avgReturnPct: number; winRate: number; trades: number } | undefined,
+  x: number,
+  y: number,
+  width: number,
+): void {
+  const formatted = formatHorizonForSnapshot(stats);
+  if (formatted.returnLine === "—") {
+    ctx.fillStyle = C.muted;
+    ctx.font = `500 12px ${MONO}`;
+    ctx.fillText("—", x, y + 30);
+    return;
+  }
+
+  const positive = (stats?.avgReturnPct ?? 0) >= 0;
   ctx.fillStyle = positive ? C.success : C.danger;
-  ctx.font = `700 11px ${MONO}`;
-  ctx.fillText(text, x + 7, y + 18);
+  ctx.font = `700 12px ${MONO}`;
+  ctx.fillText(formatted.returnLine, x, y + 22);
+
+  if (formatted.winLine) {
+    ctx.fillStyle = C.headerBlue;
+    ctx.font = `400 10px ${FONT}`;
+    ctx.fillText(formatted.winLine, x, y + 38);
+  }
+}
+
+function drawLast5Dots(
+  ctx: CanvasRenderingContext2D,
+  outcomes: boolean[],
+  x: number,
+  y: number,
+): void {
+  const dotR = 5;
+  const gap = 8;
+  const slots = 5;
+
+  for (let i = 0; i < slots; i++) {
+    const outcome = outcomes[i];
+    let color = C.dotEmpty;
+    if (outcome === true) color = C.success;
+    if (outcome === false) color = C.danger;
+
+    ctx.beginPath();
+    ctx.arc(x + i * (dotR * 2 + gap) + dotR, y, dotR, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+  }
+}
+
+function truncateText(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number,
+): string {
+  if (ctx.measureText(text).width <= maxWidth) return text;
+  let trimmed = text;
+  while (trimmed.length > 1 && ctx.measureText(`${trimmed}…`).width > maxWidth) {
+    trimmed = trimmed.slice(0, -1);
+  }
+  return `${trimmed}…`;
 }
 
 export function downloadExplorationSnapshot(blob: Blob, scan: IndicatorScanRun): void {
