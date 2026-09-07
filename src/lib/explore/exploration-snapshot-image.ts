@@ -1,5 +1,4 @@
 import type { IndicatorScanRun, IndicatorScanResultRow } from "@/lib/explore/exploration-models";
-import { formatTimeframeModeLabel } from "@/lib/patterns/mtf-combine";
 import {
   enabledSnapshotColumns,
   formatExplorationSignalDate,
@@ -7,17 +6,25 @@ import {
   type SnapshotColumnFilter,
 } from "@/lib/explore/exploration-snapshot";
 
-const COLORS = {
-  bg: "#faf8f4",
-  surface: "#ffffff",
+/** Matches site tokens from globals.css */
+const C = {
   ink: "#102a43",
   body: "#5f7184",
   muted: "#8190a0",
   border: "#e8e3dc",
-  brand: "#c96f00",
+  borderSubtle: "#f0ece6",
+  surface: "#ffffff",
+  bg: "#faf8f4",
+  bgWarm: "#f3efe8",
+  bgTop: "#fdfbf7",
+  brand: "#f59e0b",
+  brandText: "#c96f00",
+  brandLight: "#fff4dd",
   success: "#159a68",
+  successLight: "#eaf7f1",
   danger: "#e05252",
-  headerBg: "#fff4dd",
+  dangerLight: "#fdeeee",
+  headerInk: "#0f2438",
 };
 
 const FONT =
@@ -37,33 +44,23 @@ export async function renderExplorationSnapshotPng(
   const outputColumns = enabledSnapshotColumns(columns);
   const scale = 2;
 
-  // Tight but readable margins for social sharing
-  const margin = 14;
-  const contentPad = 12;
-  const rowHeight = 46;
-  const headerHeight = 38;
-  const titleBlockHeight = 92;
-  const footerHeight = 22;
+  const pad = 16;
+  const headerBlock = 58;
+  const gapAfterHeader = 12;
+  const rowHeight = 48;
+  const tableHeaderHeight = 36;
+  const tableRadius = 10;
 
-  const colSymbol = 104;
-  const colSignal = 96;
-  const colClose = 68;
-  const colHorizon = 104;
+  const colSymbol = 108;
+  const colSignal = 98;
+  const colClose = 72;
+  const colHorizon = 108;
 
   const tableWidth =
-    colSymbol +
-    colSignal +
-    colClose +
-    outputColumns.length * colHorizon;
-  const cardWidth = tableWidth + contentPad * 2;
-  const width = cardWidth + margin * 2;
+    colSymbol + colSignal + colClose + outputColumns.length * colHorizon;
+  const width = tableWidth + pad * 2;
   const height =
-    margin * 2 +
-    contentPad * 2 +
-    titleBlockHeight +
-    headerHeight +
-    rows.length * rowHeight +
-    footerHeight;
+    pad + headerBlock + gapAfterHeader + tableHeaderHeight + rows.length * rowHeight + pad;
 
   const canvas = document.createElement("canvas");
   canvas.width = width * scale;
@@ -72,124 +69,146 @@ export async function renderExplorationSnapshotPng(
   if (!ctx) throw new Error("Canvas not supported");
 
   ctx.scale(scale, scale);
-  ctx.fillStyle = COLORS.bg;
-  ctx.fillRect(0, 0, width, height);
 
-  const cardX = margin;
-  const cardY = margin;
-  const cardHeight = height - margin * 2;
+  drawBackground(ctx, width, height);
 
-  ctx.fillStyle = COLORS.surface;
-  roundRect(ctx, cardX, cardY, cardWidth, cardHeight, 12);
-  ctx.fill();
+  const contentX = pad;
+  let y = pad;
 
-  const tableX = cardX + contentPad;
-  let y = cardY + contentPad + 6;
+  // Eyebrow
+  ctx.fillStyle = C.brandText;
+  ctx.font = `600 9px ${FONT}`;
+  ctx.letterSpacing = "0.12em";
+  ctx.fillText("EXPLORATION", contentX, y + 9);
+  ctx.letterSpacing = "0px";
 
-  ctx.fillStyle = COLORS.ink;
-  ctx.font = `700 20px ${FONT}`;
-  ctx.fillText(scan.filterName, tableX, y + 20);
+  // Title
+  y += 16;
+  ctx.fillStyle = C.ink;
+  ctx.font = `700 21px ${FONT}`;
+  ctx.fillText(scan.filterName, contentX, y + 20);
 
+  // Run time only
   y += 28;
-  ctx.fillStyle = COLORS.body;
+  ctx.fillStyle = C.muted;
   ctx.font = `400 12px ${FONT}`;
-  const subtitle = `${formatTimeframeModeLabel(scan.timeframeMode)} · ${rows.length} symbols · ${formatRunDate(scan.runAt)}`;
-  ctx.fillText(subtitle, tableX, y + 12);
+  ctx.fillText(formatRunDate(scan.runAt), contentX, y + 12);
 
-  y += 18;
-  ctx.fillStyle = COLORS.muted;
-  ctx.font = `400 11px ${FONT}`;
-  const desc =
-    scan.filterDescription.length > 96
-      ? `${scan.filterDescription.slice(0, 93)}…`
-      : scan.filterDescription;
-  ctx.fillText(desc, tableX, y + 11);
+  y += gapAfterHeader + 8;
 
-  y += 22;
-
+  const tableX = contentX;
   const tableW = tableWidth;
+  const tableTop = y;
 
-  ctx.fillStyle = COLORS.headerBg;
-  roundRect(ctx, tableX, y, tableW, headerHeight, 6);
-  ctx.fill();
+  // Table shell
+  ctx.save();
+  roundRect(ctx, tableX, tableTop, tableW, tableHeaderHeight + rows.length * rowHeight, tableRadius);
+  ctx.clip();
+  ctx.fillStyle = C.surface;
+  ctx.fillRect(tableX, tableTop, tableW, tableHeaderHeight + rows.length * rowHeight);
 
-  ctx.fillStyle = COLORS.brand;
-  ctx.font = `600 10px ${FONT}`;
-  let x = tableX + 8;
-  const headerY = y + 24;
-  ctx.fillText("SYMBOL", x, headerY);
+  // Table header
+  ctx.fillStyle = C.headerInk;
+  ctx.fillRect(tableX, tableTop, tableW, tableHeaderHeight);
+
+  ctx.fillStyle = "rgba(255, 255, 255, 0.92)";
+  ctx.font = `600 9px ${FONT}`;
+  ctx.letterSpacing = "0.08em";
+  let x = tableX + 10;
+  const headerTextY = tableTop + 23;
+  ctx.fillText("SYMBOL", x, headerTextY);
   x += colSymbol;
-  ctx.fillText("SIGNAL", x, headerY);
+  ctx.fillText("SIGNAL", x, headerTextY);
   x += colSignal;
-  ctx.fillText("CLOSE", x, headerY);
+  ctx.fillText("CLOSE", x, headerTextY);
   x += colClose;
   for (const column of outputColumns) {
-    ctx.fillText(column.label.toUpperCase(), x, headerY);
+    ctx.fillText(column.label.toUpperCase(), x, headerTextY);
     x += colHorizon;
   }
+  ctx.letterSpacing = "0px";
 
-  y += headerHeight;
+  y = tableTop + tableHeaderHeight;
 
   rows.forEach((row, index) => {
+    const rowBg = index % 2 === 0 ? C.surface : C.bg;
+    ctx.fillStyle = rowBg;
+    ctx.fillRect(tableX, y, tableW, rowHeight);
+
     if (index > 0) {
-      ctx.strokeStyle = COLORS.border;
+      ctx.strokeStyle = C.borderSubtle;
       ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.moveTo(tableX, y);
-      ctx.lineTo(tableX + tableW, y);
+      ctx.moveTo(tableX + 8, y);
+      ctx.lineTo(tableX + tableW - 8, y);
       ctx.stroke();
     }
 
-    ctx.fillStyle = index % 2 === 0 ? COLORS.surface : COLORS.bg;
-    ctx.fillRect(tableX, y, tableW, rowHeight);
+    let cellX = tableX + 10;
+    const cellY = y + 22;
 
-    let cellX = tableX + 8;
-    const cellY = y + 20;
-
-    ctx.fillStyle = COLORS.ink;
+    ctx.fillStyle = C.ink;
     ctx.font = `600 12px ${MONO}`;
     ctx.fillText(row.symbol, cellX, cellY);
 
     cellX += colSymbol;
     ctx.font = `400 11px ${FONT}`;
-    ctx.fillStyle = COLORS.body;
+    ctx.fillStyle = C.body;
     ctx.fillText(formatExplorationSignalDate(row), cellX, cellY);
 
     cellX += colSignal;
-    ctx.fillStyle = COLORS.ink;
+    ctx.fillStyle = C.ink;
     ctx.font = `500 12px ${MONO}`;
     ctx.fillText(row.lastClose.toFixed(2), cellX, cellY);
 
     cellX += colClose;
     for (const column of outputColumns) {
-      const formatted = formatHorizonForSnapshot(row.horizons?.[column.key]);
-      const positive =
-        (row.horizons?.[column.key]?.avgReturnPct ?? 0) >= 0;
-      ctx.fillStyle = formatted.returnLine === "—"
-        ? COLORS.muted
-        : positive
-          ? COLORS.success
-          : COLORS.danger;
-      ctx.font = `600 11px ${MONO}`;
-      ctx.fillText(formatted.returnLine, cellX, cellY - 2);
-      if (formatted.winLine) {
-        ctx.fillStyle = COLORS.muted;
-        ctx.font = `400 9px ${FONT}`;
-        ctx.fillText(formatted.winLine, cellX, cellY + 11);
+      const stats = row.horizons?.[column.key];
+      const formatted = formatHorizonForSnapshot(stats);
+      const positive = (stats?.avgReturnPct ?? 0) >= 0;
+      const hasReturn = formatted.returnLine !== "—";
+
+      if (hasReturn) {
+        drawReturnPill(
+          ctx,
+          cellX,
+          y + 10,
+          colHorizon - 8,
+          28,
+          formatted.returnLine,
+          positive,
+        );
+        if (formatted.winLine) {
+          ctx.fillStyle = C.muted;
+          ctx.font = `400 9px ${FONT}`;
+          ctx.fillText(formatted.winLine, cellX + 2, y + 40);
+        }
+      } else {
+        ctx.fillStyle = C.muted;
+        ctx.font = `500 12px ${MONO}`;
+        ctx.fillText("—", cellX, cellY);
       }
+
       cellX += colHorizon;
     }
 
     y += rowHeight;
   });
 
-  ctx.fillStyle = COLORS.muted;
-  ctx.font = `400 9px ${FONT}`;
-  ctx.fillText(
-    "Shares & Trends · Exploration snapshot",
+  ctx.restore();
+
+  // Table border
+  ctx.strokeStyle = C.border;
+  ctx.lineWidth = 1;
+  roundRect(
+    ctx,
     tableX,
-    cardY + cardHeight - contentPad + 2,
+    tableTop,
+    tableW,
+    tableHeaderHeight + rows.length * rowHeight,
+    tableRadius,
   );
+  ctx.stroke();
 
   return new Promise((resolve, reject) => {
     canvas.toBlob(
@@ -201,6 +220,63 @@ export async function renderExplorationSnapshotPng(
       1,
     );
   });
+}
+
+function drawBackground(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+): void {
+  const base = ctx.createLinearGradient(0, 0, 0, height);
+  base.addColorStop(0, C.bgTop);
+  base.addColorStop(0.45, C.bg);
+  base.addColorStop(1, C.bgWarm);
+  ctx.fillStyle = base;
+  ctx.fillRect(0, 0, width, height);
+
+  const glow = ctx.createRadialGradient(
+    width * 0.08,
+    0,
+    0,
+    width * 0.08,
+    0,
+    width * 0.55,
+  );
+  glow.addColorStop(0, "rgba(245, 158, 11, 0.14)");
+  glow.addColorStop(1, "transparent");
+  ctx.fillStyle = glow;
+  ctx.fillRect(0, 0, width, height);
+
+  const accent = ctx.createRadialGradient(
+    width * 0.95,
+    height * 0.05,
+    0,
+    width * 0.95,
+    height * 0.05,
+    width * 0.4,
+  );
+  accent.addColorStop(0, "rgba(117, 102, 200, 0.07)");
+  accent.addColorStop(1, "transparent");
+  ctx.fillStyle = accent;
+  ctx.fillRect(0, 0, width, height);
+}
+
+function drawReturnPill(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  text: string,
+  positive: boolean,
+): void {
+  ctx.fillStyle = positive ? C.successLight : C.dangerLight;
+  roundRect(ctx, x, y, w, h, 6);
+  ctx.fill();
+
+  ctx.fillStyle = positive ? C.success : C.danger;
+  ctx.font = `700 11px ${MONO}`;
+  ctx.fillText(text, x + 7, y + 18);
 }
 
 export function downloadExplorationSnapshot(blob: Blob, scan: IndicatorScanRun): void {
