@@ -357,6 +357,83 @@ const OP_PARAM: ExplorationParamDef = {
   options: COMPARE_OPTIONS,
 };
 
+const LOOKBACK_PARAM: ExplorationParamDef = {
+  key: "lookback",
+  label: "Lookback bars",
+  type: "int",
+  default: 200,
+  min: 2,
+  max: 500,
+};
+
+const DARVAS_LOOKBACK_PARAM: ExplorationParamDef = {
+  key: "lookback",
+  label: "Box lookback",
+  type: "int",
+  default: 20,
+  min: 2,
+  max: 300,
+};
+
+function buildRollingExtremeBreak(
+  direction: "high" | "low",
+  params: Record<string, number | string>,
+  timeframeMode: ExploreTimeframeMode,
+  name: string,
+): PatternDefinition {
+  const lookback = Number(params.lookback ?? 200);
+  const defaultPrice = direction === "high" ? "high" : "low";
+  const defaultOp = direction === "high" ? "crosses_above" : "crosses_below";
+  const price = String(params.price ?? defaultPrice);
+  const op = String(params.op ?? defaultOp) as Expression["op"];
+  const alias = direction === "high" ? "rolling_high" : "rolling_low";
+  const indicatorType = direction === "high" ? "rolling_high" : "rolling_low";
+
+  return {
+    name,
+    indicators: [
+      {
+        alias,
+        type: indicatorType,
+        params: { length: lookback },
+        timeframe: toTf(timeframeMode),
+      },
+    ],
+    entry: expr(op, price, alias),
+    backtest: { entryOn: "close", exitOn: "opposite_signal" },
+  };
+}
+
+function buildDarvasBreakout(
+  direction: "up" | "down",
+  params: Record<string, number | string>,
+  timeframeMode: ExploreTimeframeMode,
+  name: string,
+): PatternDefinition {
+  const lookback = Number(params.lookback ?? 20);
+  const price = String(params.price ?? "close");
+  const op =
+    direction === "up"
+      ? (String(params.op ?? "crosses_above") as Expression["op"])
+      : (String(params.op ?? "crosses_below") as Expression["op"]);
+  const bandRef =
+    direction === "up" ? "darvas_box_top_prior" : "darvas_box_bottom_prior";
+
+  return {
+    name,
+    indicators: [
+      {
+        alias: "darvas_box",
+        type: "darvas_box",
+        params: { lookback },
+        timeframe: toTf(timeframeMode),
+      },
+    ],
+    entry: expr(op, price, bandRef),
+    backtest: { entryOn: "close", exitOn: "opposite_signal" },
+  };
+}
+
 export const EXPLORATION_PRESETS: ExplorationPreset[] = [
   {
     id: "exp-sma-price",
@@ -1406,6 +1483,138 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
       return `StdDev(${period}) ${opLabel(op).toLowerCase()} ${threshold}`;
     },
   },
+  {
+    id: "exp-new-high-after-lookback",
+    name: "New High After Lookback",
+    category: "Breakout",
+    kind: "price_breakout",
+    description:
+      "Price high breaks above the highest high of the prior N bars (not all-time high)",
+    params: [
+      LOOKBACK_PARAM,
+      {
+        key: "price",
+        label: "Price",
+        type: "enum",
+        default: "high",
+        options: OHLC_OPTIONS,
+      },
+      {
+        key: "op",
+        label: "Condition",
+        type: "enum",
+        default: "crosses_above",
+        options: CROSS_COMPARE_OPTIONS,
+      },
+    ],
+    buildPattern: (params, tf) =>
+      buildRollingExtremeBreak("high", params, tf, "New High After Lookback"),
+    describe: (params) => {
+      const lookback = Number(params.lookback ?? 200);
+      const price = String(params.price ?? "high");
+      const op = String(params.op ?? "crosses_above");
+      return `${priceLabel(price)} ${opLabel(op).toLowerCase()} ${lookback}-bar high`;
+    },
+  },
+  {
+    id: "exp-new-low-after-lookback",
+    name: "New Low After Lookback",
+    category: "Breakout",
+    kind: "price_breakout",
+    description:
+      "Price low breaks below the lowest low of the prior N bars",
+    params: [
+      LOOKBACK_PARAM,
+      {
+        key: "price",
+        label: "Price",
+        type: "enum",
+        default: "low",
+        options: OHLC_OPTIONS,
+      },
+      {
+        key: "op",
+        label: "Condition",
+        type: "enum",
+        default: "crosses_below",
+        options: CROSS_COMPARE_OPTIONS,
+      },
+    ],
+    buildPattern: (params, tf) =>
+      buildRollingExtremeBreak("low", params, tf, "New Low After Lookback"),
+    describe: (params) => {
+      const lookback = Number(params.lookback ?? 200);
+      const price = String(params.price ?? "low");
+      const op = String(params.op ?? "crosses_below");
+      return `${priceLabel(price)} ${opLabel(op).toLowerCase()} ${lookback}-bar low`;
+    },
+  },
+  {
+    id: "exp-darvas-breakout-up",
+    name: "Darvas Box Breakout Up",
+    category: "Breakout",
+    kind: "price_breakout",
+    description:
+      "Close breaks above the prior Darvas box top after consolidation",
+    params: [
+      DARVAS_LOOKBACK_PARAM,
+      {
+        key: "price",
+        label: "Price",
+        type: "enum",
+        default: "close",
+        options: OHLC_OPTIONS,
+      },
+      {
+        key: "op",
+        label: "Condition",
+        type: "enum",
+        default: "crosses_above",
+        options: CROSS_COMPARE_OPTIONS,
+      },
+    ],
+    buildPattern: (params, tf) =>
+      buildDarvasBreakout("up", params, tf, "Darvas Box Breakout Up"),
+    describe: (params) => {
+      const lookback = Number(params.lookback ?? 20);
+      const price = String(params.price ?? "close");
+      const op = String(params.op ?? "crosses_above");
+      return `${priceLabel(price)} ${opLabel(op).toLowerCase()} Darvas box top (${lookback} lookback)`;
+    },
+  },
+  {
+    id: "exp-darvas-breakout-down",
+    name: "Darvas Box Breakout Down",
+    category: "Breakout",
+    kind: "price_breakout",
+    description:
+      "Close breaks below the prior Darvas box bottom after consolidation",
+    params: [
+      DARVAS_LOOKBACK_PARAM,
+      {
+        key: "price",
+        label: "Price",
+        type: "enum",
+        default: "close",
+        options: OHLC_OPTIONS,
+      },
+      {
+        key: "op",
+        label: "Condition",
+        type: "enum",
+        default: "crosses_below",
+        options: CROSS_COMPARE_OPTIONS,
+      },
+    ],
+    buildPattern: (params, tf) =>
+      buildDarvasBreakout("down", params, tf, "Darvas Box Breakout Down"),
+    describe: (params) => {
+      const lookback = Number(params.lookback ?? 20);
+      const price = String(params.price ?? "close");
+      const op = String(params.op ?? "crosses_below");
+      return `${priceLabel(price)} ${opLabel(op).toLowerCase()} Darvas box bottom (${lookback} lookback)`;
+    },
+  },
 ];
 
 export function getExplorationPreset(id: string): ExplorationPreset | undefined {
@@ -1417,6 +1626,7 @@ export const DEFAULT_EXPLORATION_PRESET_ID = "exp-sma-price";
 export const EXPLORATION_FILTERS = [
   { id: "all", label: "All" },
   { id: "custom", label: "My explorations" },
+  { id: "Breakout", label: "Breakout" },
   { id: "Trend", label: "Trend" },
   { id: "Momentum", label: "Momentum" },
   { id: "Volatility", label: "Volatility" },
@@ -1429,6 +1639,7 @@ export const EXPLORATION_CATEGORY_STYLES: Record<
   { bg: string; text: string; dot: string }
 > = {
   Trend: { bg: "bg-info-light", text: "text-info", dot: "bg-info" },
+  Breakout: { bg: "bg-success-light", text: "text-success", dot: "bg-success" },
   Momentum: { bg: "bg-brand-light", text: "text-brand-text", dot: "bg-brand" },
   Volatility: { bg: "bg-accent-light", text: "text-accent", dot: "bg-accent" },
   Custom: { bg: "bg-input", text: "text-body", dot: "bg-muted" },

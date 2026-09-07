@@ -52,6 +52,56 @@ function priorRolling(
   });
 }
 
+function computeDarvasBox(
+  bars: OhlcvBar[],
+  lookback: number,
+): {
+  top: (number | null)[];
+  bottom: (number | null)[];
+  topPrior: (number | null)[];
+  bottomPrior: (number | null)[];
+} {
+  const top: (number | null)[] = [];
+  const bottom: (number | null)[] = [];
+  const topPrior: (number | null)[] = [];
+  const bottomPrior: (number | null)[] = [];
+
+  let boxTop: number | null = null;
+  let boxBottom: number | null = null;
+
+  for (let i = 0; i < bars.length; i++) {
+    const bar = bars[i]!;
+    const priorTop = boxTop;
+    const priorBottom = boxBottom;
+
+    let priorRollingHigh: number | null = null;
+    if (i >= lookback) {
+      priorRollingHigh = Math.max(
+        ...bars.slice(i - lookback, i).map((b) => b.high),
+      );
+    }
+
+    if (priorRollingHigh !== null && bar.high > priorRollingHigh) {
+      boxTop = bar.high;
+      boxBottom = bar.low;
+    } else if (boxTop !== null) {
+      if (bar.high > boxTop) {
+        boxTop = bar.high;
+        boxBottom = bar.low;
+      } else {
+        boxBottom = Math.min(boxBottom ?? bar.low, bar.low);
+      }
+    }
+
+    top.push(boxTop);
+    bottom.push(boxBottom);
+    topPrior.push(priorTop);
+    bottomPrior.push(priorBottom);
+  }
+
+  return { top, bottom, topPrior, bottomPrior };
+}
+
 function computeOnBars(
   bars: OhlcvBar[],
   def: IndicatorDef,
@@ -482,6 +532,16 @@ function computeOnBars(
       const length = Number(params.length ?? 20);
       const lowest = Lowest.calculate({ period: length, values: input });
       result[def.alias] = padStart(lowest, bars.length);
+      break;
+    }
+    case "darvas_box": {
+      const lookback = Number(params.lookback ?? 20);
+      const box = computeDarvasBox(bars, lookback);
+      result[`${def.alias}_box_top`] = box.top;
+      result[`${def.alias}_box_bottom`] = box.bottom;
+      result[`${def.alias}_box_top_prior`] = box.topPrior;
+      result[`${def.alias}_box_bottom_prior`] = box.bottomPrior;
+      result[def.alias] = box.top;
       break;
     }
     default:
