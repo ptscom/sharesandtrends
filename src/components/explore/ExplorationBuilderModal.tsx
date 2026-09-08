@@ -73,7 +73,10 @@ interface ExplorationPresetSettingsModalProps {
   }[];
   description: string;
   onClose: () => void;
-  onSave: (params: Record<string, number | string>) => void;
+  onSave: (
+    params: Record<string, number | string>,
+    description: string,
+  ) => void;
 }
 
 export function ExplorationPresetSettingsModal({
@@ -86,10 +89,14 @@ export function ExplorationPresetSettingsModal({
   onSave,
 }: ExplorationPresetSettingsModalProps) {
   const [draft, setDraft] = useState(params);
+  const [draftDescription, setDraftDescription] = useState(description);
 
   useEffect(() => {
-    if (open) setDraft(params);
-  }, [open, params]);
+    if (open) {
+      setDraft(params);
+      setDraftDescription(description);
+    }
+  }, [open, params, description]);
 
   useEffect(() => {
     if (!open) return;
@@ -122,10 +129,25 @@ export function ExplorationPresetSettingsModal({
       >
         <div className="border-b border-border px-5 py-4">
           <h2 className="ui-page-title">{presetName}</h2>
-          <p className="ui-helper mt-0.5">{description}</p>
+          <p className="ui-helper mt-0.5">Tune parameters and snapshot description</p>
         </div>
 
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
+          <label className="block text-sm">
+            <span className="ui-field-label">Description</span>
+            <textarea
+              value={draftDescription}
+              onChange={(e) => setDraftDescription(e.target.value)}
+              rows={2}
+              maxLength={100}
+              placeholder="Short summary shown in results and snapshot"
+              className="ui-input mt-1 resize-none"
+            />
+            <span className="mt-1 block text-xs text-muted">
+              Keep it short — used in the snapshot header
+            </span>
+          </label>
+
           {paramDefs.map((def) => (
             <label key={def.key} className="block text-sm">
               <span className="ui-field-label">{def.label}</span>
@@ -172,7 +194,7 @@ export function ExplorationPresetSettingsModal({
           </button>
           <button
             type="button"
-            onClick={() => onSave(draft)}
+            onClick={() => onSave(draft, draftDescription)}
             className="ui-btn-primary"
           >
             Apply
@@ -187,12 +209,13 @@ interface ExplorationBuilderModalProps {
   open: boolean;
   initial: ExplorationBuilderState | null;
   initialName?: string;
+  initialDescription?: string;
   editingSavedId?: string | null;
   onClose: () => void;
   onAdd: (
     name: string,
     builder: ExplorationBuilderState,
-    savedId?: string,
+    options?: { savedId?: string; description?: string },
   ) => void;
 }
 
@@ -200,11 +223,13 @@ export function ExplorationBuilderModal({
   open,
   initial,
   initialName,
+  initialDescription,
   editingSavedId,
   onClose,
   onAdd,
 }: ExplorationBuilderModalProps) {
   const [name, setName] = useState("Custom exploration");
+  const [description, setDescription] = useState("");
   const [rows, setRows] = useState<ExplorationConditionRow[]>([]);
   const [priorContext, setPriorContext] = useState<ExplorationPriorContext>(
     createDefaultPriorContext(),
@@ -216,6 +241,7 @@ export function ExplorationBuilderModal({
       initial ?? { rows: [{ id: crypto.randomUUID(), condition: createBlankCondition() }] },
     );
     setName(initialName?.trim() || "Custom exploration");
+    setDescription(initialDescription?.trim() || "");
     setRows(
       normalized.rows.map((row) => ({
         ...row,
@@ -223,7 +249,7 @@ export function ExplorationBuilderModal({
       })),
     );
     setPriorContext(normalized.priorContext ?? createDefaultPriorContext());
-  }, [open, initial, initialName]);
+  }, [open, initial, initialName, initialDescription]);
 
   useEffect(() => {
     if (!open) return;
@@ -296,7 +322,14 @@ export function ExplorationBuilderModal({
 
   const handleAdd = () => {
     if (rows.length === 0) return;
-    onAdd(name, { rows, priorContext }, editingSavedId ?? undefined);
+    onAdd(
+      name,
+      { rows, priorContext },
+      {
+        savedId: editingSavedId ?? undefined,
+        description,
+      },
+    );
     onClose();
   };
 
@@ -329,6 +362,20 @@ export function ExplorationBuilderModal({
               value={name}
               onChange={(e) => setName(e.target.value)}
               className={`${FIELD} mt-0.5 w-full`}
+            />
+          </label>
+        </div>
+
+        <div className="border-b border-border px-4 py-3">
+          <label className="block text-sm">
+            <span className="ui-field-label text-xs">Description</span>
+            <textarea
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+              rows={2}
+              maxLength={100}
+              placeholder="Short summary for results and snapshot"
+              className="ui-input mt-1 w-full resize-none"
             />
           </label>
         </div>

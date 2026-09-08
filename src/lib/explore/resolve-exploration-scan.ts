@@ -27,6 +27,7 @@ export async function resolveExplorationFilterFromScan(
     return {
       source: "preset",
       name: scan.filterName,
+      description: scan.filterDescription,
       timeframeMode: scan.timeframeMode,
       presetId,
       params: defaultParamsForPreset(preset),

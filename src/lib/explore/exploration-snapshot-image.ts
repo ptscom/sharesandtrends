@@ -1,4 +1,5 @@
 import type { IndicatorScanRun, IndicatorScanResultRow } from "@/lib/explore/exploration-models";
+import { snapshotDescriptionText } from "@/lib/explore/exploration-description";
 import {
   buildSnapshotRowExtras,
   formatSnapshotClose,
@@ -82,7 +83,7 @@ export async function renderExplorationSnapshotPng(
   const contentW = layout.width - layout.pad * 2;
   let y = layout.pad;
 
-  drawHeader(ctx, scan, rows.length, contentX, y, contentW, fontFamily);
+  drawHeader(ctx, scan, contentX, y, contentW, fontFamily);
   y += layout.headerBlock + layout.gapAfterHeader;
 
   const tableX = contentX;
@@ -170,7 +171,7 @@ function buildLayout(
   rowCount: number,
 ): SnapshotLayout {
   const pad = 20;
-  const headerBlock = 78;
+  const headerBlock = 84;
   const gapAfterHeader = 14;
   const rowHeight = 54;
   const tableHeaderHeight = 34;
@@ -301,19 +302,18 @@ function drawTableBodyBackground(
 function drawHeader(
   ctx: CanvasRenderingContext2D,
   scan: IndicatorScanRun,
-  symbolCount: number,
   x: number,
   y: number,
   contentWidth: number,
   fontFamily: string,
 ): void {
-  const badgeW = 178;
-  const badgeH = 54;
-  const badgeX = x + contentWidth - badgeW;
-  const badgeY = y;
-  const badgeTextX = badgeX + 34;
-  const badgeTextMaxW = badgeW - 34 - 12;
-  const titleMaxW = contentWidth - badgeW - 16;
+  const descBoxW = Math.min(300, Math.max(240, contentWidth * 0.42));
+  const descPad = 14;
+  const descBoxX = x + contentWidth - descBoxW;
+  const titleMaxW = contentWidth - descBoxW - 16;
+  const description = snapshotDescriptionText(
+    scan.filterDescription || scan.filterName,
+  );
 
   ctx.fillStyle = C.brandText;
   ctx.font = font(fontFamily, 700, 10);
@@ -327,45 +327,68 @@ function drawHeader(
   ctx.font = font(fontFamily, 400, 13);
   ctx.fillText(formatRunDate(scan.runAt), x, y + 58);
 
+  ctx.font = font(fontFamily, 400, 12);
+  const descLines = wrapTextLines(
+    ctx,
+    description,
+    descBoxW - descPad * 2,
+    3,
+  );
+  const descBoxH = Math.max(62, 18 + descLines.length * 17 + 16);
+  const descBoxY = y;
+
   ctx.fillStyle = C.brandBadgeBg;
   ctx.strokeStyle = C.brandBadgeBorder;
   ctx.lineWidth = 1;
-  roundRect(ctx, badgeX, badgeY, badgeW, badgeH, 10);
+  roundRect(ctx, descBoxX, descBoxY, descBoxW, descBoxH, 10);
   ctx.fill();
   ctx.stroke();
 
-  drawMiniBarIcon(ctx, badgeX + 12, badgeY + 14);
-
-  ctx.fillStyle = C.ink;
-  ctx.font = font(fontFamily, 700, 13);
-  ctx.fillText(
-    truncateText(
-      ctx,
-      `${symbolCount} symbol${symbolCount === 1 ? "" : "s"}`,
-      badgeTextMaxW,
-    ),
-    badgeTextX,
-    badgeY + 22,
-  );
-
-  ctx.fillStyle = C.headerBlue;
-  ctx.font = font(fontFamily, 400, 11);
-  ctx.fillText(
-    truncateText(ctx, "Showing latest signals", badgeTextMaxW),
-    badgeTextX,
-    badgeY + 40,
-  );
+  ctx.fillStyle = C.body;
+  ctx.textAlign = "left";
+  const lineHeight = 17;
+  const textBlockHeight = descLines.length * lineHeight;
+  let textY = descBoxY + (descBoxH - textBlockHeight) / 2 + 11;
+  for (const line of descLines) {
+    ctx.fillText(line, descBoxX + descPad, textY);
+    textY += lineHeight;
+  }
 }
 
-function drawMiniBarIcon(ctx: CanvasRenderingContext2D, x: number, y: number): void {
-  const heights = [9, 15, 11];
-  const barW = 4;
-  const gap = 3;
-  heights.forEach((h, index) => {
-    ctx.fillStyle = index === 1 ? C.brand : "#fbbf24";
-    roundRect(ctx, x + index * (barW + gap), y + (16 - h), barW, h, 1.5);
-    ctx.fill();
-  });
+function wrapTextLines(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number,
+  maxLines: number,
+): string[] {
+  const words = text.split(/\s+/).filter(Boolean);
+  if (words.length === 0) return [""];
+
+  const lines: string[] = [];
+  let index = 0;
+
+  while (index < words.length && lines.length < maxLines) {
+    let line = words[index]!;
+    index += 1;
+
+    while (index < words.length) {
+      const candidate = `${line} ${words[index]}`;
+      if (ctx.measureText(candidate).width > maxWidth) break;
+      line = candidate;
+      index += 1;
+    }
+
+    if (lines.length === maxLines - 1 && index < words.length) {
+      lines.push(
+        truncateText(ctx, `${line} ${words.slice(index).join(" ")}`, maxWidth),
+      );
+      break;
+    }
+
+    lines.push(line);
+  }
+
+  return lines;
 }
 
 function drawTableHeader(

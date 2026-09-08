@@ -109,6 +109,8 @@ export interface ExplorationPreset {
 export interface ExplorationFilter {
   source: "preset" | "builder";
   name: string;
+  /** Short human-readable summary for results and snapshots */
+  description?: string;
   timeframeMode: ExploreTimeframeMode;
   presetId?: string;
   params?: Record<string, number | string>;
@@ -120,6 +122,7 @@ export interface ExplorationFilter {
 export interface SavedExploration {
   id: string;
   name: string;
+  description?: string;
   builder: ExplorationBuilderState;
   createdAt: string;
   updatedAt: string;

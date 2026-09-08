@@ -13,6 +13,10 @@ import {
   describeExplorationFilter,
   describePreset,
 } from "@/lib/explore/exploration-to-pattern";
+import {
+  EXPLORATION_DESCRIPTION_MAX,
+  resolveExplorationDescription,
+} from "@/lib/explore/exploration-description";
 import type { ExplorationFilter, SavedExploration } from "@/lib/explore/exploration-models";
 import {
   explorationFilterKey,
@@ -36,6 +40,7 @@ interface ExploreExplorationSelectorProps {
   onTogglePreset: (presetId: string) => void;
   onToggleSaved: (savedId: string) => void;
   onToggleFavorite: (key: string) => void;
+  onUpdateFilterDescription: (key: string, description: string) => void;
   onDeleteSaved: (savedId: string) => void;
   onOpenPresetSettings: (presetId: string, e: MouseEvent) => void;
   onOpenHistory: (filterKey: string, filterName: string) => void;
@@ -58,6 +63,7 @@ export function ExploreExplorationSelector({
   onTogglePreset,
   onToggleSaved,
   onToggleFavorite,
+  onUpdateFilterDescription,
   onDeleteSaved,
   onOpenPresetSettings,
   onOpenHistory,
@@ -132,25 +138,38 @@ export function ExploreExplorationSelector({
             {selectedCount} exploration{selectedCount === 1 ? "" : "s"} selected
           </p>
           <ul className="mt-2 space-y-2">
-            {selectedList.map((filter) => (
+            {selectedList.map((filter) => {
+              const filterKey = explorationFilterKey(filter);
+              return (
               <li
-                key={explorationFilterKey(filter)}
+                key={filterKey}
                 className="flex items-start justify-between gap-3"
               >
-                <div className="min-w-0">
+                <div className="min-w-0 flex-1">
                   <p className="font-semibold text-brand-text">{filter.name}</p>
-                  <p className="mt-0.5 text-sm text-muted">
+                  <label className="mt-2 block">
+                    <span className="sr-only">Description for {filter.name}</span>
+                    <input
+                      value={resolveExplorationDescription(filter)}
+                      onChange={(e) =>
+                        onUpdateFilterDescription(filterKey, e.target.value)
+                      }
+                      maxLength={EXPLORATION_DESCRIPTION_MAX}
+                      className="ui-input w-full py-1.5 text-sm"
+                      placeholder="Short description for snapshot"
+                    />
+                  </label>
+                  <p className="mt-1 text-xs text-muted">
                     {describeExplorationFilter(filter)}
                   </p>
                 </div>
                 <HistoryButton
                   label={`View past runs for ${filter.name}`}
-                  onClick={() =>
-                    onOpenHistory(explorationFilterKey(filter), filter.name)
-                  }
+                  onClick={() => onOpenHistory(filterKey, filter.name)}
                 />
               </li>
-            ))}
+            );
+            })}
           </ul>
         </div>
       )}

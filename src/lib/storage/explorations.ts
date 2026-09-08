@@ -8,6 +8,7 @@ import { getDb } from "./db";
 export async function saveExploration(input: {
   id?: string;
   name: string;
+  description?: string;
   builder: ExplorationBuilderState;
 }): Promise<SavedExploration> {
   const now = new Date().toISOString();
@@ -16,6 +17,7 @@ export async function saveExploration(input: {
   const record: SavedExploration = {
     id,
     name: input.name.trim() || "Custom exploration",
+    description: input.description?.trim() || existing?.description,
     builder: input.builder,
     createdAt: existing?.createdAt ?? now,
     updatedAt: now,
