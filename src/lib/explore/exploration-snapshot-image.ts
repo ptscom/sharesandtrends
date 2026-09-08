@@ -16,16 +16,16 @@ const C = {
   body: "#5f7184",
   muted: "#8a9bb0",
   headerBlue: "#4b78b8",
-  borderSubtle: "#eeedeb",
+  borderSubtle: "#f2ebe4",
   white: "#ffffff",
-  peachTop: "#f6f4f2",
-  peachMid: "#faf9f8",
-  peachGlow: "rgba(170, 160, 150, 0.06)",
+  peachTop: "#f9f3ec",
+  peachMid: "#fbf6f1",
+  peachGlow: "rgba(230, 195, 155, 0.08)",
   brandText: "#c96f00",
   brand: "#f59e0b",
-  brandBadgeBg: "#faf9f7",
-  brandBadgeBorder: "#ebe8e4",
-  tableHeaderBg: "#f4f3f1",
+  brandBadgeBg: "#faf5ef",
+  brandBadgeBorder: "#f0e6da",
+  tableHeaderBg: "#f8f2eb",
   success: "#159a68",
   danger: "#e05252",
   dotEmpty: "#d8dee6",
@@ -232,7 +232,7 @@ function drawWarmBackground(
   const grad = ctx.createLinearGradient(0, 0, 0, height);
   grad.addColorStop(0, C.peachTop);
   grad.addColorStop(0.28, C.peachMid);
-  grad.addColorStop(0.55, "#fcfcfb");
+  grad.addColorStop(0.55, "#fefbf8");
   grad.addColorStop(1, C.white);
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, width, height);
