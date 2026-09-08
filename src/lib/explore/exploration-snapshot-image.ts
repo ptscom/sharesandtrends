@@ -167,6 +167,10 @@ function font(
   return `${weight} ${size}px ${family}`;
 }
 
+const TITLE_SIZE = 22;
+const TITLE_TOP = 36;
+const TITLE_LINE_HEIGHT = 26;
+
 function buildLayout(
   outputColumns: SnapshotColumnFilter[],
   rowCount: number,
@@ -177,8 +181,8 @@ function buildLayout(
   const gapAfterHeader = 8;
   const rowHeight = 54;
   const tableHeaderHeight = 34;
-  const titleSize = 22;
-  const titleLineHeight = 26;
+  const titleSize = TITLE_SIZE;
+  const titleLineHeight = TITLE_LINE_HEIGHT;
   const columns: SnapshotCol[] = [
     { id: "symbol", label: "SYMBOL", width: 138, align: "left" },
     { id: "signal", label: "SIGNAL DATE", width: 98, align: "left" },
@@ -201,10 +205,10 @@ function buildLayout(
   let titleLineCount = 1;
   if (measureCtx) {
     measureCtx.font = font(fontFamily, 700, titleSize);
-    titleLineCount = wrapTextLines(measureCtx, filterName, titleMaxW, 2).length;
+    titleLineCount = fitTitleLines(measureCtx, filterName, titleMaxW, 2).length;
   }
 
-  const headerBlock = 24 + titleLineCount * titleLineHeight + 6;
+  const headerBlock = TITLE_TOP + 4 + titleLineCount * titleLineHeight + 6;
 
   const width = tableWidth + pad * 2;
   const height =
@@ -347,12 +351,12 @@ function drawHeader(
   );
 
   ctx.fillStyle = C.ink;
-  ctx.font = font(fontFamily, 700, 22);
-  const titleLines = wrapTextLines(ctx, scan.filterName, titleMaxW, 2);
-  let titleY = y + 28;
+  ctx.font = font(fontFamily, 700, TITLE_SIZE);
+  const titleLines = fitTitleLines(ctx, scan.filterName, titleMaxW, 2);
+  let titleY = y + TITLE_TOP;
   for (const line of titleLines) {
     ctx.fillText(line, x, titleY);
-    titleY += 26;
+    titleY += TITLE_LINE_HEIGHT;
   }
 
   ctx.font = font(fontFamily, 400, 12);
@@ -381,6 +385,20 @@ function drawHeader(
     ctx.fillText(line, descBoxX + descPad, textY);
     textY += lineHeight;
   }
+}
+
+function fitTitleLines(
+  ctx: CanvasRenderingContext2D,
+  text: string,
+  maxWidth: number,
+  maxLines: number,
+): string[] {
+  const trimmed = text.trim();
+  if (!trimmed) return [""];
+  if (ctx.measureText(trimmed).width <= maxWidth) {
+    return [trimmed];
+  }
+  return wrapTextLines(ctx, trimmed, maxWidth, maxLines);
 }
 
 function wrapTextLines(
