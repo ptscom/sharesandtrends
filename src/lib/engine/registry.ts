@@ -425,6 +425,15 @@ export const INDICATOR_REGISTRY: IndicatorDefinition[] = [
     outputs: ["lowest"],
   },
   {
+    id: "darvas_box",
+    name: "Darvas Box",
+    category: "price",
+    params: {
+      lookback: { type: "int", default: 20, min: 2, max: 300, label: "Lookback" },
+    },
+    outputs: ["box_top", "box_bottom", "box_top_prior", "box_bottom_prior"],
+  },
+  {
     id: "candle_pattern",
     name: "Candlestick Pattern",
     category: "pattern",

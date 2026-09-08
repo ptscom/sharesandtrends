@@ -701,6 +701,7 @@ export function ExploreClient() {
             filterName: filter.name,
             filterDescription: describeExplorationFilter(filter),
             timeframeMode: filter.timeframeMode,
+            filter,
             onProgress: (done, total, phase) => {
               setScanPhase(phase);
               const completedExplorations = index;

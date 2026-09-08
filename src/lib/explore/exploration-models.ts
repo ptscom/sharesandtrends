@@ -89,7 +89,8 @@ export type ExplorationPresetKind =
   | "oscillator_level"
   | "line_cross"
   | "price_vs_band"
-  | "streak_breakout";
+  | "streak_breakout"
+  | "price_breakout";
 
 export interface ExplorationPreset {
   id: string;
@@ -152,6 +153,8 @@ export interface IndicatorScanRun {
   filterName: string;
   filterDescription: string;
   timeframeMode: ExploreTimeframeMode;
+  /** Snapshot of the exploration filter used for this run (for symbol drill-down) */
+  filter?: ExplorationFilter;
   results: IndicatorScanResultRow[];
 }
 
