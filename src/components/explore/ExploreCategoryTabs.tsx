@@ -18,7 +18,7 @@ export function ExploreCategoryTabs({
     <div
       role="tablist"
       aria-label="Exploration category"
-      className="flex flex-wrap gap-1 rounded-xl border border-border bg-bg p-1"
+      className="flex flex-wrap gap-1 rounded-xl border border-border-subtle bg-bg/70 p-1"
     >
       {EXPLORATION_CATEGORY_TABS.map((item) => {
         const active = category === item.id;

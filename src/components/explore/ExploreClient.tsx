@@ -23,7 +23,6 @@ import { ExplorePriceCacheFooter } from "@/components/explore/ExplorePriceCacheF
 import { ExploreScanResultsPanel } from "@/components/explore/ExploreScanResultsPanel";
 import { ExploreStrategySelector } from "@/components/explore/ExploreStrategySelector";
 import { ExploreStrategySettingsModal } from "@/components/explore/ExploreStrategySettingsModal";
-import { ExploreCategoryTabs } from "@/components/explore/ExploreCategoryTabs";
 import { ExploreTimeframeTabs } from "@/components/explore/ExploreTimeframeTabs";
 import { ExploreTopBar } from "@/components/explore/ExploreTopBar";
 import { LabStatusBanner } from "@/components/lab/LabShell";
@@ -908,16 +907,13 @@ export function ExploreClient() {
                 mode={explorationTimeframeMode}
                 onChange={setExplorationTimeframeMode}
               />
-              <ExploreCategoryTabs
-                category={explorationCategoryFilter}
-                onChange={setExplorationCategoryFilter}
-              />
               <ExploreExplorationSelector
                 selectedFilters={selectedExplorationFilters}
                 savedExplorations={savedExplorations}
                 favoriteKeys={explorationFavoriteKeys}
                 query={explorationQuery}
                 categoryFilter={explorationCategoryFilter}
+                onCategoryChange={setExplorationCategoryFilter}
                 onQueryChange={setExplorationQuery}
                 onTogglePreset={toggleExplorationPreset}
                 onToggleSaved={toggleSavedExploration}
