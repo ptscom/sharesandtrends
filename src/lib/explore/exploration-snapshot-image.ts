@@ -35,7 +35,6 @@ interface SnapshotCol {
   label: string;
   width: number;
   align: ColAlign;
-  sortable: boolean;
 }
 
 interface SnapshotLayout {
@@ -177,17 +176,16 @@ function buildLayout(
   const tableHeaderHeight = 34;
 
   const columns: SnapshotCol[] = [
-    { id: "symbol", label: "SYMBOL", width: 138, align: "left", sortable: true },
-    { id: "signal", label: "SIGNAL DATE", width: 98, align: "left", sortable: true },
-    { id: "close", label: "CLOSE", width: 78, align: "left", sortable: true },
+    { id: "symbol", label: "SYMBOL", width: 138, align: "left" },
+    { id: "signal", label: "SIGNAL DATE", width: 98, align: "left" },
+    { id: "close", label: "CLOSE", width: 78, align: "left" },
     ...outputColumns.map((column) => ({
       id: column.key,
       label: column.label.toUpperCase(),
       width: 90,
       align: "left" as ColAlign,
-      sortable: true,
     })),
-    { id: "last5", label: "LAST 5", width: 84, align: "center", sortable: false },
+    { id: "last5", label: "LAST 5", width: 84, align: "center" },
   ];
 
   const tableWidth = columns.reduce((sum, col) => sum + col.width, 0);
@@ -296,7 +294,7 @@ function drawTableBodyBackground(
   tableBodyHeight: number,
 ): void {
   ctx.fillStyle = C.white;
-  roundRect(ctx, tableX, tableTop, tableWidth, tableBodyHeight, 10);
+  roundRectBottom(ctx, tableX, tableTop, tableWidth, tableBodyHeight, 10);
   ctx.fill();
 }
 
@@ -409,37 +407,15 @@ function drawHeaderCell(
 ): void {
   const padL = 10;
   const labelW = ctx.measureText(column.label).width;
-  const sortW = column.sortable ? 12 : 0;
-  const totalW = labelW + sortW;
 
   const labelX =
     column.align === "center"
-      ? x + (column.width - totalW) / 2
+      ? x + (column.width - labelW) / 2
       : x + padL;
 
+  ctx.fillStyle = C.headerBlue;
   ctx.textAlign = "left";
   ctx.fillText(column.label, labelX, y);
-
-  if (column.sortable) {
-    drawSortGlyph(ctx, labelX + labelW + 3, y - 7);
-  }
-}
-
-function drawSortGlyph(ctx: CanvasRenderingContext2D, x: number, y: number): void {
-  ctx.fillStyle = "#a8bdd8";
-  ctx.beginPath();
-  ctx.moveTo(x + 2.5, y);
-  ctx.lineTo(x + 5.5, y + 3.5);
-  ctx.lineTo(x, y + 3.5);
-  ctx.closePath();
-  ctx.fill();
-
-  ctx.beginPath();
-  ctx.moveTo(x, y + 4.5);
-  ctx.lineTo(x + 5.5, y + 4.5);
-  ctx.lineTo(x + 2.5, y + 8);
-  ctx.closePath();
-  ctx.fill();
 }
 
 function drawTableRow(
@@ -663,5 +639,25 @@ function roundRectTop(
   ctx.lineTo(x, y + h);
   ctx.lineTo(x, y + radius);
   ctx.quadraticCurveTo(x, y, x + radius, y);
+  ctx.closePath();
+}
+
+function roundRectBottom(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number,
+): void {
+  const radius = Math.min(r, w / 2, h);
+  ctx.beginPath();
+  ctx.moveTo(x, y);
+  ctx.lineTo(x + w, y);
+  ctx.lineTo(x + w, y + h - radius);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - radius, y + h);
+  ctx.lineTo(x + radius, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - radius);
+  ctx.lineTo(x, y);
   ctx.closePath();
 }
