@@ -2,10 +2,9 @@
 
 import type { MouseEvent } from "react";
 import {
-  EXPLORATION_FILTERS,
   EXPLORATION_PRESETS,
   explorationCategoryStyle,
-  type ExplorationFilterId,
+  type ExplorationCategoryId,
 } from "@/lib/explore/exploration-presets";
 import {
   describeBuilderState,
@@ -20,15 +19,21 @@ import {
 } from "@/lib/explore/exploration-filter-key";
 import { ExplorationHistoryIcon } from "@/components/explore/ExplorationRunHistoryModal";
 
+import {
+  presetFavoriteKey,
+  savedFavoriteKey,
+} from "@/lib/storage/exploration-favorites";
+
 interface ExploreExplorationSelectorProps {
   selectedFilters: Record<string, ExplorationFilter>;
   savedExplorations: SavedExploration[];
+  favoriteKeys: Set<string>;
   query: string;
-  categoryFilter: ExplorationFilterId;
+  categoryFilter: ExplorationCategoryId;
   onQueryChange: (query: string) => void;
-  onCategoryChange: (filter: ExplorationFilterId) => void;
   onTogglePreset: (presetId: string) => void;
   onToggleSaved: (savedId: string) => void;
+  onToggleFavorite: (key: string) => void;
   onDeleteSaved: (savedId: string) => void;
   onOpenPresetSettings: (presetId: string, e: MouseEvent) => void;
   onOpenHistory: (filterKey: string, filterName: string) => void;
@@ -39,12 +44,13 @@ interface ExploreExplorationSelectorProps {
 export function ExploreExplorationSelector({
   selectedFilters,
   savedExplorations,
+  favoriteKeys,
   query,
   categoryFilter,
   onQueryChange,
-  onCategoryChange,
   onTogglePreset,
   onToggleSaved,
+  onToggleFavorite,
   onDeleteSaved,
   onOpenPresetSettings,
   onOpenHistory,
@@ -54,8 +60,14 @@ export function ExploreExplorationSelector({
   const q = query.trim().toLowerCase();
   const selectedCount = Object.keys(selectedFilters).length;
   const presets = EXPLORATION_PRESETS.filter((preset) => {
+    const favoriteKey = presetFavoriteKey(preset.id);
     if (categoryFilter === "custom") return false;
-    if (categoryFilter !== "all" && preset.category !== categoryFilter) {
+    if (categoryFilter === "favorites") {
+      if (!favoriteKeys.has(favoriteKey)) return false;
+    } else if (
+      categoryFilter !== "all" &&
+      preset.category !== categoryFilter
+    ) {
       return false;
     }
     if (!q) return true;
@@ -67,7 +79,10 @@ export function ExploreExplorationSelector({
   });
 
   const saved = savedExplorations.filter((item) => {
-    if (
+    const favoriteKey = savedFavoriteKey(item.id);
+    if (categoryFilter === "favorites") {
+      if (!favoriteKeys.has(favoriteKey)) return false;
+    } else if (
       categoryFilter !== "all" &&
       categoryFilter !== "custom"
     ) {
@@ -134,29 +149,16 @@ export function ExploreExplorationSelector({
         </div>
       )}
 
-      <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+      <div className="mt-4">
         <input
           value={query}
           onChange={(e) => onQueryChange(e.target.value)}
           placeholder="Search explorations…"
-          className="ui-input flex-1"
+          className="ui-input w-full"
         />
-        <select
-          value={categoryFilter}
-          onChange={(e) =>
-            onCategoryChange(e.target.value as ExplorationFilterId)
-          }
-          className="ui-input w-full sm:w-48"
-        >
-          {EXPLORATION_FILTERS.map((item) => (
-            <option key={item.id} value={item.id}>
-              {item.label}
-            </option>
-          ))}
-        </select>
       </div>
 
-      {saved.length > 0 && (
+      {saved.length > 0 && categoryFilter !== "Candlesticks" && (
         <div className="mt-4">
           <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">
             My explorations
@@ -164,7 +166,9 @@ export function ExploreExplorationSelector({
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {saved.map((item) => {
               const filterKey = savedFilterKey(item.id);
+              const favoriteKey = savedFavoriteKey(item.id);
               const isSelected = Boolean(selectedFilters[filterKey]);
+              const isFavorite = favoriteKeys.has(favoriteKey);
               const preview = describeBuilderState(item.builder);
               const style = explorationCategoryStyle("Custom");
 
@@ -214,6 +218,11 @@ export function ExploreExplorationSelector({
                       </div>
                     </div>
                     <div className="flex shrink-0 flex-col gap-1">
+                      <FavoriteButton
+                        active={isFavorite}
+                        label={`${isFavorite ? "Remove" : "Add"} ${item.name} from favorites`}
+                        onClick={() => onToggleFavorite(favoriteKey)}
+                      />
                       <HistoryButton
                         label={`Past runs for ${item.name}`}
                         onClick={() =>
@@ -245,7 +254,9 @@ export function ExploreExplorationSelector({
       <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {presets.map((preset) => {
           const filterKey = presetFilterKey(preset.id);
+          const favoriteKey = presetFavoriteKey(preset.id);
           const isSelected = Boolean(selectedFilters[filterKey]);
+          const isFavorite = favoriteKeys.has(favoriteKey);
           const style = explorationCategoryStyle(preset.category);
           const selectedFilter = selectedFilters[filterKey];
           const preview = describePreset(
@@ -303,6 +314,11 @@ export function ExploreExplorationSelector({
                   </div>
                 </div>
                 <div className="flex shrink-0 flex-col gap-1">
+                  <FavoriteButton
+                    active={isFavorite}
+                    label={`${isFavorite ? "Remove" : "Add"} ${preset.name} from favorites`}
+                    onClick={() => onToggleFavorite(favoriteKey)}
+                  />
                   <HistoryButton
                     label={`Past runs for ${preset.name}`}
                     onClick={() =>
@@ -328,7 +344,11 @@ export function ExploreExplorationSelector({
 
       {presets.length === 0 && saved.length === 0 && (
         <p className="ui-helper mt-4 rounded-xl border border-border-subtle px-4 py-8 text-center">
-          No explorations match your search.
+          {categoryFilter === "Candlesticks"
+            ? "Candlestick explorations are coming soon."
+            : categoryFilter === "favorites"
+              ? "Star explorations to add them to your favorites."
+              : "No explorations match your search."}
         </p>
       )}
     </section>
@@ -346,6 +366,43 @@ function CheckIcon() {
         strokeLinejoin="round"
       />
     </svg>
+  );
+}
+
+function FavoriteButton({
+  active,
+  label,
+  onClick,
+}: {
+  active: boolean;
+  label: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick();
+      }}
+      className={`flex h-8 w-8 items-center justify-center rounded-lg border transition ${
+        active
+          ? "border-brand bg-brand/10 text-brand"
+          : "border-border text-muted hover:border-brand hover:text-ink"
+      }`}
+      aria-label={label}
+      title={active ? "Remove from favorites" : "Add to favorites"}
+    >
+      <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+        <path
+          d="M7 2.2 8.55 5.3 12 5.85 9.5 8.2 10.1 11.6 7 9.95 3.9 11.6 4.5 8.2 2 5.85 5.45 5.3 7 2.2Z"
+          stroke="currentColor"
+          strokeWidth="1.2"
+          fill={active ? "currentColor" : "none"}
+          strokeLinejoin="round"
+        />
+      </svg>
+    </button>
   );
 }
 

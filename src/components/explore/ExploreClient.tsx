@@ -23,6 +23,7 @@ import { ExplorePriceCacheFooter } from "@/components/explore/ExplorePriceCacheF
 import { ExploreScanResultsPanel } from "@/components/explore/ExploreScanResultsPanel";
 import { ExploreStrategySelector } from "@/components/explore/ExploreStrategySelector";
 import { ExploreStrategySettingsModal } from "@/components/explore/ExploreStrategySettingsModal";
+import { ExploreCategoryTabs } from "@/components/explore/ExploreCategoryTabs";
 import { ExploreTimeframeTabs } from "@/components/explore/ExploreTimeframeTabs";
 import { ExploreTopBar } from "@/components/explore/ExploreTopBar";
 import { LabStatusBanner } from "@/components/lab/LabShell";
@@ -48,7 +49,7 @@ import {
 import {
   DEFAULT_EXPLORATION_PRESET_ID,
   getExplorationPreset,
-  type ExplorationFilterId,
+  type ExplorationCategoryId,
 } from "@/lib/explore/exploration-presets";
 import {
   describeExplorationFilter,
@@ -90,6 +91,10 @@ import {
   listExplorations,
   saveExploration,
 } from "@/lib/storage/explorations";
+import {
+  loadExplorationFavorites,
+  saveExplorationFavorites,
+} from "@/lib/storage/exploration-favorites";
 import { saveIndicatorScanRun } from "@/lib/storage/indicator-scans";
 import { listSymbols } from "@/lib/storage/prices";
 import {
@@ -144,7 +149,10 @@ export function ExploreClient() {
     });
   const [explorationQuery, setExplorationQuery] = useState("");
   const [explorationCategoryFilter, setExplorationCategoryFilter] =
-    useState<ExplorationFilterId>("all");
+    useState<ExplorationCategoryId>("all");
+  const [explorationFavoriteKeys, setExplorationFavoriteKeys] = useState<
+    Set<string>
+  >(() => new Set());
   const [presetSettingsId, setPresetSettingsId] = useState<string | null>(null);
   const [builderOpen, setBuilderOpen] = useState(false);
   const [runHistoryOpen, setRunHistoryOpen] = useState(false);
@@ -336,6 +344,16 @@ export function ExploreClient() {
     setSavedExplorations(list);
   }, []);
 
+  const toggleExplorationFavorite = useCallback((key: string) => {
+    setExplorationFavoriteKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      saveExplorationFavorites([...next]);
+      return next;
+    });
+  }, []);
+
   const toggleSavedExploration = useCallback(
     (savedId: string) => {
       const saved = savedExplorations.find((item) => item.id === savedId);
@@ -505,6 +523,7 @@ export function ExploreClient() {
       setModifiedPresetIds(modified);
     })();
     void reloadSavedExplorations();
+    setExplorationFavoriteKeys(new Set(loadExplorationFavorites()));
   }, [reloadSavedExplorations]);
 
   useEffect(() => {
@@ -889,15 +908,20 @@ export function ExploreClient() {
                 mode={explorationTimeframeMode}
                 onChange={setExplorationTimeframeMode}
               />
+              <ExploreCategoryTabs
+                category={explorationCategoryFilter}
+                onChange={setExplorationCategoryFilter}
+              />
               <ExploreExplorationSelector
                 selectedFilters={selectedExplorationFilters}
                 savedExplorations={savedExplorations}
+                favoriteKeys={explorationFavoriteKeys}
                 query={explorationQuery}
                 categoryFilter={explorationCategoryFilter}
                 onQueryChange={setExplorationQuery}
-                onCategoryChange={setExplorationCategoryFilter}
                 onTogglePreset={toggleExplorationPreset}
                 onToggleSaved={toggleSavedExploration}
+                onToggleFavorite={toggleExplorationFavorite}
                 onDeleteSaved={(id) => void handleDeleteSavedExploration(id)}
                 onOpenPresetSettings={openExplorationPresetSettings}
                 onOpenHistory={openExplorationHistory}

@@ -438,7 +438,7 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
   {
     id: "exp-sma-price",
     name: "SMA vs Price",
-    category: "Trend",
+    category: "Moving Averages",
     kind: "overlay_vs_price",
     description: "Compare price to a simple moving average",
     params: [PERIOD_PARAM, PRICE_PARAM, OP_PARAM],
@@ -454,7 +454,7 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
   {
     id: "exp-ema-price",
     name: "EMA vs Price",
-    category: "Trend",
+    category: "Moving Averages",
     kind: "overlay_vs_price",
     description: "Compare price to an exponential moving average",
     params: [PERIOD_PARAM, PRICE_PARAM, OP_PARAM],
@@ -470,7 +470,7 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
   {
     id: "exp-sma-sma",
     name: "SMA Crossover",
-    category: "Trend",
+    category: "Moving Averages",
     kind: "overlay_vs_overlay",
     description: "Fast SMA crossing slow SMA (e.g. golden cross)",
     params: [FAST_PERIOD_PARAM, SLOW_PERIOD_PARAM, OP_PARAM],
@@ -486,7 +486,7 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
   {
     id: "exp-ema-ema",
     name: "EMA Crossover",
-    category: "Trend",
+    category: "Moving Averages",
     kind: "overlay_vs_overlay",
     description: "Fast EMA crossing slow EMA",
     params: [FAST_PERIOD_PARAM, SLOW_PERIOD_PARAM, OP_PARAM],
@@ -502,7 +502,7 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
   {
     id: "exp-rsi-level",
     name: "RSI Level",
-    category: "Momentum",
+    category: "Oscillators",
     kind: "oscillator_level",
     description: "RSI above or below a threshold",
     params: [
@@ -533,7 +533,7 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
   {
     id: "exp-cci-level",
     name: "CCI Level",
-    category: "Momentum",
+    category: "Oscillators",
     kind: "oscillator_level",
     description: "CCI above or below a threshold",
     params: [
@@ -591,7 +591,7 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
   {
     id: "exp-macd-cross",
     name: "MACD Cross",
-    category: "Momentum",
+    category: "Oscillators",
     kind: "line_cross",
     description: "MACD line crossing signal line",
     params: [
@@ -631,7 +631,7 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
   {
     id: "exp-stoch-cross",
     name: "Stochastic Cross",
-    category: "Momentum",
+    category: "Oscillators",
     kind: "line_cross",
     description: "%K crossing %D",
     params: [
@@ -721,7 +721,7 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
   {
     id: "exp-wma-price",
     name: "WMA vs Price",
-    category: "Trend",
+    category: "Moving Averages",
     kind: "overlay_vs_price",
     description: "Compare price to a weighted moving average",
     params: [PERIOD_PARAM, PRICE_PARAM, OP_PARAM],
@@ -737,7 +737,7 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
   {
     id: "exp-wma-wma",
     name: "WMA Crossover",
-    category: "Trend",
+    category: "Moving Averages",
     kind: "overlay_vs_overlay",
     description: "Fast WMA crossing slow WMA",
     params: [FAST_PERIOD_PARAM, SLOW_PERIOD_PARAM, OP_PARAM],
@@ -753,7 +753,7 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
   {
     id: "exp-ema-sma",
     name: "EMA vs SMA",
-    category: "Trend",
+    category: "Moving Averages",
     kind: "overlay_vs_overlay",
     description: "Fast EMA crossing slow SMA",
     params: [
@@ -773,7 +773,7 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
   {
     id: "exp-ema-9-21",
     name: "EMA 9/21 Cross",
-    category: "Trend",
+    category: "Moving Averages",
     kind: "overlay_vs_overlay",
     description: "Short-term EMA crossing medium EMA",
     params: [
@@ -793,7 +793,7 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
   {
     id: "exp-sma-10-20",
     name: "SMA 10/20 Cross",
-    category: "Trend",
+    category: "Moving Averages",
     kind: "overlay_vs_overlay",
     description: "Short-term SMA golden cross",
     params: [
@@ -813,7 +813,7 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
   {
     id: "exp-price-psar",
     name: "Price vs Parabolic SAR",
-    category: "Trend",
+    category: "Moving Averages",
     kind: "overlay_vs_price",
     description: "Price crossing Parabolic SAR",
     params: [PRICE_PARAM, OP_PARAM],
@@ -843,7 +843,7 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
   {
     id: "exp-price-vwap",
     name: "Price vs VWAP",
-    category: "Trend",
+    category: "Moving Averages",
     kind: "overlay_vs_price",
     description: "Price relative to volume-weighted average price",
     params: [PRICE_PARAM, OP_PARAM],
@@ -904,7 +904,7 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
   {
     id: "exp-rsi-oversold",
     name: "RSI Oversold",
-    category: "Momentum",
+    category: "Oscillators",
     kind: "oscillator_level",
     description: "RSI below 30 — potential bounce",
     params: [
@@ -930,7 +930,7 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
   {
     id: "exp-rsi-overbought",
     name: "RSI Overbought",
-    category: "Momentum",
+    category: "Oscillators",
     kind: "oscillator_level",
     description: "RSI above 70 — potential pullback",
     params: [
@@ -956,7 +956,7 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
   {
     id: "exp-rsi-cross-50",
     name: "RSI Cross 50",
-    category: "Momentum",
+    category: "Oscillators",
     kind: "oscillator_level",
     description: "RSI crossing the 50 midline",
     params: [
@@ -981,7 +981,7 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
   {
     id: "exp-rsi-breakout-after-consolidation",
     name: "RSI Breakout After Consolidation",
-    category: "Momentum",
+    category: "Oscillators",
     kind: "streak_breakout",
     description:
       "RSI crosses above a level after staying below it for many consecutive days",
@@ -1026,7 +1026,7 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
   {
     id: "exp-williamsr-oversold",
     name: "Williams %R Oversold",
-    category: "Momentum",
+    category: "Oscillators",
     kind: "oscillator_level",
     description: "Williams %R below -80",
     params: [
@@ -1060,7 +1060,7 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
   {
     id: "exp-mfi-oversold",
     name: "MFI Oversold",
-    category: "Momentum",
+    category: "Oscillators",
     kind: "oscillator_level",
     description: "Money Flow Index below 20",
     params: [
@@ -1086,7 +1086,7 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
   {
     id: "exp-roc-cross-zero",
     name: "ROC Cross Zero",
-    category: "Momentum",
+    category: "Oscillators",
     kind: "oscillator_level",
     description: "Rate of change crossing zero",
     params: [
@@ -1111,7 +1111,7 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
   {
     id: "exp-momentum-positive",
     name: "Momentum Positive",
-    category: "Momentum",
+    category: "Oscillators",
     kind: "oscillator_level",
     description: "Momentum above zero",
     params: [
@@ -1144,7 +1144,7 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
   {
     id: "exp-stoch-rsi-cross",
     name: "Stoch RSI Cross",
-    category: "Momentum",
+    category: "Oscillators",
     kind: "line_cross",
     description: "Stochastic RSI %K crossing %D",
     params: [
@@ -1181,7 +1181,7 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
   {
     id: "exp-trix-cross",
     name: "TRIX Cross",
-    category: "Momentum",
+    category: "Oscillators",
     kind: "line_cross",
     description: "TRIX line crossing signal",
     params: [
@@ -1212,7 +1212,7 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
   {
     id: "exp-kst-cross",
     name: "KST Cross",
-    category: "Momentum",
+    category: "Oscillators",
     kind: "line_cross",
     description: "Know Sure Thing crossing signal line",
     params: [
@@ -1242,7 +1242,7 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
   {
     id: "exp-ao-cross-zero",
     name: "Awesome Oscillator",
-    category: "Momentum",
+    category: "Oscillators",
     kind: "oscillator_level",
     description: "AO crossing above or below zero",
     params: [
@@ -1280,7 +1280,7 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
   {
     id: "exp-force-index-positive",
     name: "Force Index",
-    category: "Momentum",
+    category: "Oscillators",
     kind: "oscillator_level",
     description: "Force Index above zero",
     params: [
@@ -1313,7 +1313,7 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
   {
     id: "exp-zscore-oversold",
     name: "Z-Score Oversold",
-    category: "Momentum",
+    category: "Oscillators",
     kind: "oscillator_level",
     description: "Price z-score below -2 (statistical dip)",
     params: [
@@ -1623,26 +1623,45 @@ export function getExplorationPreset(id: string): ExplorationPreset | undefined 
 
 export const DEFAULT_EXPLORATION_PRESET_ID = "exp-sma-price";
 
-export const EXPLORATION_FILTERS = [
+export const EXPLORATION_CATEGORY_TABS = [
   { id: "all", label: "All" },
-  { id: "custom", label: "My explorations" },
+  { id: "Moving Averages", label: "Moving Averages" },
+  { id: "Oscillators", label: "Oscillators" },
+  { id: "Volatility", label: "Volatility" },
   { id: "Breakout", label: "Breakout" },
   { id: "Trend", label: "Trend" },
-  { id: "Momentum", label: "Momentum" },
-  { id: "Volatility", label: "Volatility" },
+  { id: "Candlesticks", label: "Candlesticks" },
+  { id: "favorites", label: "Favorites" },
+  { id: "custom", label: "Custom" },
 ] as const;
 
-export type ExplorationFilterId = (typeof EXPLORATION_FILTERS)[number]["id"];
+export type ExplorationCategoryId =
+  (typeof EXPLORATION_CATEGORY_TABS)[number]["id"];
 
 export const EXPLORATION_CATEGORY_STYLES: Record<
   string,
   { bg: string; text: string; dot: string }
 > = {
-  Trend: { bg: "bg-info-light", text: "text-info", dot: "bg-info" },
-  Breakout: { bg: "bg-success-light", text: "text-success", dot: "bg-success" },
-  Momentum: { bg: "bg-brand-light", text: "text-brand-text", dot: "bg-brand" },
+  "Moving Averages": {
+    bg: "bg-info-light",
+    text: "text-info",
+    dot: "bg-info",
+  },
+  Oscillators: {
+    bg: "bg-brand-light",
+    text: "text-brand-text",
+    dot: "bg-brand",
+  },
   Volatility: { bg: "bg-accent-light", text: "text-accent", dot: "bg-accent" },
+  Breakout: {
+    bg: "bg-success-light",
+    text: "text-success",
+    dot: "bg-success",
+  },
+  Trend: { bg: "bg-info-light", text: "text-info", dot: "bg-info" },
+  Candlesticks: { bg: "bg-input", text: "text-body", dot: "bg-muted" },
   Custom: { bg: "bg-input", text: "text-body", dot: "bg-muted" },
+  Favorites: { bg: "bg-brand-light", text: "text-brand-text", dot: "bg-brand" },
 };
 
 export function explorationCategoryStyle(category: string) {
