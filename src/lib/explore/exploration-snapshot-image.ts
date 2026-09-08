@@ -18,11 +18,9 @@ const C = {
   headerBlue: "#4b78b8",
   borderSubtle: "#edeae5",
   white: "#ffffff",
-  peachTop: "#f5f3ef",
-  peachMid: "#f7f5f0",
   brandText: "#c96f00",
   brand: "#f59e0b",
-  brandBadgeBg: "#f7f5f0",
+  brandBadgeBg: "rgba(255, 255, 255, 0.72)",
   brandBadgeBorder: "#ebe7e0",
   tableHeaderBg: "#f5f3ef",
   success: "#159a68",
@@ -228,12 +226,65 @@ function drawWarmBackground(
   width: number,
   height: number,
 ): void {
-  const grad = ctx.createLinearGradient(0, 0, 0, height);
-  grad.addColorStop(0, C.peachTop);
-  grad.addColorStop(0.32, C.peachMid);
-  grad.addColorStop(0.62, "#faf9f7");
-  grad.addColorStop(1, C.white);
-  ctx.fillStyle = grad;
+  ctx.fillStyle = C.white;
+  ctx.fillRect(0, 0, width, height);
+
+  const base = ctx.createLinearGradient(0, 0, 0, height);
+  base.addColorStop(0, "#faf7f3");
+  base.addColorStop(0.28, "#f8f7f6");
+  base.addColorStop(0.55, "#fcfcfb");
+  base.addColorStop(1, C.white);
+  ctx.fillStyle = base;
+  ctx.fillRect(0, 0, width, height);
+
+  const peachGlow = ctx.createRadialGradient(
+    width * 0.1,
+    -height * 0.02,
+    0,
+    width * 0.12,
+    height * 0.04,
+    width * 0.62,
+  );
+  peachGlow.addColorStop(0, "rgba(255, 214, 170, 0.42)");
+  peachGlow.addColorStop(0.42, "rgba(255, 232, 205, 0.16)");
+  peachGlow.addColorStop(1, "transparent");
+  ctx.fillStyle = peachGlow;
+  ctx.fillRect(0, 0, width, height);
+
+  const greyGlow = ctx.createRadialGradient(
+    width * 0.78,
+    -height * 0.04,
+    0,
+    width * 0.74,
+    height * 0.06,
+    width * 0.58,
+  );
+  greyGlow.addColorStop(0, "rgba(198, 206, 220, 0.3)");
+  greyGlow.addColorStop(0.45, "rgba(220, 225, 233, 0.12)");
+  greyGlow.addColorStop(1, "transparent");
+  ctx.fillStyle = greyGlow;
+  ctx.fillRect(0, 0, width, height);
+
+  const centerBlend = ctx.createRadialGradient(
+    width * 0.42,
+    0,
+    0,
+    width * 0.42,
+    height * 0.03,
+    width * 0.48,
+  );
+  centerBlend.addColorStop(0, "rgba(245, 236, 226, 0.28)");
+  centerBlend.addColorStop(0.55, "rgba(248, 246, 244, 0.08)");
+  centerBlend.addColorStop(1, "transparent");
+  ctx.fillStyle = centerBlend;
+  ctx.fillRect(0, 0, width, height);
+
+  const whiteFade = ctx.createLinearGradient(0, 0, 0, height);
+  whiteFade.addColorStop(0, "rgba(255, 255, 255, 0)");
+  whiteFade.addColorStop(0.38, "rgba(255, 255, 255, 0)");
+  whiteFade.addColorStop(0.72, "rgba(255, 255, 255, 0.55)");
+  whiteFade.addColorStop(1, "rgba(255, 255, 255, 1)");
+  ctx.fillStyle = whiteFade;
   ctx.fillRect(0, 0, width, height);
 }
 
