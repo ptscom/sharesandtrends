@@ -14,12 +14,13 @@ import {
 const C = {
   ink: "#102a43",
   body: "#5f7184",
-  muted: "#9aa8b6",
+  muted: "#8a9bb0",
   headerBlue: "#4b78b8",
-  borderSubtle: "#edf1f5",
-  surface: "#ffffff",
-  outerTop: "#e9f0f8",
-  outerBottom: "#f4f7fb",
+  borderSubtle: "#f0ece6",
+  white: "#ffffff",
+  peachTop: "#fef0e4",
+  peachMid: "#fff7ef",
+  peachGlow: "rgba(245, 158, 11, 0.1)",
   brandText: "#c96f00",
   brand: "#f59e0b",
   brandBadgeBg: "#fff7ed",
@@ -28,12 +29,7 @@ const C = {
   success: "#159a68",
   danger: "#e05252",
   dotEmpty: "#d8dee6",
-  shadow: "rgba(16, 42, 67, 0.07)",
 };
-
-const FONT =
-  'system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif';
-const MONO = 'ui-monospace, "SF Mono", Menlo, Consolas, monospace';
 
 type ColAlign = "left" | "center" | "right";
 
@@ -46,17 +42,12 @@ interface SnapshotCol {
 }
 
 interface SnapshotLayout {
-  outerPad: number;
-  cardPadX: number;
-  cardPadTop: number;
-  cardPadBottom: number;
+  pad: number;
   headerBlock: number;
   gapAfterHeader: number;
   rowHeight: number;
   tableHeaderHeight: number;
   tableWidth: number;
-  cardWidth: number;
-  cardHeight: number;
   width: number;
   height: number;
   columns: SnapshotCol[];
@@ -68,11 +59,14 @@ interface RenderOptions {
   columns: SnapshotColumnFilter[];
 }
 
+let cachedFontFamily: string | null = null;
+
 export async function renderExplorationSnapshotPng(
   options: RenderOptions,
 ): Promise<Blob> {
   const { scan, rows, columns } = options;
   const outputColumns = enabledSnapshotColumns(columns);
+  const fontFamily = await ensureSnapshotFonts();
   const rowExtras = await buildSnapshotRowExtras(scan, rows);
   const scale = 2;
 
@@ -86,27 +80,41 @@ export async function renderExplorationSnapshotPng(
 
   ctx.scale(scale, scale);
 
-  drawOuterBackground(ctx, layout.width, layout.height);
+  drawWarmBackground(ctx, layout.width, layout.height);
 
-  const cardX = layout.outerPad;
-  const cardY = layout.outerPad;
-  drawCard(ctx, cardX, cardY, layout.cardWidth, layout.cardHeight);
+  const contentX = layout.pad;
+  const contentW = layout.width - layout.pad * 2;
+  let y = layout.pad;
 
-  const contentX = cardX + layout.cardPadX;
-  const contentW = layout.cardWidth - layout.cardPadX * 2;
-  let y = cardY + layout.cardPadTop;
-
-  drawHeader(ctx, scan, rows.length, contentX, y, contentW);
+  drawHeader(ctx, scan, rows.length, contentX, y, contentW, fontFamily);
   y += layout.headerBlock + layout.gapAfterHeader;
 
   const tableX = contentX;
   const tableTop = y;
+  const tableBodyHeight = rows.length * layout.rowHeight;
 
-  drawTableHeader(ctx, tableX, tableTop, layout);
+  drawTableBodyBackground(
+    ctx,
+    tableX,
+    tableTop + layout.tableHeaderHeight,
+    layout.tableWidth,
+    tableBodyHeight,
+  );
+
+  drawTableHeader(ctx, tableX, tableTop, layout, fontFamily);
 
   y = tableTop + layout.tableHeaderHeight;
   rows.forEach((row, index) => {
-    drawTableRow(ctx, row, rowExtras.get(row.symbol), tableX, y, layout, index);
+    drawTableRow(
+      ctx,
+      row,
+      rowExtras.get(row.symbol),
+      tableX,
+      y,
+      layout,
+      index,
+      fontFamily,
+    );
     y += layout.rowHeight;
   });
 
@@ -122,18 +130,54 @@ export async function renderExplorationSnapshotPng(
   });
 }
 
+async function ensureSnapshotFonts(): Promise<string> {
+  if (cachedFontFamily) return cachedFontFamily;
+
+  const family =
+    typeof document !== "undefined"
+      ? getComputedStyle(document.body).fontFamily
+      : "Inter, sans-serif";
+
+  const primary = family.split(",")[0]?.replace(/['"]/g, "").trim() || "Inter";
+  const fontFamily = `${family}`;
+
+  if (typeof document !== "undefined") {
+    await Promise.all([
+      document.fonts.load(`400 11px ${fontFamily}`),
+      document.fonts.load(`400 12px ${fontFamily}`),
+      document.fonts.load(`400 13px ${fontFamily}`),
+      document.fonts.load(`600 10px ${fontFamily}`),
+      document.fonts.load(`600 12px ${fontFamily}`),
+      document.fonts.load(`600 13px ${fontFamily}`),
+      document.fonts.load(`700 10px ${fontFamily}`),
+      document.fonts.load(`700 12px ${fontFamily}`),
+      document.fonts.load(`700 13px ${fontFamily}`),
+      document.fonts.load(`700 24px ${fontFamily}`),
+    ]);
+    await document.fonts.ready;
+  }
+
+  cachedFontFamily = fontFamily;
+  return primary;
+}
+
+function font(
+  family: string,
+  weight: number,
+  size: number,
+): string {
+  return `${weight} ${size}px ${family}`;
+}
+
 function buildLayout(
   outputColumns: SnapshotColumnFilter[],
   rowCount: number,
 ): SnapshotLayout {
-  const outerPad = 10;
-  const cardPadX = 18;
-  const cardPadTop = 18;
-  const cardPadBottom = 14;
-  const headerBlock = 76;
-  const gapAfterHeader = 12;
-  const rowHeight = 52;
-  const tableHeaderHeight = 32;
+  const pad = 20;
+  const headerBlock = 78;
+  const gapAfterHeader = 14;
+  const rowHeight = 54;
+  const tableHeaderHeight = 34;
 
   const columns: SnapshotCol[] = [
     { id: "symbol", label: "SYMBOL", width: 138, align: "left", sortable: true },
@@ -150,29 +194,22 @@ function buildLayout(
   ];
 
   const tableWidth = columns.reduce((sum, col) => sum + col.width, 0);
-  const cardWidth = tableWidth + cardPadX * 2;
-  const width = cardWidth + outerPad * 2;
-  const cardHeight =
-    cardPadTop +
+  const width = tableWidth + pad * 2;
+  const height =
+    pad +
     headerBlock +
     gapAfterHeader +
     tableHeaderHeight +
     rowCount * rowHeight +
-    cardPadBottom;
-  const height = cardHeight + outerPad * 2;
+    pad;
 
   return {
-    outerPad,
-    cardPadX,
-    cardPadTop,
-    cardPadBottom,
+    pad,
     headerBlock,
     gapAfterHeader,
     rowHeight,
     tableHeaderHeight,
     tableWidth,
-    cardWidth,
-    cardHeight,
     width,
     height,
     columns,
@@ -187,38 +224,43 @@ function colX(tableX: number, columns: SnapshotCol[], index: number): number {
   return x;
 }
 
-function drawOuterBackground(
+function drawWarmBackground(
   ctx: CanvasRenderingContext2D,
   width: number,
   height: number,
 ): void {
   const grad = ctx.createLinearGradient(0, 0, 0, height);
-  grad.addColorStop(0, C.outerTop);
-  grad.addColorStop(1, C.outerBottom);
+  grad.addColorStop(0, C.peachTop);
+  grad.addColorStop(0.28, C.peachMid);
+  grad.addColorStop(0.55, "#fffdfb");
+  grad.addColorStop(1, C.white);
   ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, width, height);
+
+  const glow = ctx.createRadialGradient(
+    width * 0.12,
+    0,
+    0,
+    width * 0.12,
+    0,
+    width * 0.65,
+  );
+  glow.addColorStop(0, C.peachGlow);
+  glow.addColorStop(1, "transparent");
+  ctx.fillStyle = glow;
   ctx.fillRect(0, 0, width, height);
 }
 
-function drawCard(
+function drawTableBodyBackground(
   ctx: CanvasRenderingContext2D,
-  x: number,
-  y: number,
-  w: number,
-  h: number,
+  tableX: number,
+  tableTop: number,
+  tableWidth: number,
+  tableBodyHeight: number,
 ): void {
-  ctx.save();
-  ctx.shadowColor = C.shadow;
-  ctx.shadowBlur = 16;
-  ctx.shadowOffsetY = 3;
-  ctx.fillStyle = C.surface;
-  roundRect(ctx, x, y, w, h, 12);
+  ctx.fillStyle = C.white;
+  roundRect(ctx, tableX, tableTop, tableWidth, tableBodyHeight, 10);
   ctx.fill();
-  ctx.restore();
-
-  ctx.strokeStyle = C.borderSubtle;
-  ctx.lineWidth = 1;
-  roundRect(ctx, x, y, w, h, 12);
-  ctx.stroke();
 }
 
 function drawHeader(
@@ -228,44 +270,45 @@ function drawHeader(
   x: number,
   y: number,
   contentWidth: number,
+  fontFamily: string,
 ): void {
   ctx.fillStyle = C.brandText;
-  ctx.font = `700 10px ${FONT}`;
+  ctx.font = font(fontFamily, 700, 10);
   ctx.fillText("EXPLORATION", x, y + 10);
 
   ctx.fillStyle = C.ink;
-  ctx.font = `700 23px ${FONT}`;
-  ctx.fillText(scan.filterName, x, y + 36);
+  ctx.font = font(fontFamily, 700, 24);
+  ctx.fillText(truncateText(ctx, scan.filterName, contentWidth - 156), x, y + 38);
 
   ctx.fillStyle = C.headerBlue;
-  ctx.font = `400 13px ${FONT}`;
-  ctx.fillText(formatRunDate(scan.runAt), x, y + 56);
+  ctx.font = font(fontFamily, 400, 13);
+  ctx.fillText(formatRunDate(scan.runAt), x, y + 58);
 
-  const badgeW = 146;
-  const badgeH = 52;
+  const badgeW = 148;
+  const badgeH = 54;
   const badgeX = x + contentWidth - badgeW;
   const badgeY = y;
 
   ctx.fillStyle = C.brandBadgeBg;
   ctx.strokeStyle = C.brandBadgeBorder;
   ctx.lineWidth = 1;
-  roundRect(ctx, badgeX, badgeY, badgeW, badgeH, 9);
+  roundRect(ctx, badgeX, badgeY, badgeW, badgeH, 10);
   ctx.fill();
   ctx.stroke();
 
-  drawMiniBarIcon(ctx, badgeX + 11, badgeY + 13);
+  drawMiniBarIcon(ctx, badgeX + 12, badgeY + 14);
 
   ctx.fillStyle = C.ink;
-  ctx.font = `700 13px ${FONT}`;
+  ctx.font = font(fontFamily, 700, 13);
   ctx.fillText(
     `${symbolCount} symbol${symbolCount === 1 ? "" : "s"}`,
-    badgeX + 33,
+    badgeX + 34,
     badgeY + 22,
   );
 
   ctx.fillStyle = C.headerBlue;
-  ctx.font = `400 11px ${FONT}`;
-  ctx.fillText("Showing latest signals", badgeX + 33, badgeY + 38);
+  ctx.font = font(fontFamily, 400, 11);
+  ctx.fillText("Showing latest signals", badgeX + 34, badgeY + 40);
 }
 
 function drawMiniBarIcon(ctx: CanvasRenderingContext2D, x: number, y: number): void {
@@ -284,16 +327,19 @@ function drawTableHeader(
   tableX: number,
   tableTop: number,
   layout: SnapshotLayout,
+  fontFamily: string,
 ): void {
   const { columns, tableWidth, tableHeaderHeight } = layout;
 
   ctx.fillStyle = C.tableHeaderBg;
-  ctx.fillRect(tableX, tableTop, tableWidth, tableHeaderHeight);
+  roundRect(ctx, tableX, tableTop, tableWidth, tableHeaderHeight + 2, 10);
+  ctx.fill();
+  ctx.fillRect(tableX, tableTop + 10, tableWidth, tableHeaderHeight);
 
   ctx.fillStyle = C.headerBlue;
-  ctx.font = `600 10px ${FONT}`;
+  ctx.font = font(fontFamily, 600, 10);
 
-  const textY = tableTop + 20;
+  const textY = tableTop + 21;
 
   columns.forEach((column, index) => {
     const x = colX(tableX, columns, index);
@@ -315,28 +361,21 @@ function drawHeaderCell(
   y: number,
 ): void {
   const padL = 10;
-  const sortW = 8;
+  const labelW = ctx.measureText(column.label).width;
+  const sortW = column.sortable ? 12 : 0;
+  const totalW = labelW + sortW;
+
   const labelX =
     column.align === "center"
-      ? x + (column.width - measureHeaderLabel(ctx, column.label, column.sortable)) / 2
+      ? x + (column.width - totalW) / 2
       : x + padL;
 
   ctx.textAlign = "left";
   ctx.fillText(column.label, labelX, y);
 
   if (column.sortable) {
-    const labelW = ctx.measureText(column.label).width;
     drawSortGlyph(ctx, labelX + labelW + 3, y - 7);
   }
-}
-
-function measureHeaderLabel(
-  ctx: CanvasRenderingContext2D,
-  label: string,
-  sortable: boolean,
-): number {
-  const labelW = ctx.measureText(label).width;
-  return labelW + (sortable ? 14 : 0);
 }
 
 function drawSortGlyph(ctx: CanvasRenderingContext2D, x: number, y: number): void {
@@ -364,6 +403,7 @@ function drawTableRow(
   y: number,
   layout: SnapshotLayout,
   index: number,
+  fontFamily: string,
 ): void {
   const { columns, tableWidth, rowHeight } = layout;
 
@@ -378,7 +418,7 @@ function drawTableRow(
 
   columns.forEach((column, colIndex) => {
     const x = colX(tableX, columns, colIndex);
-    drawBodyCell(ctx, column, row, extras, x, y, rowHeight);
+    drawBodyCell(ctx, column, row, extras, x, y, rowHeight, fontFamily);
   });
 }
 
@@ -390,6 +430,7 @@ function drawBodyCell(
   x: number,
   y: number,
   rowHeight: number,
+  fontFamily: string,
 ): void {
   const padL = 10;
   const midY = y + rowHeight / 2 + 4;
@@ -399,11 +440,11 @@ function drawBodyCell(
       const textX = x + padL;
       ctx.textAlign = "left";
       ctx.fillStyle = C.ink;
-      ctx.font = `700 12px ${MONO}`;
+      ctx.font = font(fontFamily, 700, 12);
       ctx.fillText(truncateText(ctx, row.symbol, column.width - padL * 2), textX, y + 20);
 
       ctx.fillStyle = C.headerBlue;
-      ctx.font = `400 11px ${FONT}`;
+      ctx.font = font(fontFamily, 400, 11);
       ctx.fillText(
         truncateText(ctx, extras?.subtitle ?? row.symbol, column.width - padL * 2),
         textX,
@@ -414,14 +455,14 @@ function drawBodyCell(
     case "signal": {
       ctx.textAlign = "left";
       ctx.fillStyle = C.body;
-      ctx.font = `400 12px ${FONT}`;
+      ctx.font = font(fontFamily, 400, 12);
       ctx.fillText(formatExplorationSignalDate(row), x + padL, midY);
       break;
     }
     case "close": {
       ctx.textAlign = "left";
       ctx.fillStyle = C.ink;
-      ctx.font = `600 13px ${MONO}`;
+      ctx.font = font(fontFamily, 600, 13);
       ctx.fillText(formatSnapshotClose(row.lastClose), x + padL, midY);
       break;
     }
@@ -430,7 +471,13 @@ function drawBodyCell(
       break;
     }
     default: {
-      drawHorizonCell(ctx, row.horizons?.[column.id as "d3" | "d5" | "d10"], x, y, column);
+      drawHorizonCell(
+        ctx,
+        row.horizons?.[column.id as "d3" | "d5" | "d10"],
+        x,
+        y,
+        fontFamily,
+      );
       break;
     }
   }
@@ -441,7 +488,7 @@ function drawHorizonCell(
   stats: { avgReturnPct: number; winRate: number; trades: number } | undefined,
   x: number,
   y: number,
-  column: SnapshotCol,
+  fontFamily: string,
 ): void {
   const padL = 10;
   const formatted = formatHorizonForSnapshot(stats);
@@ -450,19 +497,19 @@ function drawHorizonCell(
 
   if (formatted.returnLine === "—") {
     ctx.fillStyle = C.muted;
-    ctx.font = `500 12px ${MONO}`;
+    ctx.font = font(fontFamily, 500, 12);
     ctx.fillText("—", x + padL, y + 30);
     return;
   }
 
   const positive = (stats?.avgReturnPct ?? 0) >= 0;
   ctx.fillStyle = positive ? C.success : C.danger;
-  ctx.font = `700 12px ${MONO}`;
+  ctx.font = font(fontFamily, 700, 12);
   ctx.fillText(formatted.returnLine, x + padL, y + 20);
 
   if (formatted.winLine) {
     ctx.fillStyle = C.headerBlue;
-    ctx.font = `400 10px ${FONT}`;
+    ctx.font = font(fontFamily, 400, 10);
     ctx.fillText(formatted.winLine, x + padL, y + 36);
   }
 }
@@ -538,15 +585,16 @@ function roundRect(
   h: number,
   r: number,
 ): void {
+  const radius = Math.min(r, w / 2, h / 2);
   ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.lineTo(x + w - r, y);
-  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-  ctx.lineTo(x + w, y + h - r);
-  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-  ctx.lineTo(x + r, y + h);
-  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-  ctx.lineTo(x, y + r);
-  ctx.quadraticCurveTo(x, y, x + r, y);
+  ctx.moveTo(x + radius, y);
+  ctx.lineTo(x + w - radius, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + radius);
+  ctx.lineTo(x + w, y + h - radius);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - radius, y + h);
+  ctx.lineTo(x + radius, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - radius);
+  ctx.lineTo(x, y + radius);
+  ctx.quadraticCurveTo(x, y, x + radius, y);
   ctx.closePath();
 }
