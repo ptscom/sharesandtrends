@@ -1,6 +1,6 @@
 "use client";
 
-import type { MouseEvent } from "react";
+import type { MouseEvent, ReactNode } from "react";
 import { ExploreCategoryTabs } from "@/components/explore/ExploreCategoryTabs";
 import {
   EXPLORATION_PRESETS,
@@ -112,6 +112,10 @@ export function ExploreExplorationSelector({
 
   const selectedList = Object.values(selectedFilters);
   const editingCustom = selectedList.find((item) => item.source === "builder");
+  const showCategoryBadge =
+    categoryFilter === "all" ||
+    categoryFilter === "custom" ||
+    categoryFilter === "favorites";
 
   return (
     <section className="ui-panel p-6">
@@ -176,6 +180,7 @@ export function ExploreExplorationSelector({
                   <PresetCard
                     key={entry.preset.id}
                     preset={entry.preset}
+                    showCategoryBadge={showCategoryBadge}
                     selectedFilters={selectedFilters}
                     favoriteKeys={favoriteKeys}
                     onTogglePreset={onTogglePreset}
@@ -188,6 +193,7 @@ export function ExploreExplorationSelector({
                   <SavedCard
                     key={entry.item.id}
                     item={entry.item}
+                    showCategoryBadge={showCategoryBadge}
                     selectedFilters={selectedFilters}
                     favoriteKeys={favoriteKeys}
                     onToggleSaved={onToggleSaved}
@@ -217,6 +223,7 @@ export function ExploreExplorationSelector({
 
 function PresetCard({
   preset,
+  showCategoryBadge,
   selectedFilters,
   favoriteKeys,
   onTogglePreset,
@@ -225,6 +232,7 @@ function PresetCard({
   onOpenPresetSettings,
 }: {
   preset: ExplorationPreset;
+  showCategoryBadge: boolean;
   selectedFilters: Record<string, ExplorationFilter>;
   favoriteKeys: Set<string>;
   onTogglePreset: (presetId: string) => void;
@@ -247,48 +255,46 @@ function PresetCard({
 
   return (
     <div
-      className={`rounded-xl border p-3 transition ${
+      role="button"
+      tabIndex={0}
+      onClick={() => onTogglePreset(preset.id)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onTogglePreset(preset.id);
+        }
+      }}
+      className={`rounded-xl border p-3 transition cursor-pointer ${
         isSelected
           ? "border-brand bg-brand/5"
           : "border-border hover:border-brand/40 hover:bg-bg"
       }`}
+      aria-pressed={isSelected}
+      aria-label={`${isSelected ? "Deselect" : "Select"} ${preset.name}`}
     >
       <div className="flex items-start gap-2.5">
-        <button
-          type="button"
-          onClick={() => onTogglePreset(preset.id)}
-          className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
-            isSelected
-              ? "border-brand bg-brand text-white"
-              : "border-border bg-surface"
-          }`}
-          aria-label={`${isSelected ? "Deselect" : "Select"} ${preset.name}`}
-          aria-pressed={isSelected}
-        >
-          {isSelected && <CheckIcon />}
-        </button>
         <div className="min-w-0 flex-1">
-          <button
-            type="button"
-            onClick={() => onTogglePreset(preset.id)}
-            className="text-left"
-          >
-            <p className="font-medium text-ink">{preset.name}</p>
-            <p className="mt-0.5 text-xs text-muted line-clamp-2">
-              {preset.description}
-            </p>
-          </button>
+          <p className="font-medium text-ink">{preset.name}</p>
+          <p className="mt-0.5 text-xs text-muted line-clamp-2">
+            {preset.description}
+          </p>
           <div className="mt-2 flex flex-wrap items-center gap-2">
-            <span
-              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${style.bg} ${style.text}`}
-            >
-              <span className={`h-1.5 w-1.5 rounded-full ${style.dot}`} />
-              {preset.category}
-            </span>
+            {showCategoryBadge && (
+              <span
+                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${style.bg} ${style.text}`}
+              >
+                <span className={`h-1.5 w-1.5 rounded-full ${style.dot}`} />
+                {preset.category}
+              </span>
+            )}
             <span className="text-[11px] text-muted">{preview}</span>
           </div>
         </div>
-        <div className="flex shrink-0 flex-col gap-1">
+        <div
+          className="flex shrink-0 flex-col gap-1"
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+        >
           <FavoriteButton
             active={isFavorite}
             label={`${isFavorite ? "Remove" : "Add"} ${preset.name} from favorites`}
@@ -298,15 +304,13 @@ function PresetCard({
             label={`Past runs for ${preset.name}`}
             onClick={() => onOpenHistory(presetFilterKey(preset.id), preset.name)}
           />
-          <button
-            type="button"
-            onClick={(e) => onOpenPresetSettings(preset.id, e)}
-            className="flex h-8 w-8 items-center justify-center rounded-lg border border-border text-muted hover:border-brand hover:text-ink"
-            aria-label={`Configure ${preset.name}`}
+          <CardIconButton
+            label={`Configure ${preset.name}`}
             title="Configure parameters"
+            onClick={(e) => onOpenPresetSettings(preset.id, e)}
           >
-            ⚙
-          </button>
+            <SettingsIcon />
+          </CardIconButton>
         </div>
       </div>
     </div>
@@ -315,6 +319,7 @@ function PresetCard({
 
 function SavedCard({
   item,
+  showCategoryBadge,
   selectedFilters,
   favoriteKeys,
   onToggleSaved,
@@ -323,6 +328,7 @@ function SavedCard({
   onOpenHistory,
 }: {
   item: SavedExploration;
+  showCategoryBadge: boolean;
   selectedFilters: Record<string, ExplorationFilter>;
   favoriteKeys: Set<string>;
   onToggleSaved: (savedId: string) => void;
@@ -339,45 +345,43 @@ function SavedCard({
 
   return (
     <div
-      className={`rounded-xl border p-3 transition ${
+      role="button"
+      tabIndex={0}
+      onClick={() => onToggleSaved(item.id)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onToggleSaved(item.id);
+        }
+      }}
+      className={`rounded-xl border p-3 transition cursor-pointer ${
         isSelected
           ? "border-brand bg-brand/5"
           : "border-border hover:border-brand/40 hover:bg-bg"
       }`}
+      aria-pressed={isSelected}
+      aria-label={`${isSelected ? "Deselect" : "Select"} ${item.name}`}
     >
       <div className="flex items-start gap-2.5">
-        <button
-          type="button"
-          onClick={() => onToggleSaved(item.id)}
-          className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded border ${
-            isSelected
-              ? "border-brand bg-brand text-white"
-              : "border-border bg-surface"
-          }`}
-          aria-label={`${isSelected ? "Deselect" : "Select"} ${item.name}`}
-          aria-pressed={isSelected}
-        >
-          {isSelected && <CheckIcon />}
-        </button>
         <div className="min-w-0 flex-1">
-          <button
-            type="button"
-            onClick={() => onToggleSaved(item.id)}
-            className="text-left"
-          >
-            <p className="font-medium text-ink">{item.name}</p>
-            <p className="mt-0.5 text-xs text-muted line-clamp-2">{preview}</p>
-          </button>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
-            <span
-              className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${style.bg} ${style.text}`}
-            >
-              <span className={`h-1.5 w-1.5 rounded-full ${style.dot}`} />
-              Custom
-            </span>
-          </div>
+          <p className="font-medium text-ink">{item.name}</p>
+          <p className="mt-0.5 text-xs text-muted line-clamp-2">{preview}</p>
+          {showCategoryBadge && (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <span
+                className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${style.bg} ${style.text}`}
+              >
+                <span className={`h-1.5 w-1.5 rounded-full ${style.dot}`} />
+                Custom
+              </span>
+            </div>
+          )}
         </div>
-        <div className="flex shrink-0 flex-col gap-1">
+        <div
+          className="flex shrink-0 flex-col gap-1"
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+        >
           <FavoriteButton
             active={isFavorite}
             label={`${isFavorite ? "Remove" : "Add"} ${item.name} from favorites`}
@@ -387,35 +391,49 @@ function SavedCard({
             label={`Past runs for ${item.name}`}
             onClick={() => onOpenHistory(savedFilterKey(item.id), item.name)}
           />
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onDeleteSaved(item.id);
-            }}
-            className="flex h-8 w-8 items-center justify-center rounded-lg border border-border text-muted hover:border-danger hover:text-danger"
-            aria-label={`Delete ${item.name}`}
+          <CardIconButton
+            label={`Delete ${item.name}`}
             title="Remove from my explorations"
+            onClick={() => onDeleteSaved(item.id)}
+            className="hover:border-danger hover:text-danger"
           >
-            ✕
-          </button>
+            <DeleteIcon />
+          </CardIconButton>
         </div>
       </div>
     </div>
   );
 }
 
-function CheckIcon() {
+const cardIconButtonClass =
+  "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-border text-muted transition hover:border-brand hover:text-ink";
+
+function CardIconButton({
+  label,
+  title,
+  onClick,
+  className = "",
+  children,
+}: {
+  label: string;
+  title?: string;
+  onClick: (e: MouseEvent<HTMLButtonElement>) => void;
+  className?: string;
+  children: ReactNode;
+}) {
   return (
-    <svg width="10" height="10" viewBox="0 0 10 10" fill="none" aria-hidden>
-      <path
-        d="M2 5.2 4.1 7.3 8 3.4"
-        stroke="currentColor"
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        onClick(e);
+      }}
+      className={`${cardIconButtonClass} ${className}`}
+      aria-label={label}
+      title={title}
+    >
+      {children}
+    </button>
   );
 }
 
@@ -429,19 +447,15 @@ function FavoriteButton({
   onClick: () => void;
 }) {
   return (
-    <button
-      type="button"
-      onClick={(e) => {
-        e.stopPropagation();
-        onClick();
-      }}
-      className={`flex h-8 w-8 items-center justify-center rounded-lg border transition ${
-        active
-          ? "border-brand bg-brand/10 text-brand"
-          : "border-border text-muted hover:border-brand hover:text-ink"
-      }`}
-      aria-label={label}
+    <CardIconButton
+      label={label}
       title={active ? "Remove from favorites" : "Add to favorites"}
+      onClick={() => onClick()}
+      className={
+        active
+          ? "border-brand bg-brand/10 text-brand hover:border-brand hover:text-brand"
+          : ""
+      }
     >
       <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
         <path
@@ -452,7 +466,7 @@ function FavoriteButton({
           strokeLinejoin="round"
         />
       </svg>
-    </button>
+    </CardIconButton>
   );
 }
 
@@ -464,18 +478,45 @@ function HistoryButton({
   onClick: () => void;
 }) {
   return (
-    <button
-      type="button"
-      onClick={(e) => {
-        e.stopPropagation();
-        onClick();
-      }}
-      className="flex h-8 w-8 items-center justify-center rounded-lg border border-border text-muted hover:border-brand hover:text-ink"
-      aria-label={label}
-      title="Past runs"
-    >
-      <ExplorationHistoryIcon />
-    </button>
+    <CardIconButton label={label} title="Past runs" onClick={() => onClick()}>
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden>
+        <circle cx="8" cy="8" r="6.25" stroke="currentColor" strokeWidth="1.25" />
+        <path
+          d="M8 5v3.25l2 1.25"
+          stroke="currentColor"
+          strokeWidth="1.25"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    </CardIconButton>
+  );
+}
+
+function SettingsIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+      <path
+        d="M7 1.75v1.1M7 11.15v1.1M2.25 7h1.1M10.65 7h1.1M3.7 3.7l.78.78M9.52 9.52l.78.78M3.7 10.3l.78-.78M9.52 4.48l.78-.78"
+        stroke="currentColor"
+        strokeWidth="1.1"
+        strokeLinecap="round"
+      />
+      <circle cx="7" cy="7" r="2.1" stroke="currentColor" strokeWidth="1.1" />
+    </svg>
+  );
+}
+
+function DeleteIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden>
+      <path
+        d="M3.5 3.5 10.5 10.5M10.5 3.5 3.5 10.5"
+        stroke="currentColor"
+        strokeWidth="1.25"
+        strokeLinecap="round"
+      />
+    </svg>
   );
 }
 
