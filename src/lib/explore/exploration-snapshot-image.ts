@@ -67,7 +67,7 @@ export async function renderExplorationSnapshotPng(
   const rowExtras = await buildSnapshotRowExtras(scan, rows);
   const scale = 2;
 
-  const layout = buildLayout(outputColumns, rows.length);
+  const layout = buildLayout(outputColumns, rows.length, scan.filterName, fontFamily);
 
   const canvas = document.createElement("canvas");
   canvas.width = layout.width * scale;
@@ -149,6 +149,7 @@ async function ensureSnapshotFonts(): Promise<string> {
       document.fonts.load(`700 10px ${fontFamily}`),
       document.fonts.load(`700 12px ${fontFamily}`),
       document.fonts.load(`700 13px ${fontFamily}`),
+      document.fonts.load(`700 22px ${fontFamily}`),
       document.fonts.load(`700 24px ${fontFamily}`),
     ]);
     await document.fonts.ready;
@@ -169,13 +170,15 @@ function font(
 function buildLayout(
   outputColumns: SnapshotColumnFilter[],
   rowCount: number,
+  filterName: string,
+  fontFamily: string,
 ): SnapshotLayout {
   const pad = 20;
-  const headerBlock = 84;
-  const gapAfterHeader = 14;
+  const gapAfterHeader = 8;
   const rowHeight = 54;
   const tableHeaderHeight = 34;
-
+  const titleSize = 22;
+  const titleLineHeight = 26;
   const columns: SnapshotCol[] = [
     { id: "symbol", label: "SYMBOL", width: 138, align: "left" },
     { id: "signal", label: "SIGNAL DATE", width: 98, align: "left" },
@@ -190,6 +193,19 @@ function buildLayout(
   ];
 
   const tableWidth = columns.reduce((sum, col) => sum + col.width, 0);
+  const contentWidth = tableWidth;
+  const descBoxW = Math.min(300, Math.max(240, contentWidth * 0.42));
+  const titleMaxW = contentWidth - descBoxW - 16;
+
+  const measureCtx = document.createElement("canvas").getContext("2d");
+  let titleLineCount = 1;
+  if (measureCtx) {
+    measureCtx.font = font(fontFamily, 700, titleSize);
+    titleLineCount = wrapTextLines(measureCtx, filterName, titleMaxW, 2).length;
+  }
+
+  const headerBlock = 24 + titleLineCount * titleLineHeight + 6;
+
   const width = tableWidth + pad * 2;
   const height =
     pad +
@@ -317,15 +333,27 @@ function drawHeader(
 
   ctx.fillStyle = C.brandText;
   ctx.font = font(fontFamily, 700, 10);
-  ctx.fillText("EXPLORATION", x, y + 10);
+  ctx.textAlign = "left";
+  const eyebrowLabel = "EXPLORATION";
+  ctx.fillText(eyebrowLabel, x, y + 10);
+
+  const eyebrowGap = 10;
+  const eyebrowLabelW = ctx.measureText(eyebrowLabel).width;
+  ctx.fillStyle = C.muted;
+  ctx.fillText(
+    formatRunDate(scan.runAt),
+    x + eyebrowLabelW + eyebrowGap,
+    y + 10,
+  );
 
   ctx.fillStyle = C.ink;
-  ctx.font = font(fontFamily, 700, 24);
-  ctx.fillText(truncateText(ctx, scan.filterName, titleMaxW), x, y + 38);
-
-  ctx.fillStyle = C.headerBlue;
-  ctx.font = font(fontFamily, 400, 13);
-  ctx.fillText(formatRunDate(scan.runAt), x, y + 58);
+  ctx.font = font(fontFamily, 700, 22);
+  const titleLines = wrapTextLines(ctx, scan.filterName, titleMaxW, 2);
+  let titleY = y + 28;
+  for (const line of titleLines) {
+    ctx.fillText(line, x, titleY);
+    titleY += 26;
+  }
 
   ctx.font = font(fontFamily, 400, 12);
   const descLines = wrapTextLines(
