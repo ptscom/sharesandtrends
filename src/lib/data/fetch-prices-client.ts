@@ -1,4 +1,4 @@
-import { mergePriceBars } from "@/lib/storage/prices";
+import { mergePriceBars, setSymbolName } from "@/lib/storage/prices";
 import type { OhlcvBar } from "@/lib/types";
 
 export interface FetchBarsOptions {
@@ -11,6 +11,7 @@ export interface FetchBarsResult {
   symbol: string;
   bars: OhlcvBar[];
   count: number;
+  name?: string | null;
   error?: string;
 }
 
@@ -54,7 +55,8 @@ export async function fetchPriceBars(
       };
     }
     const bars = data.bars as OhlcvBar[];
-    return { symbol: upper, bars, count: bars.length };
+    const name = typeof data.name === "string" ? data.name : null;
+    return { symbol: upper, bars, count: bars.length, name };
   } catch (e) {
     return {
       symbol: upper,
@@ -93,6 +95,9 @@ export async function runFetchJobs(
       return;
     }
     await mergePriceBars(job.symbol, fetched.bars);
+    if (fetched.name) {
+      await setSymbolName(fetched.symbol, fetched.name);
+    }
     results[index] = { symbol: fetched.symbol, count: fetched.count };
   };
 
