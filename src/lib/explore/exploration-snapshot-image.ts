@@ -16,16 +16,15 @@ const C = {
   body: "#5f7184",
   muted: "#8a9bb0",
   headerBlue: "#4b78b8",
-  borderSubtle: "#f2ebe4",
+  borderSubtle: "#edeae5",
   white: "#ffffff",
-  peachTop: "#f9f3ec",
-  peachMid: "#fbf6f1",
-  peachGlow: "rgba(230, 195, 155, 0.08)",
+  peachTop: "#f5f3ef",
+  peachMid: "#f7f5f0",
   brandText: "#c96f00",
   brand: "#f59e0b",
-  brandBadgeBg: "#faf5ef",
-  brandBadgeBorder: "#f0e6da",
-  tableHeaderBg: "#f8f2eb",
+  brandBadgeBg: "#f7f5f0",
+  brandBadgeBorder: "#ebe7e0",
+  tableHeaderBg: "#f5f3ef",
   success: "#159a68",
   danger: "#e05252",
   dotEmpty: "#d8dee6",
@@ -231,23 +230,10 @@ function drawWarmBackground(
 ): void {
   const grad = ctx.createLinearGradient(0, 0, 0, height);
   grad.addColorStop(0, C.peachTop);
-  grad.addColorStop(0.28, C.peachMid);
-  grad.addColorStop(0.55, "#fefbf8");
+  grad.addColorStop(0.32, C.peachMid);
+  grad.addColorStop(0.62, "#faf9f7");
   grad.addColorStop(1, C.white);
   ctx.fillStyle = grad;
-  ctx.fillRect(0, 0, width, height);
-
-  const glow = ctx.createRadialGradient(
-    width * 0.12,
-    0,
-    0,
-    width * 0.12,
-    0,
-    width * 0.65,
-  );
-  glow.addColorStop(0, C.peachGlow);
-  glow.addColorStop(1, "transparent");
-  ctx.fillStyle = glow;
   ctx.fillRect(0, 0, width, height);
 }
 
@@ -272,22 +258,25 @@ function drawHeader(
   contentWidth: number,
   fontFamily: string,
 ): void {
+  const badgeW = 178;
+  const badgeH = 54;
+  const badgeX = x + contentWidth - badgeW;
+  const badgeY = y;
+  const badgeTextX = badgeX + 34;
+  const badgeTextMaxW = badgeW - 34 - 12;
+  const titleMaxW = contentWidth - badgeW - 16;
+
   ctx.fillStyle = C.brandText;
   ctx.font = font(fontFamily, 700, 10);
   ctx.fillText("EXPLORATION", x, y + 10);
 
   ctx.fillStyle = C.ink;
   ctx.font = font(fontFamily, 700, 24);
-  ctx.fillText(truncateText(ctx, scan.filterName, contentWidth - 156), x, y + 38);
+  ctx.fillText(truncateText(ctx, scan.filterName, titleMaxW), x, y + 38);
 
   ctx.fillStyle = C.headerBlue;
   ctx.font = font(fontFamily, 400, 13);
   ctx.fillText(formatRunDate(scan.runAt), x, y + 58);
-
-  const badgeW = 148;
-  const badgeH = 54;
-  const badgeX = x + contentWidth - badgeW;
-  const badgeY = y;
 
   ctx.fillStyle = C.brandBadgeBg;
   ctx.strokeStyle = C.brandBadgeBorder;
@@ -301,14 +290,22 @@ function drawHeader(
   ctx.fillStyle = C.ink;
   ctx.font = font(fontFamily, 700, 13);
   ctx.fillText(
-    `${symbolCount} symbol${symbolCount === 1 ? "" : "s"}`,
-    badgeX + 34,
+    truncateText(
+      ctx,
+      `${symbolCount} symbol${symbolCount === 1 ? "" : "s"}`,
+      badgeTextMaxW,
+    ),
+    badgeTextX,
     badgeY + 22,
   );
 
   ctx.fillStyle = C.headerBlue;
   ctx.font = font(fontFamily, 400, 11);
-  ctx.fillText("Showing latest signals", badgeX + 34, badgeY + 40);
+  ctx.fillText(
+    truncateText(ctx, "Showing latest signals", badgeTextMaxW),
+    badgeTextX,
+    badgeY + 40,
+  );
 }
 
 function drawMiniBarIcon(ctx: CanvasRenderingContext2D, x: number, y: number): void {
