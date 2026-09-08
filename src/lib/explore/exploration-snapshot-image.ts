@@ -16,16 +16,16 @@ const C = {
   body: "#5f7184",
   muted: "#8a9bb0",
   headerBlue: "#4b78b8",
-  borderSubtle: "#f0ece6",
+  borderSubtle: "#eeedeb",
   white: "#ffffff",
-  peachTop: "#fef0e4",
-  peachMid: "#fff7ef",
-  peachGlow: "rgba(245, 158, 11, 0.1)",
+  peachTop: "#f6f4f2",
+  peachMid: "#faf9f8",
+  peachGlow: "rgba(170, 160, 150, 0.06)",
   brandText: "#c96f00",
   brand: "#f59e0b",
-  brandBadgeBg: "#fff7ed",
-  brandBadgeBorder: "#fde4c4",
-  tableHeaderBg: "#fef6eb",
+  brandBadgeBg: "#faf9f7",
+  brandBadgeBorder: "#ebe8e4",
+  tableHeaderBg: "#f4f3f1",
   success: "#159a68",
   danger: "#e05252",
   dotEmpty: "#d8dee6",
@@ -232,7 +232,7 @@ function drawWarmBackground(
   const grad = ctx.createLinearGradient(0, 0, 0, height);
   grad.addColorStop(0, C.peachTop);
   grad.addColorStop(0.28, C.peachMid);
-  grad.addColorStop(0.55, "#fffdfb");
+  grad.addColorStop(0.55, "#fcfcfb");
   grad.addColorStop(1, C.white);
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, width, height);
@@ -332,9 +332,8 @@ function drawTableHeader(
   const { columns, tableWidth, tableHeaderHeight } = layout;
 
   ctx.fillStyle = C.tableHeaderBg;
-  roundRect(ctx, tableX, tableTop, tableWidth, tableHeaderHeight + 2, 10);
+  roundRectTop(ctx, tableX, tableTop, tableWidth, tableHeaderHeight, 10);
   ctx.fill();
-  ctx.fillRect(tableX, tableTop + 10, tableWidth, tableHeaderHeight);
 
   ctx.fillStyle = C.headerBlue;
   ctx.font = font(fontFamily, 600, 10);
@@ -594,6 +593,26 @@ function roundRect(
   ctx.quadraticCurveTo(x + w, y + h, x + w - radius, y + h);
   ctx.lineTo(x + radius, y + h);
   ctx.quadraticCurveTo(x, y + h, x, y + h - radius);
+  ctx.lineTo(x, y + radius);
+  ctx.quadraticCurveTo(x, y, x + radius, y);
+  ctx.closePath();
+}
+
+function roundRectTop(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number,
+): void {
+  const radius = Math.min(r, w / 2, h);
+  ctx.beginPath();
+  ctx.moveTo(x + radius, y);
+  ctx.lineTo(x + w - radius, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + radius);
+  ctx.lineTo(x + w, y + h);
+  ctx.lineTo(x, y + h);
   ctx.lineTo(x, y + radius);
   ctx.quadraticCurveTo(x, y, x + radius, y);
   ctx.closePath();
