@@ -230,6 +230,15 @@ export const INDICATOR_REGISTRY: IndicatorDefinition[] = [
     outputs: ["rolling_low"],
   },
   {
+    id: "rolling_range_pct",
+    name: "Prior Rolling Range %",
+    category: "price",
+    params: {
+      length: { type: "int", default: 10, min: 2, max: 300, label: "Period" },
+    },
+    outputs: ["rolling_range_pct"],
+  },
+  {
     id: "momentum",
     name: "Price Momentum %",
     category: "momentum",

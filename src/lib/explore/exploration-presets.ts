@@ -375,6 +375,56 @@ const DARVAS_LOOKBACK_PARAM: ExplorationParamDef = {
   max: 300,
 };
 
+const TIGHT_RANGE_LOOKBACK_PARAM: ExplorationParamDef = {
+  key: "lookback",
+  label: "Prior trading days",
+  type: "int",
+  default: 10,
+  min: 2,
+  max: 60,
+};
+
+const MAX_RANGE_PCT_PARAM: ExplorationParamDef = {
+  key: "maxRangePct",
+  label: "Max range %",
+  type: "float",
+  default: 3,
+  min: 0.5,
+  max: 20,
+};
+
+function buildTightRangeHighBreakout(
+  params: Record<string, number | string>,
+  timeframeMode: ExploreTimeframeMode,
+  name: string,
+): PatternDefinition {
+  const lookback = Number(params.lookback ?? 10);
+  const maxRangePct = Number(params.maxRangePct ?? 3);
+  const price = String(params.price ?? "high");
+  const op = String(params.op ?? "gt") as Expression["op"];
+
+  return {
+    name,
+    indicators: [
+      {
+        alias: "rolling_high",
+        type: "rolling_high",
+        params: { length: lookback },
+        timeframe: toTf(timeframeMode),
+      },
+      {
+        alias: "rolling_range_pct",
+        type: "rolling_range_pct",
+        params: { length: lookback },
+        timeframe: toTf(timeframeMode),
+      },
+    ],
+    entry: expr(op, price, "rolling_high"),
+    filters: expr("lte", "rolling_range_pct", maxRangePct),
+    backtest: { entryOn: "close", exitOn: "opposite_signal" },
+  };
+}
+
 function buildRollingExtremeBreak(
   direction: "high" | "low",
   params: Record<string, number | string>,
@@ -1546,6 +1596,41 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
       const price = String(params.price ?? "high");
       const op = String(params.op ?? "crosses_above");
       return `${priceLabel(price)} ${opLabel(op).toLowerCase()} ${lookback}-bar high`;
+    },
+  },
+  {
+    id: "exp-tight-range-high-breakout",
+    name: "Tight Range High Breakout",
+    category: "Breakout",
+    kind: "price_breakout",
+    description:
+      "After a tight prior range (default 3% over 10 days), today's high breaks above the prior period's highest high",
+    params: [
+      TIGHT_RANGE_LOOKBACK_PARAM,
+      MAX_RANGE_PCT_PARAM,
+      {
+        key: "price",
+        label: "Price",
+        type: "enum",
+        default: "high",
+        options: OHLC_OPTIONS,
+      },
+      {
+        key: "op",
+        label: "Condition",
+        type: "enum",
+        default: "gt",
+        options: COMPARE_OPTIONS,
+      },
+    ],
+    buildPattern: (params, tf) =>
+      buildTightRangeHighBreakout(params, tf, "Tight Range High Breakout"),
+    describe: (params) => {
+      const lookback = Number(params.lookback ?? 10);
+      const maxRangePct = Number(params.maxRangePct ?? 3);
+      const price = String(params.price ?? "high");
+      const op = String(params.op ?? "gt");
+      return `${priceLabel(price)} ${opLabel(op).toLowerCase()} ${lookback}-day high (range ≤ ${maxRangePct}%)`;
     },
   },
   {
