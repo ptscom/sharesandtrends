@@ -52,6 +52,20 @@ function priorRolling(
   });
 }
 
+function priorRollingRangePct(
+  bars: OhlcvBar[],
+  period: number,
+): (number | null)[] {
+  return bars.map((_, i) => {
+    if (i < period) return null;
+    const slice = bars.slice(i - period, i);
+    const highestHigh = Math.max(...slice.map((b) => b.high));
+    const lowestLow = Math.min(...slice.map((b) => b.low));
+    if (lowestLow <= 0) return null;
+    return ((highestHigh - lowestLow) / lowestLow) * 100;
+  });
+}
+
 function computeOnBars(
   bars: OhlcvBar[],
   def: IndicatorDef,
@@ -292,6 +306,11 @@ function computeOnBars(
     case "rolling_low": {
       const length = Number(params.length ?? 20);
       result[def.alias] = priorRolling(bars, length, "low");
+      break;
+    }
+    case "rolling_range_pct": {
+      const length = Number(params.length ?? 10);
+      result[def.alias] = priorRollingRangePct(bars, length);
       break;
     }
     case "momentum": {
