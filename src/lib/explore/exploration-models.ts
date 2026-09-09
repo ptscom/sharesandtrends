@@ -89,7 +89,10 @@ export type ExplorationPresetKind =
   | "oscillator_level"
   | "line_cross"
   | "price_vs_band"
-  | "streak_breakout";
+  | "streak_breakout"
+  | "price_breakout"
+  | "chart_pattern"
+  | "deep_low_reversion";
 
 export interface ExplorationPreset {
   id: string;
@@ -108,6 +111,8 @@ export interface ExplorationPreset {
 export interface ExplorationFilter {
   source: "preset" | "builder";
   name: string;
+  /** Short human-readable summary for results and snapshots */
+  description?: string;
   timeframeMode: ExploreTimeframeMode;
   presetId?: string;
   params?: Record<string, number | string>;
@@ -119,6 +124,7 @@ export interface ExplorationFilter {
 export interface SavedExploration {
   id: string;
   name: string;
+  description?: string;
   builder: ExplorationBuilderState;
   createdAt: string;
   updatedAt: string;
@@ -152,6 +158,8 @@ export interface IndicatorScanRun {
   filterName: string;
   filterDescription: string;
   timeframeMode: ExploreTimeframeMode;
+  /** Snapshot of the exploration filter used for this run (for symbol drill-down) */
+  filter?: ExplorationFilter;
   results: IndicatorScanResultRow[];
 }
 

@@ -357,11 +357,156 @@ const OP_PARAM: ExplorationParamDef = {
   options: COMPARE_OPTIONS,
 };
 
+const LOOKBACK_PARAM: ExplorationParamDef = {
+  key: "lookback",
+  label: "Lookback bars",
+  type: "int",
+  default: 200,
+  min: 2,
+  max: 500,
+};
+
+const DARVAS_LOOKBACK_PARAM: ExplorationParamDef = {
+  key: "lookback",
+  label: "Box lookback",
+  type: "int",
+  default: 20,
+  min: 2,
+  max: 300,
+};
+
+function buildRollingExtremeBreak(
+  direction: "high" | "low",
+  params: Record<string, number | string>,
+  timeframeMode: ExploreTimeframeMode,
+  name: string,
+): PatternDefinition {
+  const lookback = Number(params.lookback ?? 200);
+  const defaultPrice = direction === "high" ? "high" : "low";
+  const defaultOp = direction === "high" ? "crosses_above" : "crosses_below";
+  const price = String(params.price ?? defaultPrice);
+  const op = String(params.op ?? defaultOp) as Expression["op"];
+  const alias = direction === "high" ? "rolling_high" : "rolling_low";
+  const indicatorType = direction === "high" ? "rolling_high" : "rolling_low";
+
+  return {
+    name,
+    indicators: [
+      {
+        alias,
+        type: indicatorType,
+        params: { length: lookback },
+        timeframe: toTf(timeframeMode),
+      },
+    ],
+    entry: expr(op, price, alias),
+    backtest: { entryOn: "close", exitOn: "opposite_signal" },
+  };
+}
+
+const CHART_LOOKBACK_PARAM: ExplorationParamDef = {
+  key: "lookback",
+  label: "Lookback bars",
+  type: "int",
+  default: 60,
+  min: 15,
+  max: 300,
+};
+
+const DEEP_LOW_COMPARE_OPTIONS = [
+  { value: "lte", label: "At or below ( <= )" },
+  { value: "lt", label: "Below ( < )" },
+  { value: "crosses_below", label: "Crosses below" },
+];
+
+function buildDeepLowReversion(
+  params: Record<string, number | string>,
+  _timeframeMode: ExploreTimeframeMode,
+  name: string,
+): PatternDefinition {
+  const months = Number(params.months ?? 24);
+  const deepCount = Number(params.deepCount ?? 3);
+  const historySource = String(params.historySource ?? "low");
+  const price = String(params.price ?? "low");
+  const op = String(params.op ?? "lte") as Expression["op"];
+
+  return {
+    name,
+    indicators: [
+      {
+        alias: "deep_low_avg",
+        type: "deep_low_avg",
+        params: {
+          lookback: months,
+          count: deepCount,
+          source: historySource,
+        },
+        timeframe: "1M",
+      },
+    ],
+    entry: expr(op, price, "deep_low_avg"),
+    backtest: { entryOn: "close", exitOn: "opposite_signal" },
+  };
+}
+
+function buildChartPattern(
+  patternId: string,
+  params: Record<string, number | string>,
+  timeframeMode: ExploreTimeframeMode,
+  name: string,
+): PatternDefinition {
+  const lookback = Number(params.lookback ?? 60);
+
+  return {
+    name,
+    indicators: [
+      {
+        alias: "chart_pattern",
+        type: "chart_pattern",
+        params: { pattern: patternId, lookback },
+        timeframe: toTf(timeframeMode),
+      },
+    ],
+    entry: expr("gt", "chart_pattern", 0.5),
+    backtest: { entryOn: "close", exitOn: "opposite_signal" },
+  };
+}
+
+function buildDarvasBreakout(
+  direction: "up" | "down",
+  params: Record<string, number | string>,
+  timeframeMode: ExploreTimeframeMode,
+  name: string,
+): PatternDefinition {
+  const lookback = Number(params.lookback ?? 20);
+  const price = String(params.price ?? "close");
+  const op =
+    direction === "up"
+      ? (String(params.op ?? "crosses_above") as Expression["op"])
+      : (String(params.op ?? "crosses_below") as Expression["op"]);
+  const bandRef =
+    direction === "up" ? "darvas_box_top_prior" : "darvas_box_bottom_prior";
+
+  return {
+    name,
+    indicators: [
+      {
+        alias: "darvas_box",
+        type: "darvas_box",
+        params: { lookback },
+        timeframe: toTf(timeframeMode),
+      },
+    ],
+    entry: expr(op, price, bandRef),
+    backtest: { entryOn: "close", exitOn: "opposite_signal" },
+  };
+}
+
 export const EXPLORATION_PRESETS: ExplorationPreset[] = [
   {
     id: "exp-sma-price",
     name: "SMA vs Price",
-    category: "Trend",
+    category: "Moving Averages",
     kind: "overlay_vs_price",
     description: "Compare price to a simple moving average",
     params: [PERIOD_PARAM, PRICE_PARAM, OP_PARAM],
@@ -377,7 +522,7 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
   {
     id: "exp-ema-price",
     name: "EMA vs Price",
-    category: "Trend",
+    category: "Moving Averages",
     kind: "overlay_vs_price",
     description: "Compare price to an exponential moving average",
     params: [PERIOD_PARAM, PRICE_PARAM, OP_PARAM],
@@ -393,7 +538,7 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
   {
     id: "exp-sma-sma",
     name: "SMA Crossover",
-    category: "Trend",
+    category: "Moving Averages",
     kind: "overlay_vs_overlay",
     description: "Fast SMA crossing slow SMA (e.g. golden cross)",
     params: [FAST_PERIOD_PARAM, SLOW_PERIOD_PARAM, OP_PARAM],
@@ -409,7 +554,7 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
   {
     id: "exp-ema-ema",
     name: "EMA Crossover",
-    category: "Trend",
+    category: "Moving Averages",
     kind: "overlay_vs_overlay",
     description: "Fast EMA crossing slow EMA",
     params: [FAST_PERIOD_PARAM, SLOW_PERIOD_PARAM, OP_PARAM],
@@ -425,7 +570,7 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
   {
     id: "exp-rsi-level",
     name: "RSI Level",
-    category: "Momentum",
+    category: "Oscillators",
     kind: "oscillator_level",
     description: "RSI above or below a threshold",
     params: [
@@ -456,7 +601,7 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
   {
     id: "exp-cci-level",
     name: "CCI Level",
-    category: "Momentum",
+    category: "Oscillators",
     kind: "oscillator_level",
     description: "CCI above or below a threshold",
     params: [
@@ -514,7 +659,7 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
   {
     id: "exp-macd-cross",
     name: "MACD Cross",
-    category: "Momentum",
+    category: "Oscillators",
     kind: "line_cross",
     description: "MACD line crossing signal line",
     params: [
@@ -554,7 +699,7 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
   {
     id: "exp-stoch-cross",
     name: "Stochastic Cross",
-    category: "Momentum",
+    category: "Oscillators",
     kind: "line_cross",
     description: "%K crossing %D",
     params: [
@@ -644,7 +789,7 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
   {
     id: "exp-wma-price",
     name: "WMA vs Price",
-    category: "Trend",
+    category: "Moving Averages",
     kind: "overlay_vs_price",
     description: "Compare price to a weighted moving average",
     params: [PERIOD_PARAM, PRICE_PARAM, OP_PARAM],
@@ -660,7 +805,7 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
   {
     id: "exp-wma-wma",
     name: "WMA Crossover",
-    category: "Trend",
+    category: "Moving Averages",
     kind: "overlay_vs_overlay",
     description: "Fast WMA crossing slow WMA",
     params: [FAST_PERIOD_PARAM, SLOW_PERIOD_PARAM, OP_PARAM],
@@ -676,7 +821,7 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
   {
     id: "exp-ema-sma",
     name: "EMA vs SMA",
-    category: "Trend",
+    category: "Moving Averages",
     kind: "overlay_vs_overlay",
     description: "Fast EMA crossing slow SMA",
     params: [
@@ -696,7 +841,7 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
   {
     id: "exp-ema-9-21",
     name: "EMA 9/21 Cross",
-    category: "Trend",
+    category: "Moving Averages",
     kind: "overlay_vs_overlay",
     description: "Short-term EMA crossing medium EMA",
     params: [
@@ -716,7 +861,7 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
   {
     id: "exp-sma-10-20",
     name: "SMA 10/20 Cross",
-    category: "Trend",
+    category: "Moving Averages",
     kind: "overlay_vs_overlay",
     description: "Short-term SMA golden cross",
     params: [
@@ -736,7 +881,7 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
   {
     id: "exp-price-psar",
     name: "Price vs Parabolic SAR",
-    category: "Trend",
+    category: "Moving Averages",
     kind: "overlay_vs_price",
     description: "Price crossing Parabolic SAR",
     params: [PRICE_PARAM, OP_PARAM],
@@ -766,7 +911,7 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
   {
     id: "exp-price-vwap",
     name: "Price vs VWAP",
-    category: "Trend",
+    category: "Moving Averages",
     kind: "overlay_vs_price",
     description: "Price relative to volume-weighted average price",
     params: [PRICE_PARAM, OP_PARAM],
@@ -827,7 +972,7 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
   {
     id: "exp-rsi-oversold",
     name: "RSI Oversold",
-    category: "Momentum",
+    category: "Oscillators",
     kind: "oscillator_level",
     description: "RSI below 30 — potential bounce",
     params: [
@@ -853,7 +998,7 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
   {
     id: "exp-rsi-overbought",
     name: "RSI Overbought",
-    category: "Momentum",
+    category: "Oscillators",
     kind: "oscillator_level",
     description: "RSI above 70 — potential pullback",
     params: [
@@ -879,7 +1024,7 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
   {
     id: "exp-rsi-cross-50",
     name: "RSI Cross 50",
-    category: "Momentum",
+    category: "Oscillators",
     kind: "oscillator_level",
     description: "RSI crossing the 50 midline",
     params: [
@@ -904,7 +1049,7 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
   {
     id: "exp-rsi-breakout-after-consolidation",
     name: "RSI Breakout After Consolidation",
-    category: "Momentum",
+    category: "Oscillators",
     kind: "streak_breakout",
     description:
       "RSI crosses above a level after staying below it for many consecutive days",
@@ -949,7 +1094,7 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
   {
     id: "exp-williamsr-oversold",
     name: "Williams %R Oversold",
-    category: "Momentum",
+    category: "Oscillators",
     kind: "oscillator_level",
     description: "Williams %R below -80",
     params: [
@@ -983,7 +1128,7 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
   {
     id: "exp-mfi-oversold",
     name: "MFI Oversold",
-    category: "Momentum",
+    category: "Oscillators",
     kind: "oscillator_level",
     description: "Money Flow Index below 20",
     params: [
@@ -1009,7 +1154,7 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
   {
     id: "exp-roc-cross-zero",
     name: "ROC Cross Zero",
-    category: "Momentum",
+    category: "Oscillators",
     kind: "oscillator_level",
     description: "Rate of change crossing zero",
     params: [
@@ -1034,7 +1179,7 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
   {
     id: "exp-momentum-positive",
     name: "Momentum Positive",
-    category: "Momentum",
+    category: "Oscillators",
     kind: "oscillator_level",
     description: "Momentum above zero",
     params: [
@@ -1067,7 +1212,7 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
   {
     id: "exp-stoch-rsi-cross",
     name: "Stoch RSI Cross",
-    category: "Momentum",
+    category: "Oscillators",
     kind: "line_cross",
     description: "Stochastic RSI %K crossing %D",
     params: [
@@ -1104,7 +1249,7 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
   {
     id: "exp-trix-cross",
     name: "TRIX Cross",
-    category: "Momentum",
+    category: "Oscillators",
     kind: "line_cross",
     description: "TRIX line crossing signal",
     params: [
@@ -1135,7 +1280,7 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
   {
     id: "exp-kst-cross",
     name: "KST Cross",
-    category: "Momentum",
+    category: "Oscillators",
     kind: "line_cross",
     description: "Know Sure Thing crossing signal line",
     params: [
@@ -1165,7 +1310,7 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
   {
     id: "exp-ao-cross-zero",
     name: "Awesome Oscillator",
-    category: "Momentum",
+    category: "Oscillators",
     kind: "oscillator_level",
     description: "AO crossing above or below zero",
     params: [
@@ -1203,7 +1348,7 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
   {
     id: "exp-force-index-positive",
     name: "Force Index",
-    category: "Momentum",
+    category: "Oscillators",
     kind: "oscillator_level",
     description: "Force Index above zero",
     params: [
@@ -1236,7 +1381,7 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
   {
     id: "exp-zscore-oversold",
     name: "Z-Score Oversold",
-    category: "Momentum",
+    category: "Oscillators",
     kind: "oscillator_level",
     description: "Price z-score below -2 (statistical dip)",
     params: [
@@ -1406,6 +1551,335 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
       return `StdDev(${period}) ${opLabel(op).toLowerCase()} ${threshold}`;
     },
   },
+  {
+    id: "exp-new-high-after-lookback",
+    name: "New High After Lookback",
+    category: "Breakout",
+    kind: "price_breakout",
+    description:
+      "Price high breaks above the highest high of the prior N bars (not all-time high)",
+    params: [
+      LOOKBACK_PARAM,
+      {
+        key: "price",
+        label: "Price",
+        type: "enum",
+        default: "high",
+        options: OHLC_OPTIONS,
+      },
+      {
+        key: "op",
+        label: "Condition",
+        type: "enum",
+        default: "crosses_above",
+        options: CROSS_COMPARE_OPTIONS,
+      },
+    ],
+    buildPattern: (params, tf) =>
+      buildRollingExtremeBreak("high", params, tf, "New High After Lookback"),
+    describe: (params) => {
+      const lookback = Number(params.lookback ?? 200);
+      const price = String(params.price ?? "high");
+      const op = String(params.op ?? "crosses_above");
+      return `${priceLabel(price)} ${opLabel(op).toLowerCase()} ${lookback}-bar high`;
+    },
+  },
+  {
+    id: "exp-new-low-after-lookback",
+    name: "New Low After Lookback",
+    category: "Breakout",
+    kind: "price_breakout",
+    description:
+      "Price low breaks below the lowest low of the prior N bars",
+    params: [
+      LOOKBACK_PARAM,
+      {
+        key: "price",
+        label: "Price",
+        type: "enum",
+        default: "low",
+        options: OHLC_OPTIONS,
+      },
+      {
+        key: "op",
+        label: "Condition",
+        type: "enum",
+        default: "crosses_below",
+        options: CROSS_COMPARE_OPTIONS,
+      },
+    ],
+    buildPattern: (params, tf) =>
+      buildRollingExtremeBreak("low", params, tf, "New Low After Lookback"),
+    describe: (params) => {
+      const lookback = Number(params.lookback ?? 200);
+      const price = String(params.price ?? "low");
+      const op = String(params.op ?? "crosses_below");
+      return `${priceLabel(price)} ${opLabel(op).toLowerCase()} ${lookback}-bar low`;
+    },
+  },
+  {
+    id: "exp-darvas-breakout-up",
+    name: "Darvas Box Breakout Up",
+    category: "Breakout",
+    kind: "price_breakout",
+    description:
+      "Close breaks above the prior Darvas box top after consolidation",
+    params: [
+      DARVAS_LOOKBACK_PARAM,
+      {
+        key: "price",
+        label: "Price",
+        type: "enum",
+        default: "close",
+        options: OHLC_OPTIONS,
+      },
+      {
+        key: "op",
+        label: "Condition",
+        type: "enum",
+        default: "crosses_above",
+        options: CROSS_COMPARE_OPTIONS,
+      },
+    ],
+    buildPattern: (params, tf) =>
+      buildDarvasBreakout("up", params, tf, "Darvas Box Breakout Up"),
+    describe: (params) => {
+      const lookback = Number(params.lookback ?? 20);
+      const price = String(params.price ?? "close");
+      const op = String(params.op ?? "crosses_above");
+      return `${priceLabel(price)} ${opLabel(op).toLowerCase()} Darvas box top (${lookback} lookback)`;
+    },
+  },
+  {
+    id: "exp-darvas-breakout-down",
+    name: "Darvas Box Breakout Down",
+    category: "Breakout",
+    kind: "price_breakout",
+    description:
+      "Close breaks below the prior Darvas box bottom after consolidation",
+    params: [
+      DARVAS_LOOKBACK_PARAM,
+      {
+        key: "price",
+        label: "Price",
+        type: "enum",
+        default: "close",
+        options: OHLC_OPTIONS,
+      },
+      {
+        key: "op",
+        label: "Condition",
+        type: "enum",
+        default: "crosses_below",
+        options: CROSS_COMPARE_OPTIONS,
+      },
+    ],
+    buildPattern: (params, tf) =>
+      buildDarvasBreakout("down", params, tf, "Darvas Box Breakout Down"),
+    describe: (params) => {
+      const lookback = Number(params.lookback ?? 20);
+      const price = String(params.price ?? "close");
+      const op = String(params.op ?? "crosses_below");
+      return `${priceLabel(price)} ${opLabel(op).toLowerCase()} Darvas box bottom (${lookback} lookback)`;
+    },
+  },
+  {
+    id: "exp-chart-bull-flag",
+    name: "Bull Flag",
+    category: "Chart patterns",
+    kind: "chart_pattern",
+    description: "Bullish continuation after a sharp rally and tight flag consolidation",
+    params: [CHART_LOOKBACK_PARAM],
+    buildPattern: (params, tf) =>
+      buildChartPattern("bull_flag", params, tf, "Bull Flag"),
+    describe: (params) => {
+      const lookback = Number(params.lookback ?? 60);
+      return `Bull flag breakout (${lookback} bar lookback)`;
+    },
+  },
+  {
+    id: "exp-chart-ascending-triangle",
+    name: "Ascending Triangle",
+    category: "Chart patterns",
+    kind: "chart_pattern",
+    description: "Flat resistance with rising lows breaking upward",
+    params: [CHART_LOOKBACK_PARAM],
+    buildPattern: (params, tf) =>
+      buildChartPattern("ascending_triangle", params, tf, "Ascending Triangle"),
+    describe: (params) => {
+      const lookback = Number(params.lookback ?? 60);
+      return `Ascending triangle breakout (${lookback} bar lookback)`;
+    },
+  },
+  {
+    id: "exp-chart-cup-handle",
+    name: "Cup & Handle",
+    category: "Chart patterns",
+    kind: "chart_pattern",
+    description: "Rounded base recovery with a shallow handle breakout",
+    params: [CHART_LOOKBACK_PARAM],
+    buildPattern: (params, tf) =>
+      buildChartPattern("cup_and_handle", params, tf, "Cup & Handle"),
+    describe: (params) => {
+      const lookback = Number(params.lookback ?? 60);
+      return `Cup & handle breakout (${lookback} bar lookback)`;
+    },
+  },
+  {
+    id: "exp-chart-double-bottom",
+    name: "Double Bottom",
+    category: "Chart patterns",
+    kind: "chart_pattern",
+    description: "Two similar lows with a neckline breakout",
+    params: [CHART_LOOKBACK_PARAM],
+    buildPattern: (params, tf) =>
+      buildChartPattern("double_bottom", params, tf, "Double Bottom"),
+    describe: (params) => {
+      const lookback = Number(params.lookback ?? 60);
+      return `Double bottom breakout (${lookback} bar lookback)`;
+    },
+  },
+  {
+    id: "exp-chart-long-base-breakout",
+    name: "Long Base Breakout",
+    category: "Chart patterns",
+    kind: "chart_pattern",
+    description: "Extended tight range resolving with an upside breakout",
+    params: [CHART_LOOKBACK_PARAM],
+    buildPattern: (params, tf) =>
+      buildChartPattern("long_base_breakout", params, tf, "Long Base Breakout"),
+    describe: (params) => {
+      const lookback = Number(params.lookback ?? 60);
+      return `Long base breakout (${lookback} bar lookback)`;
+    },
+  },
+  {
+    id: "exp-chart-bear-flag",
+    name: "Bear Flag",
+    category: "Chart patterns",
+    kind: "chart_pattern",
+    description: "Bearish continuation after a sharp decline and tight flag consolidation",
+    params: [CHART_LOOKBACK_PARAM],
+    buildPattern: (params, tf) =>
+      buildChartPattern("bear_flag", params, tf, "Bear Flag"),
+    describe: (params) => {
+      const lookback = Number(params.lookback ?? 60);
+      return `Bear flag breakdown (${lookback} bar lookback)`;
+    },
+  },
+  {
+    id: "exp-chart-descending-triangle",
+    name: "Descending Triangle",
+    category: "Chart patterns",
+    kind: "chart_pattern",
+    description: "Flat support with falling highs breaking downward",
+    params: [CHART_LOOKBACK_PARAM],
+    buildPattern: (params, tf) =>
+      buildChartPattern("descending_triangle", params, tf, "Descending Triangle"),
+    describe: (params) => {
+      const lookback = Number(params.lookback ?? 60);
+      return `Descending triangle breakdown (${lookback} bar lookback)`;
+    },
+  },
+  {
+    id: "exp-chart-head-shoulders",
+    name: "Head & Shoulders",
+    category: "Chart patterns",
+    kind: "chart_pattern",
+    description: "Three-peak reversal with neckline breakdown",
+    params: [CHART_LOOKBACK_PARAM],
+    buildPattern: (params, tf) =>
+      buildChartPattern("head_and_shoulders", params, tf, "Head & Shoulders"),
+    describe: (params) => {
+      const lookback = Number(params.lookback ?? 60);
+      return `Head & shoulders breakdown (${lookback} bar lookback)`;
+    },
+  },
+  {
+    id: "exp-chart-double-top",
+    name: "Double Top",
+    category: "Chart patterns",
+    kind: "chart_pattern",
+    description: "Two similar highs with a neckline breakdown",
+    params: [CHART_LOOKBACK_PARAM],
+    buildPattern: (params, tf) =>
+      buildChartPattern("double_top", params, tf, "Double Top"),
+    describe: (params) => {
+      const lookback = Number(params.lookback ?? 60);
+      return `Double top breakdown (${lookback} bar lookback)`;
+    },
+  },
+  {
+    id: "exp-chart-long-base-breakdown",
+    name: "Long Base Breakdown",
+    category: "Chart patterns",
+    kind: "chart_pattern",
+    description: "Extended tight range resolving with a downside breakdown",
+    params: [CHART_LOOKBACK_PARAM],
+    buildPattern: (params, tf) =>
+      buildChartPattern("long_base_breakdown", params, tf, "Long Base Breakdown"),
+    describe: (params) => {
+      const lookback = Number(params.lookback ?? 60);
+      return `Long base breakdown (${lookback} bar lookback)`;
+    },
+  },
+  {
+    id: "exp-deep-low-reversion",
+    name: "Deep Low Reversion",
+    category: "Custom",
+    kind: "deep_low_reversion",
+    description:
+      "Long when price reaches the average of the deepest monthly lows over a lookback window",
+    params: [
+      {
+        key: "months",
+        label: "Lookback (months)",
+        type: "int",
+        default: 24,
+        min: 6,
+        max: 120,
+      },
+      {
+        key: "deepCount",
+        label: "Deepest lows to average",
+        type: "int",
+        default: 3,
+        min: 1,
+        max: 10,
+      },
+      {
+        key: "historySource",
+        label: "History price field",
+        type: "enum",
+        default: "low",
+        options: OHLC_OPTIONS,
+      },
+      {
+        key: "price",
+        label: "Current price field",
+        type: "enum",
+        default: "low",
+        options: OHLC_OPTIONS,
+      },
+      {
+        key: "op",
+        label: "Condition",
+        type: "enum",
+        default: "lte",
+        options: DEEP_LOW_COMPARE_OPTIONS,
+      },
+    ],
+    buildPattern: (params, tf) =>
+      buildDeepLowReversion(params, tf, "Deep Low Reversion"),
+    describe: (params) => {
+      const months = Number(params.months ?? 24);
+      const deepCount = Number(params.deepCount ?? 3);
+      const historySource = String(params.historySource ?? "low");
+      const price = String(params.price ?? "low");
+      const op = String(params.op ?? "lte");
+      return `Avg of ${deepCount} deepest ${priceLabel(historySource)} lows over ${months}M — current ${priceLabel(price)} ${opLabel(op).toLowerCase()} level`;
+    },
+  },
 ];
 
 export function getExplorationPreset(id: string): ExplorationPreset | undefined {
@@ -1414,24 +1888,51 @@ export function getExplorationPreset(id: string): ExplorationPreset | undefined 
 
 export const DEFAULT_EXPLORATION_PRESET_ID = "exp-sma-price";
 
-export const EXPLORATION_FILTERS = [
+export const EXPLORATION_CATEGORY_TABS = [
   { id: "all", label: "All" },
-  { id: "custom", label: "My explorations" },
-  { id: "Trend", label: "Trend" },
-  { id: "Momentum", label: "Momentum" },
+  { id: "Moving Averages", label: "Moving Averages" },
+  { id: "Oscillators", label: "Oscillators" },
   { id: "Volatility", label: "Volatility" },
+  { id: "Breakout", label: "Breakout" },
+  { id: "Trend", label: "Trend" },
+  { id: "Candlesticks", label: "Candlesticks" },
+  { id: "Chart patterns", label: "Chart patterns" },
+  { id: "favorites", label: "Favorites" },
+  { id: "custom", label: "Custom" },
 ] as const;
 
-export type ExplorationFilterId = (typeof EXPLORATION_FILTERS)[number]["id"];
+export type ExplorationCategoryId =
+  (typeof EXPLORATION_CATEGORY_TABS)[number]["id"];
 
 export const EXPLORATION_CATEGORY_STYLES: Record<
   string,
   { bg: string; text: string; dot: string }
 > = {
-  Trend: { bg: "bg-info-light", text: "text-info", dot: "bg-info" },
-  Momentum: { bg: "bg-brand-light", text: "text-brand-text", dot: "bg-brand" },
+  "Moving Averages": {
+    bg: "bg-info-light",
+    text: "text-info",
+    dot: "bg-info",
+  },
+  Oscillators: {
+    bg: "bg-brand-light",
+    text: "text-brand-text",
+    dot: "bg-brand",
+  },
   Volatility: { bg: "bg-accent-light", text: "text-accent", dot: "bg-accent" },
-  Custom: { bg: "bg-input", text: "text-body", dot: "bg-muted" },
+  Breakout: {
+    bg: "bg-success-light",
+    text: "text-success",
+    dot: "bg-success",
+  },
+  Trend: { bg: "bg-info-light", text: "text-info", dot: "bg-info" },
+  Candlesticks: { bg: "bg-input", text: "text-body", dot: "bg-muted" },
+  "Chart patterns": {
+    bg: "bg-success-light",
+    text: "text-success",
+    dot: "bg-success",
+  },
+  Custom: { bg: "bg-accent-light", text: "text-accent", dot: "bg-accent" },
+  Favorites: { bg: "bg-brand-light", text: "text-brand-text", dot: "bg-brand" },
 };
 
 export function explorationCategoryStyle(category: string) {

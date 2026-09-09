@@ -46,9 +46,13 @@ import {
   summarizeExplorationFilters,
 } from "@/lib/explore/exploration-models";
 import {
+  normalizeExplorationDescription,
+  resolveExplorationDescription,
+} from "@/lib/explore/exploration-description";
+import {
   DEFAULT_EXPLORATION_PRESET_ID,
   getExplorationPreset,
-  type ExplorationFilterId,
+  type ExplorationCategoryId,
 } from "@/lib/explore/exploration-presets";
 import {
   describeExplorationFilter,
@@ -90,6 +94,10 @@ import {
   listExplorations,
   saveExploration,
 } from "@/lib/storage/explorations";
+import {
+  loadExplorationFavorites,
+  saveExplorationFavorites,
+} from "@/lib/storage/exploration-favorites";
 import { saveIndicatorScanRun } from "@/lib/storage/indicator-scans";
 import { listSymbols } from "@/lib/storage/prices";
 import {
@@ -111,6 +119,7 @@ function createDefaultExplorationFilter(
   return {
     source: "preset",
     name: preset.name,
+    description: preset.description,
     timeframeMode,
     presetId: preset.id,
     params: defaultParamsForPreset(preset),
@@ -136,6 +145,7 @@ export function ExploreClient() {
       const filter = {
         source: "preset" as const,
         name: preset.name,
+        description: preset.description,
         timeframeMode: "1D" as ExploreTimeframeMode,
         presetId: preset.id,
         params: defaultParamsForPreset(preset),
@@ -144,7 +154,10 @@ export function ExploreClient() {
     });
   const [explorationQuery, setExplorationQuery] = useState("");
   const [explorationCategoryFilter, setExplorationCategoryFilter] =
-    useState<ExplorationFilterId>("all");
+    useState<ExplorationCategoryId>("all");
+  const [explorationFavoriteKeys, setExplorationFavoriteKeys] = useState<
+    Set<string>
+  >(() => new Set());
   const [presetSettingsId, setPresetSettingsId] = useState<string | null>(null);
   const [builderOpen, setBuilderOpen] = useState(false);
   const [runHistoryOpen, setRunHistoryOpen] = useState(false);
@@ -321,6 +334,7 @@ export function ExploreClient() {
           [key]: {
             source: "preset",
             name: preset.name,
+            description: preset.description,
             timeframeMode: explorationTimeframeMode,
             presetId,
             params: defaultParamsForPreset(preset),
@@ -334,6 +348,16 @@ export function ExploreClient() {
   const reloadSavedExplorations = useCallback(async () => {
     const list = await listExplorations();
     setSavedExplorations(list);
+  }, []);
+
+  const toggleExplorationFavorite = useCallback((key: string) => {
+    setExplorationFavoriteKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      saveExplorationFavorites([...next]);
+      return next;
+    });
   }, []);
 
   const toggleSavedExploration = useCallback(
@@ -355,6 +379,7 @@ export function ExploreClient() {
           [key]: {
             source: "builder",
             name: saved.name,
+            description: saved.description,
             savedId: saved.id,
             timeframeMode: explorationTimeframeMode,
             builder: saved.builder,
@@ -384,11 +409,12 @@ export function ExploreClient() {
     async (
       name: string,
       builder: NonNullable<ExplorationFilter["builder"]>,
-      editingSavedId?: string,
+      options?: { savedId?: string; description?: string },
     ) => {
       const saved = await saveExploration({
-        id: editingSavedId,
+        id: options?.savedId,
         name,
+        description: normalizeExplorationDescription(options?.description ?? ""),
         builder,
       });
       await reloadSavedExplorations();
@@ -399,6 +425,7 @@ export function ExploreClient() {
         [key]: {
           source: "builder",
           name: saved.name,
+          description: saved.description,
           savedId: saved.id,
           timeframeMode: explorationTimeframeMode,
           builder: saved.builder,
@@ -407,6 +434,24 @@ export function ExploreClient() {
       setBuilderOpen(false);
     },
     [explorationTimeframeMode, reloadSavedExplorations],
+  );
+
+  const updateExplorationFilterDescription = useCallback(
+    (key: string, description: string) => {
+      setSelectedExplorationFilters((prev) => {
+        const filter = prev[key];
+        if (!filter) return prev;
+        return {
+          ...prev,
+          [key]: {
+            ...filter,
+            description:
+              normalizeExplorationDescription(description) || undefined,
+          },
+        };
+      });
+    },
+    [],
   );
 
   const openExplorationHistory = useCallback(
@@ -505,6 +550,7 @@ export function ExploreClient() {
       setModifiedPresetIds(modified);
     })();
     void reloadSavedExplorations();
+    setExplorationFavoriteKeys(new Set(loadExplorationFavorites()));
   }, [reloadSavedExplorations]);
 
   useEffect(() => {
@@ -699,8 +745,9 @@ export function ExploreClient() {
             pattern: patternForScan,
             filterKey,
             filterName: filter.name,
-            filterDescription: describeExplorationFilter(filter),
+            filterDescription: resolveExplorationDescription(filter),
             timeframeMode: filter.timeframeMode,
+            filter,
             onProgress: (done, total, phase) => {
               setScanPhase(phase);
               const completedExplorations = index;
@@ -891,12 +938,15 @@ export function ExploreClient() {
               <ExploreExplorationSelector
                 selectedFilters={selectedExplorationFilters}
                 savedExplorations={savedExplorations}
+                favoriteKeys={explorationFavoriteKeys}
                 query={explorationQuery}
                 categoryFilter={explorationCategoryFilter}
-                onQueryChange={setExplorationQuery}
                 onCategoryChange={setExplorationCategoryFilter}
+                onQueryChange={setExplorationQuery}
                 onTogglePreset={toggleExplorationPreset}
                 onToggleSaved={toggleSavedExploration}
+                onToggleFavorite={toggleExplorationFavorite}
+                onUpdateFilterDescription={updateExplorationFilterDescription}
                 onDeleteSaved={(id) => void handleDeleteSavedExploration(id)}
                 onOpenPresetSettings={openExplorationPresetSettings}
                 onOpenHistory={openExplorationHistory}
@@ -1046,9 +1096,13 @@ export function ExploreClient() {
               : {}
           }
           paramDefs={presetForSettings.params}
-          description={presetForSettings.description}
+          description={
+            selectedExplorationFilters[presetFilterKey(presetForSettings.id)]
+              ?.description?.trim() ||
+            presetForSettings.description
+          }
           onClose={() => setPresetSettingsId(null)}
-          onSave={(params) => {
+          onSave={(params, description) => {
             const key = presetFilterKey(presetForSettings.id);
             setExplorePath("indicator");
             setSelectedExplorationFilters((prev) => ({
@@ -1056,6 +1110,7 @@ export function ExploreClient() {
               [key]: {
                 source: "preset",
                 name: presetForSettings.name,
+                description: normalizeExplorationDescription(description),
                 timeframeMode: explorationTimeframeMode,
                 presetId: presetForSettings.id,
                 params,
@@ -1088,6 +1143,12 @@ export function ExploreClient() {
           );
           return custom?.name;
         })()}
+        initialDescription={(() => {
+          const custom = Object.values(selectedExplorationFilters).find(
+            (filter) => filter.source === "builder",
+          );
+          return custom?.description;
+        })()}
         editingSavedId={(() => {
           const custom = Object.values(selectedExplorationFilters).find(
             (filter) => filter.source === "builder" && filter.savedId,
@@ -1095,8 +1156,8 @@ export function ExploreClient() {
           return custom?.savedId ?? null;
         })()}
         onClose={() => setBuilderOpen(false)}
-        onAdd={(name, builder, savedId) =>
-          void handleAddToExploration(name, builder, savedId)
+        onAdd={(name, builder, options) =>
+          void handleAddToExploration(name, builder, options)
         }
       />
     </div>

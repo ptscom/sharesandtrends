@@ -4,6 +4,10 @@ import type { OhlcvBar } from "@/lib/types";
 interface YahooChartResult {
   chart?: {
     result?: Array<{
+      meta?: {
+        longName?: string;
+        shortName?: string;
+      };
       timestamp?: number[];
       indicators?: {
         quote?: Array<{
@@ -95,7 +99,12 @@ export async function GET(
       });
     }
 
-    return NextResponse.json({ symbol: upper, bars, count: bars.length });
+    return NextResponse.json({
+      symbol: upper,
+      name: result.meta?.longName?.trim() || result.meta?.shortName?.trim() || null,
+      bars,
+      count: bars.length,
+    });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Fetch failed";
     return NextResponse.json({ error: message }, { status: 500 });

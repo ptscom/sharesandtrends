@@ -150,6 +150,50 @@ export async function listSymbols(): Promise<SymbolMeta[]> {
   return getDb().symbols.orderBy("symbol").toArray();
 }
 
+export async function getSymbolNames(
+  symbols: string[],
+): Promise<Record<string, string>> {
+  const database = getDb();
+  const upper = symbols.map((symbol) => symbol.toUpperCase());
+  const metas = await database.symbols.bulkGet(upper);
+  const names: Record<string, string> = {};
+
+  upper.forEach((symbol, index) => {
+    const name = metas[index]?.name?.trim();
+    if (name) names[symbol] = name;
+  });
+
+  return names;
+}
+
+export async function setSymbolName(
+  symbol: string,
+  name: string,
+): Promise<void> {
+  const upper = symbol.toUpperCase();
+  const trimmed = name.trim();
+  if (!trimmed) return;
+
+  const existing = await getDb().symbols.get(upper);
+  await getDb().symbols.put({
+    symbol: upper,
+    name: trimmed,
+    sector: existing?.sector,
+    lastUpdated: existing?.lastUpdated ?? new Date().toISOString(),
+    barCount: existing?.barCount,
+    fromDate: existing?.fromDate,
+    toDate: existing?.toDate,
+  });
+}
+
+export async function setSymbolNames(
+  names: Record<string, string>,
+): Promise<void> {
+  await Promise.all(
+    Object.entries(names).map(([symbol, name]) => setSymbolName(symbol, name)),
+  );
+}
+
 export async function getStoredSymbolCount(): Promise<number> {
   return getDb().symbols.count();
 }

@@ -31,6 +31,7 @@ import type { IndicatorDef, IndicatorSeries, OhlcvBar } from "@/lib/types";
 import { alignHigherTimeframe, barsToSource, resampleBars } from "./resample";
 import { getIndicatorDefinition } from "./registry";
 import { detectCandlePatternSeries } from "./candle-patterns";
+import { detectChartPatternSeries } from "./chart-patterns";
 
 function padStart(values: number[], total: number): (number | null)[] {
   const pad = total - values.length;
@@ -50,6 +51,56 @@ function priorRolling(
       ? Math.max(...slice.map((b) => b.high))
       : Math.min(...slice.map((b) => b.low));
   });
+}
+
+function computeDarvasBox(
+  bars: OhlcvBar[],
+  lookback: number,
+): {
+  top: (number | null)[];
+  bottom: (number | null)[];
+  topPrior: (number | null)[];
+  bottomPrior: (number | null)[];
+} {
+  const top: (number | null)[] = [];
+  const bottom: (number | null)[] = [];
+  const topPrior: (number | null)[] = [];
+  const bottomPrior: (number | null)[] = [];
+
+  let boxTop: number | null = null;
+  let boxBottom: number | null = null;
+
+  for (let i = 0; i < bars.length; i++) {
+    const bar = bars[i]!;
+    const priorTop = boxTop;
+    const priorBottom = boxBottom;
+
+    let priorRollingHigh: number | null = null;
+    if (i >= lookback) {
+      priorRollingHigh = Math.max(
+        ...bars.slice(i - lookback, i).map((b) => b.high),
+      );
+    }
+
+    if (priorRollingHigh !== null && bar.high > priorRollingHigh) {
+      boxTop = bar.high;
+      boxBottom = bar.low;
+    } else if (boxTop !== null) {
+      if (bar.high > boxTop) {
+        boxTop = bar.high;
+        boxBottom = bar.low;
+      } else {
+        boxBottom = Math.min(boxBottom ?? bar.low, bar.low);
+      }
+    }
+
+    top.push(boxTop);
+    bottom.push(boxBottom);
+    topPrior.push(priorTop);
+    bottomPrior.push(priorBottom);
+  }
+
+  return { top, bottom, topPrior, bottomPrior };
 }
 
 function computeOnBars(
@@ -294,6 +345,25 @@ function computeOnBars(
       result[def.alias] = priorRolling(bars, length, "low");
       break;
     }
+    case "deep_low_avg": {
+      const lookback = Number(params.lookback ?? 24);
+      const count = Number(params.count ?? 3);
+      const field = String(params.source ?? "low") as
+        | "open"
+        | "high"
+        | "low"
+        | "close";
+      const values = bars.map((b) => b[field]);
+      result[def.alias] = values.map((_, i) => {
+        if (i < lookback) return null;
+        const slice = values.slice(i - lookback, i);
+        const sorted = [...slice].sort((a, b) => a - b);
+        const deepest = sorted.slice(0, Math.min(count, sorted.length));
+        if (deepest.length === 0) return null;
+        return deepest.reduce((sum, value) => sum + value, 0) / deepest.length;
+      });
+      break;
+    }
     case "momentum": {
       const length = Number(params.length ?? 126);
       result[def.alias] = input.map((c, i) => {
@@ -353,6 +423,12 @@ function computeOnBars(
         bodyRatioMax: bodyRatio,
         shadowRatioMin: shadowRatio,
       });
+      break;
+    }
+    case "chart_pattern": {
+      const pattern = String(params.pattern ?? "bull_flag");
+      const lookback = Number(params.lookback ?? 60);
+      result[def.alias] = detectChartPatternSeries(bars, pattern, { lookback });
       break;
     }
     case "wma": {
@@ -482,6 +558,16 @@ function computeOnBars(
       const length = Number(params.length ?? 20);
       const lowest = Lowest.calculate({ period: length, values: input });
       result[def.alias] = padStart(lowest, bars.length);
+      break;
+    }
+    case "darvas_box": {
+      const lookback = Number(params.lookback ?? 20);
+      const box = computeDarvasBox(bars, lookback);
+      result[`${def.alias}_box_top`] = box.top;
+      result[`${def.alias}_box_bottom`] = box.bottom;
+      result[`${def.alias}_box_top_prior`] = box.topPrior;
+      result[`${def.alias}_box_bottom_prior`] = box.bottomPrior;
+      result[def.alias] = box.top;
       break;
     }
     default:

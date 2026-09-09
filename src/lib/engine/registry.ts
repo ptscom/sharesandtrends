@@ -1,4 +1,5 @@
 import { getImplementedPatternIds } from "@/lib/patterns/candle-catalog";
+import { getImplementedChartPatternIds } from "@/lib/patterns/chart-pattern-catalog";
 
 export interface IndicatorParamSchema {
   type: "int" | "float" | "enum";
@@ -229,6 +230,34 @@ export const INDICATOR_REGISTRY: IndicatorDefinition[] = [
     outputs: ["rolling_low"],
   },
   {
+    id: "deep_low_avg",
+    name: "Deep Low Average",
+    category: "mean_reversion",
+    params: {
+      lookback: {
+        type: "int",
+        default: 24,
+        min: 6,
+        max: 120,
+        label: "Lookback (months)",
+      },
+      count: {
+        type: "int",
+        default: 3,
+        min: 1,
+        max: 10,
+        label: "Deepest lows to average",
+      },
+      source: {
+        type: "enum",
+        default: "low",
+        options: ["open", "high", "low", "close"],
+        label: "History price field",
+      },
+    },
+    outputs: ["deep_low_avg"],
+  },
+  {
     id: "momentum",
     name: "Price Momentum %",
     category: "momentum",
@@ -425,6 +454,15 @@ export const INDICATOR_REGISTRY: IndicatorDefinition[] = [
     outputs: ["lowest"],
   },
   {
+    id: "darvas_box",
+    name: "Darvas Box",
+    category: "price",
+    params: {
+      lookback: { type: "int", default: 20, min: 2, max: 300, label: "Lookback" },
+    },
+    outputs: ["box_top", "box_bottom", "box_top_prior", "box_bottom_prior"],
+  },
+  {
     id: "candle_pattern",
     name: "Candlestick Pattern",
     category: "pattern",
@@ -448,6 +486,27 @@ export const INDICATOR_REGISTRY: IndicatorDefinition[] = [
         min: 1,
         max: 6,
         label: "Shadow ratio",
+      },
+    },
+    outputs: ["signal"],
+  },
+  {
+    id: "chart_pattern",
+    name: "Chart Pattern",
+    category: "pattern",
+    params: {
+      pattern: {
+        type: "enum",
+        default: "bull_flag",
+        options: getImplementedChartPatternIds(),
+        label: "Pattern",
+      },
+      lookback: {
+        type: "int",
+        default: 60,
+        min: 15,
+        max: 300,
+        label: "Lookback",
       },
     },
     outputs: ["signal"],
