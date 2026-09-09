@@ -7,22 +7,18 @@ export type ChartPatternId = string;
 
 export interface ChartPatternOptions {
   lookback: number;
-  /** Minimum pole move (%) for flag patterns */
   minPolePct: number;
-  /** Price tolerance (%) when comparing peaks/troughs */
   tolerancePct: number;
-  /** Max range width (%) for long-base patterns */
   maxBaseRangePct: number;
-  /** Minimum valley/peak depth (%) between double-top/bottom peaks */
   minReversalDepthPct: number;
 }
 
 const DEFAULT_OPTIONS: ChartPatternOptions = {
   lookback: 60,
-  minPolePct: 6,
+  minPolePct: 8,
   tolerancePct: 2,
-  maxBaseRangePct: 12,
-  minReversalDepthPct: 4,
+  maxBaseRangePct: 10,
+  minReversalDepthPct: 5,
 };
 
 function windowSlice(
@@ -40,10 +36,15 @@ function near(a: number, b: number, tolerancePct: number): boolean {
   return Math.abs(a - b) / mid <= tolerancePct / 100;
 }
 
+function pctChange(from: number, to: number): number {
+  if (from === 0) return 0;
+  return ((to - from) / from) * 100;
+}
+
 function windowExtremes(bars: OhlcvBar[]) {
   const high = Math.max(...bars.map((b) => b.high));
   const low = Math.min(...bars.map((b) => b.low));
-  return { high, low, range: high - low };
+  return { high, low, range: high - low, mid: (high + low) / 2 };
 }
 
 function crossesBelow(bars: OhlcvBar[], level: number): boolean {
@@ -58,118 +59,29 @@ function crossesAbove(bars: OhlcvBar[], level: number): boolean {
   return current.close > level && prev.close <= level;
 }
 
-interface DoubleTopCandidate {
-  firstPeak: number;
-  secondPeak: number;
-  neckline: number;
+function maxCompletionLag(bars: OhlcvBar[], fraction = 0.32): number {
+  return Math.max(6, Math.floor(bars.length * fraction));
 }
 
-function validateDoubleTopCandidate(
-  bars: OhlcvBar[],
-  idxA: number,
-  idxB: number,
-  options: ChartPatternOptions,
-): DoubleTopCandidate | null {
-  if (idxB - idxA < 8) return null;
-
-  const highA = bars[idxA]!.high;
-  const highB = bars[idxB]!.high;
-  if (!near(highA, highB, options.tolerancePct)) return null;
-  if (highB > highA * 1.03) return null;
-
-  const between = bars.slice(idxA + 1, idxB);
-  if (between.length < 4) return null;
-
-  const neckline = Math.min(...between.map((b) => b.low));
-  const avgPeak = (highA + highB) / 2;
-  if (avgPeak <= 0) return null;
-
-  const valleyDepthPct = ((avgPeak - neckline) / avgPeak) * 100;
-  if (valleyDepthPct < options.minReversalDepthPct) return null;
-
-  const { high: windowHigh, range } = windowExtremes(bars);
-  if (range <= 0) return null;
-  if (highA < windowHigh - range * 0.18) return null;
-  if (highB < windowHigh - range * 0.18) return null;
-
-  const priorBars = Math.min(12, idxA);
-  if (priorBars >= 3) {
-    const priorLow = Math.min(
-      ...bars.slice(idxA - priorBars, idxA).map((b) => b.low),
-    );
-    if (priorLow <= 0) return null;
-    const rallyPct = ((highA - priorLow) / priorLow) * 100;
-    if (rallyPct < options.minReversalDepthPct) return null;
-  }
-
-  const barsSinceSecondPeak = bars.length - 1 - idxB;
-  const maxLag = Math.max(8, Math.floor(bars.length * 0.3));
-  if (barsSinceSecondPeak < 1 || barsSinceSecondPeak > maxLag) return null;
-
-  const afterSecondPeak = bars.slice(idxB + 1, bars.length - 1);
-  if (afterSecondPeak.length > 0) {
-    const belowNeckline = afterSecondPeak.filter((b) => b.close < neckline).length;
-    if (belowNeckline > afterSecondPeak.length * 0.35) return null;
-  }
-
-  return { firstPeak: idxA, secondPeak: idxB, neckline };
+function recentSlice(bars: OhlcvBar[], startFraction = 0.25): OhlcvBar[] {
+  const start = Math.floor(bars.length * startFraction);
+  return bars.slice(start);
 }
 
-interface DoubleBottomCandidate {
-  firstTrough: number;
-  secondTrough: number;
-  neckline: number;
+function isMonotonicRising(values: number[], minStepPct = 0.25): boolean {
+  if (values.length < 2) return false;
+  for (let i = 1; i < values.length; i++) {
+    if (values[i]! <= values[i - 1]! * (1 + minStepPct / 100)) return false;
+  }
+  return true;
 }
 
-function validateDoubleBottomCandidate(
-  bars: OhlcvBar[],
-  idxA: number,
-  idxB: number,
-  options: ChartPatternOptions,
-): DoubleBottomCandidate | null {
-  if (idxB - idxA < 8) return null;
-
-  const lowA = bars[idxA]!.low;
-  const lowB = bars[idxB]!.low;
-  if (!near(lowA, lowB, options.tolerancePct)) return null;
-  if (lowB < lowA * 0.97) return null;
-
-  const between = bars.slice(idxA + 1, idxB);
-  if (between.length < 4) return null;
-
-  const neckline = Math.max(...between.map((b) => b.high));
-  const avgTrough = (lowA + lowB) / 2;
-  if (avgTrough <= 0) return null;
-
-  const peakHeightPct = ((neckline - avgTrough) / avgTrough) * 100;
-  if (peakHeightPct < options.minReversalDepthPct) return null;
-
-  const { low: windowLow, range } = windowExtremes(bars);
-  if (range <= 0) return null;
-  if (lowA > windowLow + range * 0.18) return null;
-  if (lowB > windowLow + range * 0.18) return null;
-
-  const priorBars = Math.min(12, idxA);
-  if (priorBars >= 3) {
-    const priorHigh = Math.max(
-      ...bars.slice(idxA - priorBars, idxA).map((b) => b.high),
-    );
-    if (priorHigh <= 0) return null;
-    const declinePct = ((priorHigh - lowA) / priorHigh) * 100;
-    if (declinePct < options.minReversalDepthPct) return null;
+function isMonotonicFalling(values: number[], minStepPct = 0.25): boolean {
+  if (values.length < 2) return false;
+  for (let i = 1; i < values.length; i++) {
+    if (values[i]! >= values[i - 1]! * (1 - minStepPct / 100)) return false;
   }
-
-  const barsSinceSecondTrough = bars.length - 1 - idxB;
-  const maxLag = Math.max(8, Math.floor(bars.length * 0.3));
-  if (barsSinceSecondTrough < 1 || barsSinceSecondTrough > maxLag) return null;
-
-  const afterSecondTrough = bars.slice(idxB + 1, bars.length - 1);
-  if (afterSecondTrough.length > 0) {
-    const aboveNeckline = afterSecondTrough.filter((b) => b.close > neckline).length;
-    if (aboveNeckline > afterSecondTrough.length * 0.35) return null;
-  }
-
-  return { firstTrough: idxA, secondTrough: idxB, neckline };
+  return true;
 }
 
 function swingHighs(bars: OhlcvBar[], radius = 2): number[] {
@@ -204,136 +116,348 @@ function swingLows(bars: OhlcvBar[], radius = 2): number[] {
   return lows;
 }
 
-function detectBullFlag(
+interface PoleSegment {
+  start: number;
+  end: number;
+  movePct: number;
+}
+
+function findPoles(
   bars: OhlcvBar[],
+  direction: "up" | "down",
   options: ChartPatternOptions,
+): PoleSegment[] {
+  const minFlagBars = 6;
+  const maxEnd = bars.length - minFlagBars - 2;
+  const poles: PoleSegment[] = [];
+
+  for (let start = 0; start < maxEnd - 5; start++) {
+    for (let len = 5; len <= 18; len++) {
+      const end = start + len;
+      if (end >= maxEnd) continue;
+
+      const from = bars[start]!.close;
+      const to = bars[end]!.close;
+      const move =
+        direction === "up" ? pctChange(from, to) : pctChange(to, from);
+
+      if (move >= options.minPolePct) {
+        poles.push({ start, end, movePct: move });
+      }
+    }
+  }
+
+  return poles.sort((a, b) => b.end - a.end);
+}
+
+function validateFlagChannel(
+  flagBars: OhlcvBar[],
+  direction: "up" | "down",
 ): boolean {
-  if (bars.length < 20) return false;
-  const poleLen = Math.max(5, Math.floor(bars.length * 0.25));
-  const flagStart = poleLen;
-  const flagEnd = Math.max(flagStart + 5, bars.length - 2);
-  const flagBars = bars.slice(flagStart, flagEnd);
-  if (flagBars.length < 5) return false;
-
-  const poleStart = bars[0]!.close;
-  const poleEnd = bars[poleLen - 1]!.close;
-  if (poleStart <= 0) return false;
-  const poleMove = ((poleEnd - poleStart) / poleStart) * 100;
-  if (poleMove < options.minPolePct) return false;
-
-  const flagHighs = flagBars.map((b) => b.high);
-  const flagLows = flagBars.map((b) => b.low);
   const firstHalf = flagBars.slice(0, Math.floor(flagBars.length / 2));
   const secondHalf = flagBars.slice(Math.floor(flagBars.length / 2));
   const avgHigh1 =
     firstHalf.reduce((s, b) => s + b.high, 0) / Math.max(firstHalf.length, 1);
   const avgHigh2 =
     secondHalf.reduce((s, b) => s + b.high, 0) / Math.max(secondHalf.length, 1);
-  if (avgHigh2 > avgHigh1 * 1.02) return false;
+  const avgLow1 =
+    firstHalf.reduce((s, b) => s + b.low, 0) / Math.max(firstHalf.length, 1);
+  const avgLow2 =
+    secondHalf.reduce((s, b) => s + b.low, 0) / Math.max(secondHalf.length, 1);
 
-  const flagHigh = Math.max(...flagHighs);
-  const current = bars[bars.length - 1]!;
-  const prev = bars[bars.length - 2]!;
-  return current.close > flagHigh && prev.close <= flagHigh;
+  if (direction === "up") {
+    if (avgHigh2 > avgHigh1 * 1.02) return false;
+    if (avgLow2 < avgLow1 * 0.985) return false;
+    return true;
+  }
+  if (avgLow2 < avgLow1 * 0.98) return false;
+  if (avgHigh2 > avgHigh1 * 1.015) return false;
+  return true;
+}
+
+function detectBullFlag(
+  bars: OhlcvBar[],
+  options: ChartPatternOptions,
+): boolean {
+  if (bars.length < 24) return false;
+
+  for (const pole of findPoles(bars, "up", options)) {
+    const flagStart = pole.end + 1;
+    const flagEnd = bars.length - 2;
+    const flagBars = bars.slice(flagStart, flagEnd + 1);
+    if (flagBars.length < 6 || flagBars.length > Math.floor(bars.length * 0.72)) {
+      continue;
+    }
+
+    const poleLow = Math.min(
+      ...bars.slice(pole.start, pole.end + 1).map((b) => b.low),
+    );
+    const poleHigh = Math.max(
+      ...bars.slice(pole.start, pole.end + 1).map((b) => b.high),
+    );
+    const poleHeight = poleHigh - poleLow;
+    if (poleHeight <= 0) continue;
+
+    const flagHigh = Math.max(...flagBars.map((b) => b.high));
+    const flagLow = Math.min(...flagBars.map((b) => b.low));
+    if (flagHigh - flagLow > poleHeight * 0.5) continue;
+    if (poleHigh - flagLow > poleHeight * 0.58) continue;
+    if (!validateFlagChannel(flagBars, "up")) continue;
+
+    const { high: windowHigh, range } = windowExtremes(bars);
+    if (range <= 0 || poleHigh < windowHigh - range * 0.15) continue;
+
+    if (crossesAbove(bars, flagHigh)) return true;
+  }
+
+  return false;
 }
 
 function detectBearFlag(
   bars: OhlcvBar[],
   options: ChartPatternOptions,
 ): boolean {
-  if (bars.length < 20) return false;
-  const poleLen = Math.max(5, Math.floor(bars.length * 0.25));
-  const flagStart = poleLen;
-  const flagEnd = Math.max(flagStart + 5, bars.length - 2);
-  const flagBars = bars.slice(flagStart, flagEnd);
-  if (flagBars.length < 5) return false;
+  if (bars.length < 24) return false;
 
-  const poleStart = bars[0]!.close;
-  const poleEnd = bars[poleLen - 1]!.close;
-  if (poleStart <= 0) return false;
-  const poleMove = ((poleStart - poleEnd) / poleStart) * 100;
-  if (poleMove < options.minPolePct) return false;
+  for (const pole of findPoles(bars, "down", options)) {
+    const flagStart = pole.end + 1;
+    const flagEnd = bars.length - 2;
+    const flagBars = bars.slice(flagStart, flagEnd + 1);
+    if (flagBars.length < 6 || flagBars.length > Math.floor(bars.length * 0.72)) {
+      continue;
+    }
 
-  const firstHalf = flagBars.slice(0, Math.floor(flagBars.length / 2));
-  const secondHalf = flagBars.slice(Math.floor(flagBars.length / 2));
-  const avgLow1 =
-    firstHalf.reduce((s, b) => s + b.low, 0) / Math.max(firstHalf.length, 1);
-  const avgLow2 =
-    secondHalf.reduce((s, b) => s + b.low, 0) / Math.max(secondHalf.length, 1);
-  if (avgLow2 < avgLow1 * 0.98) return false;
+    const poleLow = Math.min(
+      ...bars.slice(pole.start, pole.end + 1).map((b) => b.low),
+    );
+    const poleHigh = Math.max(
+      ...bars.slice(pole.start, pole.end + 1).map((b) => b.high),
+    );
+    const poleHeight = poleHigh - poleLow;
+    if (poleHeight <= 0) continue;
 
-  const flagLow = Math.min(...flagBars.map((b) => b.low));
-  const current = bars[bars.length - 1]!;
-  const prev = bars[bars.length - 2]!;
-  return current.close < flagLow && prev.close >= flagLow;
+    const flagHigh = Math.max(...flagBars.map((b) => b.high));
+    const flagLow = Math.min(...flagBars.map((b) => b.low));
+    if (flagHigh - flagLow > poleHeight * 0.5) continue;
+    if (flagHigh - poleLow > poleHeight * 0.58) continue;
+    if (!validateFlagChannel(flagBars, "down")) continue;
+
+    const { low: windowLow, range } = windowExtremes(bars);
+    if (range <= 0 || poleLow > windowLow + range * 0.15) continue;
+
+    if (crossesBelow(bars, flagLow)) return true;
+  }
+
+  return false;
 }
+
 
 function detectAscendingTriangle(
   bars: OhlcvBar[],
   options: ChartPatternOptions,
 ): boolean {
-  if (bars.length < 15) return false;
-  const highs = swingHighs(bars);
-  const lows = swingLows(bars);
-  if (highs.length < 2 || lows.length < 2) return false;
+  const formation = recentSlice(bars, 0.2);
+  if (formation.length < 15) return false;
 
-  const resistance = Math.max(...highs.map((i) => bars[i]!.high));
+  const highs = swingHighs(formation, 2);
+  if (highs.length < 2) return false;
+
+  const { high: formHigh, low: formLow, range } = windowExtremes(formation);
+  if (range <= 0) return false;
+
+  const resistance = Math.max(...highs.map((i) => formation[i]!.high));
   const touchHighs = highs.filter((i) =>
-    near(bars[i]!.high, resistance, options.tolerancePct),
+    near(formation[i]!.high, resistance, options.tolerancePct * 1.5),
   );
   if (touchHighs.length < 2) return false;
+  if (resistance < formHigh - range * 0.12) return false;
 
-  const lowPrices = lows.map((i) => bars[i]!.low);
-  let rising = true;
-  for (let i = 1; i < lowPrices.length; i++) {
-    if (lowPrices[i]! <= lowPrices[i - 1]! * 1.002) {
-      rising = false;
-      break;
-    }
-  }
-  if (!rising) return false;
+  const third = Math.max(4, Math.floor(formation.length / 3));
+  const earlyLows = formation.slice(0, third).map((b) => b.low);
+  const lateLows = formation.slice(-third).map((b) => b.low);
+  const earlyAvg = earlyLows.reduce((s, v) => s + v, 0) / earlyLows.length;
+  const lateAvg = lateLows.reduce((s, v) => s + v, 0) / lateLows.length;
+  if (lateAvg <= earlyAvg * 1.025) return false;
 
-  const current = bars[bars.length - 1]!;
-  const prev = bars[bars.length - 2]!;
-  return current.close > resistance && prev.close <= resistance;
+  const preBreakout = formation.slice(0, formation.length - 2);
+  const testedResistance = preBreakout.some(
+    (b) => b.high >= resistance * (1 - options.tolerancePct / 100),
+  );
+  if (!testedResistance) return false;
+
+  const compressed = range / formHigh < 0.24;
+  if (!compressed) return false;
+
+  return crossesAbove(bars, resistance);
 }
 
 function detectDescendingTriangle(
   bars: OhlcvBar[],
   options: ChartPatternOptions,
 ): boolean {
-  if (bars.length < 15) return false;
-  const highs = swingHighs(bars);
-  const lows = swingLows(bars);
-  if (highs.length < 2 || lows.length < 2) return false;
+  const formation = recentSlice(bars, 0.2);
+  if (formation.length < 15) return false;
 
-  const support = Math.min(...lows.map((i) => bars[i]!.low));
+  const lows = swingLows(formation, 2);
+  if (lows.length < 2) return false;
+
+  const { high: formHigh, low: formLow, range } = windowExtremes(formation);
+  if (range <= 0) return false;
+
+  const support = Math.min(...lows.map((i) => formation[i]!.low));
   const touchLows = lows.filter((i) =>
-    near(bars[i]!.low, support, options.tolerancePct),
+    near(formation[i]!.low, support, options.tolerancePct * 1.5),
   );
   if (touchLows.length < 2) return false;
+  if (support > formLow + range * 0.12) return false;
 
-  const highPrices = highs.map((i) => bars[i]!.high);
-  let falling = true;
-  for (let i = 1; i < highPrices.length; i++) {
-    if (highPrices[i]! >= highPrices[i - 1]! * 0.998) {
-      falling = false;
-      break;
-    }
+  const third = Math.max(4, Math.floor(formation.length / 3));
+  const earlyHighs = formation.slice(0, third).map((b) => b.high);
+  const lateHighs = formation.slice(-third).map((b) => b.high);
+  const earlyAvg = earlyHighs.reduce((s, v) => s + v, 0) / earlyHighs.length;
+  const lateAvg = lateHighs.reduce((s, v) => s + v, 0) / lateHighs.length;
+  if (lateAvg >= earlyAvg * 0.975) return false;
+
+  const preBreakout = formation.slice(0, formation.length - 2);
+  const testedSupport = preBreakout.some(
+    (b) => b.low <= support * (1 + options.tolerancePct / 100),
+  );
+  if (!testedSupport) return false;
+
+  const compressed = range / formHigh < 0.24;
+  if (!compressed) return false;
+
+  return crossesBelow(bars, support);
+}
+
+interface DoubleTopCandidate {
+  firstPeak: number;
+  secondPeak: number;
+  neckline: number;
+}
+
+function validateDoubleTopCandidate(
+  bars: OhlcvBar[],
+  idxA: number,
+  idxB: number,
+  options: ChartPatternOptions,
+): DoubleTopCandidate | null {
+  if (idxB - idxA < 8) return null;
+
+  const highA = bars[idxA]!.high;
+  const highB = bars[idxB]!.high;
+  if (!near(highA, highB, options.tolerancePct * 1.25)) return null;
+  if (highB > highA * 1.02) return null;
+
+  const between = bars.slice(idxA + 1, idxB);
+  if (between.length < 4) return null;
+
+  const neckline = Math.min(...between.map((b) => b.low));
+  const avgPeak = (highA + highB) / 2;
+  if (avgPeak <= 0) return null;
+
+  const valleyDepthPct = pctChange(neckline, avgPeak);
+  if (valleyDepthPct < options.minReversalDepthPct) return null;
+
+  const { high: windowHigh, range } = windowExtremes(bars);
+  if (range <= 0) return null;
+  if (highA < windowHigh - range * 0.15) return null;
+  if (highB < windowHigh - range * 0.15) return null;
+
+  const priorBars = Math.min(12, idxA);
+  if (priorBars >= 3) {
+    const priorLow = Math.min(
+      ...bars.slice(idxA - priorBars, idxA).map((b) => b.low),
+    );
+    if (priorLow <= 0) return null;
+    if (pctChange(priorLow, highA) < options.minReversalDepthPct) return null;
   }
-  if (!falling) return false;
 
-  const current = bars[bars.length - 1]!;
-  const prev = bars[bars.length - 2]!;
-  return current.close < support && prev.close >= support;
+  const minRecentIdx = Math.floor(bars.length * 0.55);
+  if (idxB < minRecentIdx) return null;
+
+  const barsSinceSecondPeak = bars.length - 1 - idxB;
+  const maxLag = maxCompletionLag(bars);
+  if (barsSinceSecondPeak < 1 || barsSinceSecondPeak > maxLag) return null;
+
+  const afterSecondPeak = bars.slice(idxB + 1, bars.length - 1);
+  if (afterSecondPeak.length > 0) {
+    const belowNeckline = afterSecondPeak.filter((b) => b.close < neckline).length;
+    if (belowNeckline > afterSecondPeak.length * 0.25) return null;
+    const retestLow = Math.min(...afterSecondPeak.map((b) => b.low));
+    if (retestLow > neckline * 1.04) return null;
+  }
+
+  return { firstPeak: idxA, secondPeak: idxB, neckline };
+}
+
+interface DoubleBottomCandidate {
+  firstTrough: number;
+  secondTrough: number;
+  neckline: number;
+}
+
+function validateDoubleBottomCandidate(
+  bars: OhlcvBar[],
+  idxA: number,
+  idxB: number,
+  options: ChartPatternOptions,
+): DoubleBottomCandidate | null {
+  if (idxB - idxA < 8) return null;
+
+  const lowA = bars[idxA]!.low;
+  const lowB = bars[idxB]!.low;
+  if (!near(lowA, lowB, options.tolerancePct * 1.25)) return null;
+  if (lowB < lowA * 0.98) return null;
+
+  const between = bars.slice(idxA + 1, idxB);
+  if (between.length < 4) return null;
+
+  const neckline = Math.max(...between.map((b) => b.high));
+  const avgTrough = (lowA + lowB) / 2;
+  if (avgTrough <= 0) return null;
+
+  const peakHeightPct = pctChange(avgTrough, neckline);
+  if (peakHeightPct < options.minReversalDepthPct) return null;
+
+  const { low: windowLow, range } = windowExtremes(bars);
+  if (range <= 0) return null;
+  if (lowA > windowLow + range * 0.15) return null;
+  if (lowB > windowLow + range * 0.15) return null;
+
+  const priorBars = Math.min(12, idxA);
+  if (priorBars >= 3) {
+    const priorHigh = Math.max(
+      ...bars.slice(idxA - priorBars, idxA).map((b) => b.high),
+    );
+    if (priorHigh <= 0) return null;
+    if (pctChange(priorHigh, lowA) > -options.minReversalDepthPct) return null;
+  }
+
+  const minRecentIdx = Math.floor(bars.length * 0.55);
+  if (idxB < minRecentIdx) return null;
+
+  const barsSinceSecondTrough = bars.length - 1 - idxB;
+  const maxLag = maxCompletionLag(bars);
+  if (barsSinceSecondTrough < 1 || barsSinceSecondTrough > maxLag) return null;
+
+  const afterSecondTrough = bars.slice(idxB + 1, bars.length - 1);
+  if (afterSecondTrough.length > 0) {
+    const aboveNeckline = afterSecondTrough.filter((b) => b.close > neckline).length;
+    if (aboveNeckline > afterSecondTrough.length * 0.25) return null;
+    const rallyHigh = Math.max(...afterSecondTrough.map((b) => b.high));
+    if (rallyHigh < neckline * 0.96) return null;
+  }
+
+  return { firstTrough: idxA, secondTrough: idxB, neckline };
 }
 
 function detectDoubleBottom(
   bars: OhlcvBar[],
   options: ChartPatternOptions,
 ): boolean {
-  if (bars.length < 20) return false;
-  const lows = swingLows(bars, 3);
+  if (bars.length < 24) return false;
+  const lows = swingLows(bars, 2);
   if (lows.length < 2) return false;
 
   let best: DoubleBottomCandidate | null = null;
@@ -360,8 +484,8 @@ function detectDoubleTop(
   bars: OhlcvBar[],
   options: ChartPatternOptions,
 ): boolean {
-  if (bars.length < 20) return false;
-  const highs = swingHighs(bars, 3);
+  if (bars.length < 24) return false;
+  const highs = swingHighs(bars, 2);
   if (highs.length < 2) return false;
 
   let best: DoubleTopCandidate | null = null;
@@ -388,29 +512,68 @@ function detectHeadAndShoulders(
   bars: OhlcvBar[],
   options: ChartPatternOptions,
 ): boolean {
-  if (bars.length < 25) return false;
-  const highs = swingHighs(bars, 3);
+  if (bars.length < 30) return false;
+  const highs = swingHighs(bars, 2);
   if (highs.length < 3) return false;
 
   for (let i = 0; i < highs.length - 2; i++) {
-    const left = highs[i]!;
-    const head = highs[i + 1]!;
-    const right = highs[i + 2]!;
-    const leftHigh = bars[left]!.high;
-    const headHigh = bars[head]!.high;
-    const rightHigh = bars[right]!.high;
+    for (let k = i + 2; k < highs.length; k++) {
+      const left = highs[i]!;
+      const head = highs[i + 1]!;
+      const right = highs[k]!;
+      const leftHigh = bars[left]!.high;
+      const headHigh = bars[head]!.high;
+      const rightHigh = bars[right]!.high;
 
-    if (headHigh <= leftHigh || headHigh <= rightHigh) continue;
-    if (!near(leftHigh, rightHigh, options.tolerancePct * 1.5)) continue;
+      if (headHigh <= leftHigh * 1.03 || headHigh <= rightHigh * 1.03) continue;
+      if (!near(leftHigh, rightHigh, options.tolerancePct * 1.25)) continue;
 
-    const necklineSlice = bars.slice(left, right + 1);
-    const neckline = Math.min(...necklineSlice.map((b) => b.low));
-    const barsSinceRightShoulder = bars.length - 1 - right;
-    const maxLag = Math.max(8, Math.floor(bars.length * 0.3));
-    if (barsSinceRightShoulder < 1 || barsSinceRightShoulder > maxLag) continue;
+      const leftSpan = head - left;
+      const rightSpan = right - head;
+      if (leftSpan < 4 || rightSpan < 4) continue;
+      if (rightSpan > leftSpan * 2.4 || rightSpan < leftSpan * 0.4) continue;
 
-    if (crossesBelow(bars, neckline)) {
-      return true;
+      const priorBars = Math.min(10, left);
+      if (priorBars >= 3) {
+        const priorLow = Math.min(
+          ...bars.slice(left - priorBars, left).map((b) => b.low),
+        );
+        if (pctChange(priorLow, leftHigh) < options.minReversalDepthPct) continue;
+      }
+
+      const valleyLeft = Math.min(
+        ...bars.slice(left + 1, head).map((b) => b.low),
+      );
+      const valleyRight = Math.min(
+        ...bars.slice(head + 1, right).map((b) => b.low),
+      );
+      const neckline = Math.max(valleyLeft, valleyRight);
+
+      const { high: windowHigh, range } = windowExtremes(bars);
+      if (headHigh < windowHigh - range * 0.1) continue;
+
+      const minRecentIdx = Math.floor(bars.length * 0.55);
+      if (right < minRecentIdx) continue;
+
+      const barsSinceRightShoulder = bars.length - 1 - right;
+      if (
+        barsSinceRightShoulder < 1 ||
+        barsSinceRightShoulder > maxCompletionLag(bars)
+      ) {
+        continue;
+      }
+
+      const afterRight = bars.slice(right + 1, bars.length - 1);
+      if (afterRight.length > 0) {
+        const belowNeckline = afterRight.filter((b) => b.close < neckline).length;
+        if (belowNeckline > afterRight.length * 0.25) continue;
+        const retestLow = Math.min(...afterRight.map((b) => b.low));
+        if (retestLow > neckline * 1.04) continue;
+      }
+
+      if (crossesBelow(bars, neckline)) {
+        return true;
+      }
     }
   }
   return false;
@@ -420,68 +583,100 @@ function detectCupAndHandle(
   bars: OhlcvBar[],
   options: ChartPatternOptions,
 ): boolean {
-  if (bars.length < 30) return false;
-  const handleLen = Math.max(5, Math.floor(bars.length * 0.15));
+  if (bars.length < 40) return false;
+
+  const handleLen = Math.max(6, Math.floor(bars.length * 0.14));
   const cupBars = bars.slice(0, bars.length - handleLen);
   const handleBars = bars.slice(-handleLen);
-  if (cupBars.length < 20 || handleBars.length < 4) return false;
+  if (cupBars.length < 28 || handleBars.length < 5) return false;
 
-  const leftRim = cupBars[0]!.close;
-  const rightRim = cupBars[cupBars.length - 1]!.close;
-  if (!near(leftRim, rightRim, options.tolerancePct * 2)) return false;
+  const leftRimIdx = Math.min(4, Math.floor(cupBars.length * 0.08));
+  const rightRimIdx = cupBars.length - 1 - Math.min(4, Math.floor(cupBars.length * 0.08));
+  const leftRim = cupBars[leftRimIdx]!.close;
+  const rightRim = cupBars[rightRimIdx]!.close;
+  if (!near(leftRim, rightRim, options.tolerancePct * 3)) return false;
 
   const cupLow = Math.min(...cupBars.map((b) => b.low));
-  const cupDepth = ((leftRim - cupLow) / leftRim) * 100;
-  if (cupDepth < 8 || cupDepth > 45) return false;
+  const rimHigh = Math.max(leftRim, rightRim, cupBars[leftRimIdx]!.high, cupBars[rightRimIdx]!.high);
+  const cupDepthPct = pctChange(cupLow, rimHigh);
+  if (cupDepthPct < 10 || cupDepthPct > 40) return false;
 
-  const mid = Math.floor(cupBars.length / 2);
-  const midBar = cupBars[mid]!;
-  if (midBar.low > cupLow * 1.05) return false;
+  const third = Math.floor(cupBars.length / 3);
+  const leftThird = cupBars.slice(0, third);
+  const midThird = cupBars.slice(third, third * 2);
+  const rightThird = cupBars.slice(third * 2, rightRimIdx + 1);
+  if (leftThird.length < 4 || midThird.length < 4 || rightThird.length < 4) {
+    return false;
+  }
 
+  const leftTrend = pctChange(leftThird[0]!.close, leftThird[leftThird.length - 1]!.close);
+  const rightTrend = pctChange(rightThird[0]!.close, rightThird[rightThird.length - 1]!.close);
+  if (leftTrend > -4 || rightTrend < 2.5) return false;
+
+  const midLow = Math.min(...midThird.map((b) => b.low));
+  if (midLow > cupLow * 1.04) return false;
+
+  const handleLow = Math.min(...handleBars.map((b) => b.low));
   const handleHigh = Math.max(...handleBars.map((b) => b.high));
-  const rimHigh = Math.max(leftRim, rightRim);
-  if (handleHigh > rimHigh * 1.02) return false;
+  if (handleLow <= cupLow * 1.01) return false;
+  const handleDepthPct = pctChange(handleLow, rimHigh);
+  if (handleDepthPct > 18 || handleDepthPct < 2) return false;
+  if (handleHigh > rimHigh * 1.015) return false;
 
-  const breakoutLevel = Math.max(rimHigh, handleHigh);
-  const current = bars[bars.length - 1]!;
-  const prev = bars[bars.length - 2]!;
-  return current.close > breakoutLevel && prev.close <= breakoutLevel;
+  const breakoutLevel = rimHigh;
+  return crossesAbove(bars, breakoutLevel);
+}
+
+function detectLongBase(
+  bars: OhlcvBar[],
+  direction: "up" | "down",
+  options: ChartPatternOptions,
+): boolean {
+  if (bars.length < 30) return false;
+
+  const minBaseLen = Math.floor(bars.length * 0.72);
+  const baseBars = bars.slice(0, bars.length - 1);
+  if (baseBars.length < minBaseLen) return false;
+
+  const baseHigh = Math.max(...baseBars.map((b) => b.high));
+  const baseLow = Math.min(...baseBars.map((b) => b.low));
+  const mid = (baseHigh + baseLow) / 2;
+  if (mid <= 0) return false;
+
+  const rangePct = ((baseHigh - baseLow) / mid) * 100;
+  if (rangePct > options.maxBaseRangePct) return false;
+
+  const insideBase = baseBars.filter(
+    (b) => b.close >= baseLow && b.close <= baseHigh,
+  ).length;
+  if (insideBase / baseBars.length < 0.82) return false;
+
+  const closes = baseBars.map((b) => b.close);
+  const slope = pctChange(closes[0]!, closes[closes.length - 1]!);
+  if (Math.abs(slope) > options.maxBaseRangePct * 0.75) return false;
+
+  const touchHigh = baseBars.filter((b) => b.high >= baseHigh * 0.985).length;
+  const touchLow = baseBars.filter((b) => b.low <= baseLow * 1.015).length;
+  if (touchHigh < 2 || touchLow < 2) return false;
+
+  if (direction === "up") {
+    return crossesAbove(bars, baseHigh);
+  }
+  return crossesBelow(bars, baseLow);
 }
 
 function detectLongBaseBreakout(
   bars: OhlcvBar[],
   options: ChartPatternOptions,
 ): boolean {
-  if (bars.length < 20) return false;
-  const baseBars = bars.slice(0, bars.length - 1);
-  const baseHigh = Math.max(...baseBars.map((b) => b.high));
-  const baseLow = Math.min(...baseBars.map((b) => b.low));
-  const mid = (baseHigh + baseLow) / 2;
-  if (mid <= 0) return false;
-  const rangePct = ((baseHigh - baseLow) / mid) * 100;
-  if (rangePct > options.maxBaseRangePct) return false;
-
-  const current = bars[bars.length - 1]!;
-  const prev = bars[bars.length - 2]!;
-  return current.close > baseHigh && prev.close <= baseHigh;
+  return detectLongBase(bars, "up", options);
 }
 
 function detectLongBaseBreakdown(
   bars: OhlcvBar[],
   options: ChartPatternOptions,
 ): boolean {
-  if (bars.length < 20) return false;
-  const baseBars = bars.slice(0, bars.length - 1);
-  const baseHigh = Math.max(...baseBars.map((b) => b.high));
-  const baseLow = Math.min(...baseBars.map((b) => b.low));
-  const mid = (baseHigh + baseLow) / 2;
-  if (mid <= 0) return false;
-  const rangePct = ((baseHigh - baseLow) / mid) * 100;
-  if (rangePct > options.maxBaseRangePct) return false;
-
-  const current = bars[bars.length - 1]!;
-  const prev = bars[bars.length - 2]!;
-  return current.close < baseLow && prev.close >= baseLow;
+  return detectLongBase(bars, "down", options);
 }
 
 export function detectChartPatternAt(
@@ -532,12 +727,11 @@ export function detectChartPatternSeries(
 }
 
 export function formatChartPatternLabel(pattern: string): string {
-  const fromCatalog = pattern
+  return pattern
     .split("_")
     .map((w) => {
       if (w === "and") return "&";
       return w.charAt(0).toUpperCase() + w.slice(1);
     })
     .join(" ");
-  return fromCatalog.replace("Cup & Handle", "Cup & Handle");
 }
