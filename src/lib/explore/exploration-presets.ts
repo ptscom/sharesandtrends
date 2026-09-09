@@ -404,6 +404,38 @@ function buildRollingExtremeBreak(
   };
 }
 
+const CHART_LOOKBACK_PARAM: ExplorationParamDef = {
+  key: "lookback",
+  label: "Lookback bars",
+  type: "int",
+  default: 60,
+  min: 15,
+  max: 300,
+};
+
+function buildChartPattern(
+  patternId: string,
+  params: Record<string, number | string>,
+  timeframeMode: ExploreTimeframeMode,
+  name: string,
+): PatternDefinition {
+  const lookback = Number(params.lookback ?? 60);
+
+  return {
+    name,
+    indicators: [
+      {
+        alias: "chart_pattern",
+        type: "chart_pattern",
+        params: { pattern: patternId, lookback },
+        timeframe: toTf(timeframeMode),
+      },
+    ],
+    entry: expr("gt", "chart_pattern", 0.5),
+    backtest: { entryOn: "close", exitOn: "opposite_signal" },
+  };
+}
+
 function buildDarvasBreakout(
   direction: "up" | "down",
   params: Record<string, number | string>,
@@ -1615,6 +1647,146 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
       return `${priceLabel(price)} ${opLabel(op).toLowerCase()} Darvas box bottom (${lookback} lookback)`;
     },
   },
+  {
+    id: "exp-chart-bull-flag",
+    name: "Bull Flag",
+    category: "Chart patterns",
+    kind: "chart_pattern",
+    description: "Bullish continuation after a sharp rally and tight flag consolidation",
+    params: [CHART_LOOKBACK_PARAM],
+    buildPattern: (params, tf) =>
+      buildChartPattern("bull_flag", params, tf, "Bull Flag"),
+    describe: (params) => {
+      const lookback = Number(params.lookback ?? 60);
+      return `Bull flag breakout (${lookback} bar lookback)`;
+    },
+  },
+  {
+    id: "exp-chart-ascending-triangle",
+    name: "Ascending Triangle",
+    category: "Chart patterns",
+    kind: "chart_pattern",
+    description: "Flat resistance with rising lows breaking upward",
+    params: [CHART_LOOKBACK_PARAM],
+    buildPattern: (params, tf) =>
+      buildChartPattern("ascending_triangle", params, tf, "Ascending Triangle"),
+    describe: (params) => {
+      const lookback = Number(params.lookback ?? 60);
+      return `Ascending triangle breakout (${lookback} bar lookback)`;
+    },
+  },
+  {
+    id: "exp-chart-cup-handle",
+    name: "Cup & Handle",
+    category: "Chart patterns",
+    kind: "chart_pattern",
+    description: "Rounded base recovery with a shallow handle breakout",
+    params: [CHART_LOOKBACK_PARAM],
+    buildPattern: (params, tf) =>
+      buildChartPattern("cup_and_handle", params, tf, "Cup & Handle"),
+    describe: (params) => {
+      const lookback = Number(params.lookback ?? 60);
+      return `Cup & handle breakout (${lookback} bar lookback)`;
+    },
+  },
+  {
+    id: "exp-chart-double-bottom",
+    name: "Double Bottom",
+    category: "Chart patterns",
+    kind: "chart_pattern",
+    description: "Two similar lows with a neckline breakout",
+    params: [CHART_LOOKBACK_PARAM],
+    buildPattern: (params, tf) =>
+      buildChartPattern("double_bottom", params, tf, "Double Bottom"),
+    describe: (params) => {
+      const lookback = Number(params.lookback ?? 60);
+      return `Double bottom breakout (${lookback} bar lookback)`;
+    },
+  },
+  {
+    id: "exp-chart-long-base-breakout",
+    name: "Long Base Breakout",
+    category: "Chart patterns",
+    kind: "chart_pattern",
+    description: "Extended tight range resolving with an upside breakout",
+    params: [CHART_LOOKBACK_PARAM],
+    buildPattern: (params, tf) =>
+      buildChartPattern("long_base_breakout", params, tf, "Long Base Breakout"),
+    describe: (params) => {
+      const lookback = Number(params.lookback ?? 60);
+      return `Long base breakout (${lookback} bar lookback)`;
+    },
+  },
+  {
+    id: "exp-chart-bear-flag",
+    name: "Bear Flag",
+    category: "Chart patterns",
+    kind: "chart_pattern",
+    description: "Bearish continuation after a sharp decline and tight flag consolidation",
+    params: [CHART_LOOKBACK_PARAM],
+    buildPattern: (params, tf) =>
+      buildChartPattern("bear_flag", params, tf, "Bear Flag"),
+    describe: (params) => {
+      const lookback = Number(params.lookback ?? 60);
+      return `Bear flag breakdown (${lookback} bar lookback)`;
+    },
+  },
+  {
+    id: "exp-chart-descending-triangle",
+    name: "Descending Triangle",
+    category: "Chart patterns",
+    kind: "chart_pattern",
+    description: "Flat support with falling highs breaking downward",
+    params: [CHART_LOOKBACK_PARAM],
+    buildPattern: (params, tf) =>
+      buildChartPattern("descending_triangle", params, tf, "Descending Triangle"),
+    describe: (params) => {
+      const lookback = Number(params.lookback ?? 60);
+      return `Descending triangle breakdown (${lookback} bar lookback)`;
+    },
+  },
+  {
+    id: "exp-chart-head-shoulders",
+    name: "Head & Shoulders",
+    category: "Chart patterns",
+    kind: "chart_pattern",
+    description: "Three-peak reversal with neckline breakdown",
+    params: [CHART_LOOKBACK_PARAM],
+    buildPattern: (params, tf) =>
+      buildChartPattern("head_and_shoulders", params, tf, "Head & Shoulders"),
+    describe: (params) => {
+      const lookback = Number(params.lookback ?? 60);
+      return `Head & shoulders breakdown (${lookback} bar lookback)`;
+    },
+  },
+  {
+    id: "exp-chart-double-top",
+    name: "Double Top",
+    category: "Chart patterns",
+    kind: "chart_pattern",
+    description: "Two similar highs with a neckline breakdown",
+    params: [CHART_LOOKBACK_PARAM],
+    buildPattern: (params, tf) =>
+      buildChartPattern("double_top", params, tf, "Double Top"),
+    describe: (params) => {
+      const lookback = Number(params.lookback ?? 60);
+      return `Double top breakdown (${lookback} bar lookback)`;
+    },
+  },
+  {
+    id: "exp-chart-long-base-breakdown",
+    name: "Long Base Breakdown",
+    category: "Chart patterns",
+    kind: "chart_pattern",
+    description: "Extended tight range resolving with a downside breakdown",
+    params: [CHART_LOOKBACK_PARAM],
+    buildPattern: (params, tf) =>
+      buildChartPattern("long_base_breakdown", params, tf, "Long Base Breakdown"),
+    describe: (params) => {
+      const lookback = Number(params.lookback ?? 60);
+      return `Long base breakdown (${lookback} bar lookback)`;
+    },
+  },
 ];
 
 export function getExplorationPreset(id: string): ExplorationPreset | undefined {
@@ -1631,6 +1803,7 @@ export const EXPLORATION_CATEGORY_TABS = [
   { id: "Breakout", label: "Breakout" },
   { id: "Trend", label: "Trend" },
   { id: "Candlesticks", label: "Candlesticks" },
+  { id: "Chart patterns", label: "Chart patterns" },
   { id: "favorites", label: "Favorites" },
   { id: "custom", label: "Custom" },
 ] as const;
@@ -1660,6 +1833,11 @@ export const EXPLORATION_CATEGORY_STYLES: Record<
   },
   Trend: { bg: "bg-info-light", text: "text-info", dot: "bg-info" },
   Candlesticks: { bg: "bg-input", text: "text-body", dot: "bg-muted" },
+  "Chart patterns": {
+    bg: "bg-success-light",
+    text: "text-success",
+    dot: "bg-success",
+  },
   Custom: { bg: "bg-input", text: "text-body", dot: "bg-muted" },
   Favorites: { bg: "bg-brand-light", text: "text-brand-text", dot: "bg-brand" },
 };

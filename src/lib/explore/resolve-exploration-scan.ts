@@ -41,6 +41,7 @@ export async function resolveExplorationFilterFromScan(
     return {
       source: "builder",
       name: saved.name,
+      description: saved.description ?? scan.filterDescription,
       timeframeMode: scan.timeframeMode,
       builder: saved.builder,
       savedId,
@@ -51,6 +52,7 @@ export async function resolveExplorationFilterFromScan(
     return {
       source: "builder",
       name: scan.filterName,
+      description: scan.filterDescription,
       timeframeMode: scan.timeframeMode,
       builder: { rows: [] },
     };

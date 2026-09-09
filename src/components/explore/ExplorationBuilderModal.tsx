@@ -627,21 +627,23 @@ function LeftOperandFields({
   const def = getIndicatorDefinition(indicatorType);
   const outputs = def?.outputs ?? [];
   const isCandle = indicatorType === "candle_pattern";
+  const isChartPattern = indicatorType === "chart_pattern";
+  const isPatternIndicator = isCandle || isChartPattern;
   const showLinePicker =
     operand.kind === "indicator" &&
-    !isCandle &&
+    !isPatternIndicator &&
     getIndicatorRole(indicatorType) === "line_cross" &&
     outputs.length > 1;
   const showSource =
     operand.kind === "indicator" &&
-    !isCandle &&
+    !isPatternIndicator &&
     indicatorHasSource(indicatorType);
   const periodDefault = periodKey
     ? defaultPeriodForIndicator(indicatorType, periodKey)
     : 14;
 
   const showPeriod =
-    operand.kind === "indicator" && periodKey && !isCandle && !showLinePicker;
+    operand.kind === "indicator" && periodKey && !isPatternIndicator && !showLinePicker;
 
   return (
     <>

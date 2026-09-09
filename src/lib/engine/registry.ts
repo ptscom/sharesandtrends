@@ -1,4 +1,5 @@
 import { getImplementedPatternIds } from "@/lib/patterns/candle-catalog";
+import { getImplementedChartPatternIds } from "@/lib/patterns/chart-pattern-catalog";
 
 export interface IndicatorParamSchema {
   type: "int" | "float" | "enum";
@@ -457,6 +458,27 @@ export const INDICATOR_REGISTRY: IndicatorDefinition[] = [
         min: 1,
         max: 6,
         label: "Shadow ratio",
+      },
+    },
+    outputs: ["signal"],
+  },
+  {
+    id: "chart_pattern",
+    name: "Chart Pattern",
+    category: "pattern",
+    params: {
+      pattern: {
+        type: "enum",
+        default: "bull_flag",
+        options: getImplementedChartPatternIds(),
+        label: "Pattern",
+      },
+      lookback: {
+        type: "int",
+        default: 60,
+        min: 15,
+        max: 300,
+        label: "Lookback",
       },
     },
     outputs: ["signal"],

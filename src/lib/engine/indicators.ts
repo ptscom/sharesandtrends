@@ -31,6 +31,7 @@ import type { IndicatorDef, IndicatorSeries, OhlcvBar } from "@/lib/types";
 import { alignHigherTimeframe, barsToSource, resampleBars } from "./resample";
 import { getIndicatorDefinition } from "./registry";
 import { detectCandlePatternSeries } from "./candle-patterns";
+import { detectChartPatternSeries } from "./chart-patterns";
 
 function padStart(values: number[], total: number): (number | null)[] {
   const pad = total - values.length;
@@ -403,6 +404,12 @@ function computeOnBars(
         bodyRatioMax: bodyRatio,
         shadowRatioMin: shadowRatio,
       });
+      break;
+    }
+    case "chart_pattern": {
+      const pattern = String(params.pattern ?? "bull_flag");
+      const lookback = Number(params.lookback ?? 60);
+      result[def.alias] = detectChartPatternSeries(bars, pattern, { lookback });
       break;
     }
     case "wma": {

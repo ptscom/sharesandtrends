@@ -90,7 +90,8 @@ export type ExplorationPresetKind =
   | "line_cross"
   | "price_vs_band"
   | "streak_breakout"
-  | "price_breakout";
+  | "price_breakout"
+  | "chart_pattern";
 
 export interface ExplorationPreset {
   id: string;
