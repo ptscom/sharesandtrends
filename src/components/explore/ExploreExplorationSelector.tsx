@@ -75,7 +75,7 @@ export function ExploreExplorationSelector({
 
   const presets = EXPLORATION_PRESETS.filter((preset) => {
     const favoriteKey = presetFavoriteKey(preset.id);
-    if (categoryFilter === "custom") return false;
+    if (categoryFilter === "custom" && preset.category !== "Custom") return false;
     if (categoryFilter === "favorites") {
       if (!favoriteKeys.has(favoriteKey)) return false;
     } else if (
@@ -108,6 +108,7 @@ export function ExploreExplorationSelector({
 
   const gridItems: GridItem[] = [];
   if (categoryFilter === "custom") {
+    for (const preset of presets) gridItems.push({ type: "preset", preset });
     for (const item of saved) gridItems.push({ type: "saved", item });
   } else if (categoryFilter === "all" || categoryFilter === "favorites") {
     for (const preset of presets) gridItems.push({ type: "preset", preset });
@@ -232,7 +233,7 @@ export function ExploreExplorationSelector({
             : categoryFilter === "favorites"
               ? "Star explorations to add them to your favorites."
               : categoryFilter === "custom"
-                ? "No custom explorations yet. Use Build custom to create one."
+                ? "No custom explorations yet. Select a preset above or use Build custom to create one."
                 : "No explorations match your search."}
         </p>
       )}

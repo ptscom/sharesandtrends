@@ -345,6 +345,25 @@ function computeOnBars(
       result[def.alias] = priorRolling(bars, length, "low");
       break;
     }
+    case "deep_low_avg": {
+      const lookback = Number(params.lookback ?? 24);
+      const count = Number(params.count ?? 3);
+      const field = String(params.source ?? "low") as
+        | "open"
+        | "high"
+        | "low"
+        | "close";
+      const values = bars.map((b) => b[field]);
+      result[def.alias] = values.map((_, i) => {
+        if (i < lookback) return null;
+        const slice = values.slice(i - lookback, i);
+        const sorted = [...slice].sort((a, b) => a - b);
+        const deepest = sorted.slice(0, Math.min(count, sorted.length));
+        if (deepest.length === 0) return null;
+        return deepest.reduce((sum, value) => sum + value, 0) / deepest.length;
+      });
+      break;
+    }
     case "momentum": {
       const length = Number(params.length ?? 126);
       result[def.alias] = input.map((c, i) => {

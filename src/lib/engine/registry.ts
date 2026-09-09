@@ -230,6 +230,34 @@ export const INDICATOR_REGISTRY: IndicatorDefinition[] = [
     outputs: ["rolling_low"],
   },
   {
+    id: "deep_low_avg",
+    name: "Deep Low Average",
+    category: "mean_reversion",
+    params: {
+      lookback: {
+        type: "int",
+        default: 24,
+        min: 6,
+        max: 120,
+        label: "Lookback (months)",
+      },
+      count: {
+        type: "int",
+        default: 3,
+        min: 1,
+        max: 10,
+        label: "Deepest lows to average",
+      },
+      source: {
+        type: "enum",
+        default: "low",
+        options: ["open", "high", "low", "close"],
+        label: "History price field",
+      },
+    },
+    outputs: ["deep_low_avg"],
+  },
+  {
     id: "momentum",
     name: "Price Momentum %",
     category: "momentum",

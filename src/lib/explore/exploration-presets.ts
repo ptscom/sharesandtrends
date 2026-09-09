@@ -413,6 +413,42 @@ const CHART_LOOKBACK_PARAM: ExplorationParamDef = {
   max: 300,
 };
 
+const DEEP_LOW_COMPARE_OPTIONS = [
+  { value: "lte", label: "At or below ( <= )" },
+  { value: "lt", label: "Below ( < )" },
+  { value: "crosses_below", label: "Crosses below" },
+];
+
+function buildDeepLowReversion(
+  params: Record<string, number | string>,
+  _timeframeMode: ExploreTimeframeMode,
+  name: string,
+): PatternDefinition {
+  const months = Number(params.months ?? 24);
+  const deepCount = Number(params.deepCount ?? 3);
+  const historySource = String(params.historySource ?? "low");
+  const price = String(params.price ?? "low");
+  const op = String(params.op ?? "lte") as Expression["op"];
+
+  return {
+    name,
+    indicators: [
+      {
+        alias: "deep_low_avg",
+        type: "deep_low_avg",
+        params: {
+          lookback: months,
+          count: deepCount,
+          source: historySource,
+        },
+        timeframe: "1M",
+      },
+    ],
+    entry: expr(op, price, "deep_low_avg"),
+    backtest: { entryOn: "close", exitOn: "opposite_signal" },
+  };
+}
+
 function buildChartPattern(
   patternId: string,
   params: Record<string, number | string>,
@@ -1787,6 +1823,63 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
       return `Long base breakdown (${lookback} bar lookback)`;
     },
   },
+  {
+    id: "exp-deep-low-reversion",
+    name: "Deep Low Reversion",
+    category: "Custom",
+    kind: "deep_low_reversion",
+    description:
+      "Long when price reaches the average of the deepest monthly lows over a lookback window",
+    params: [
+      {
+        key: "months",
+        label: "Lookback (months)",
+        type: "int",
+        default: 24,
+        min: 6,
+        max: 120,
+      },
+      {
+        key: "deepCount",
+        label: "Deepest lows to average",
+        type: "int",
+        default: 3,
+        min: 1,
+        max: 10,
+      },
+      {
+        key: "historySource",
+        label: "History price field",
+        type: "enum",
+        default: "low",
+        options: OHLC_OPTIONS,
+      },
+      {
+        key: "price",
+        label: "Current price field",
+        type: "enum",
+        default: "low",
+        options: OHLC_OPTIONS,
+      },
+      {
+        key: "op",
+        label: "Condition",
+        type: "enum",
+        default: "lte",
+        options: DEEP_LOW_COMPARE_OPTIONS,
+      },
+    ],
+    buildPattern: (params, tf) =>
+      buildDeepLowReversion(params, tf, "Deep Low Reversion"),
+    describe: (params) => {
+      const months = Number(params.months ?? 24);
+      const deepCount = Number(params.deepCount ?? 3);
+      const historySource = String(params.historySource ?? "low");
+      const price = String(params.price ?? "low");
+      const op = String(params.op ?? "lte");
+      return `Avg of ${deepCount} deepest ${priceLabel(historySource)} lows over ${months}M — current ${priceLabel(price)} ${opLabel(op).toLowerCase()} level`;
+    },
+  },
 ];
 
 export function getExplorationPreset(id: string): ExplorationPreset | undefined {
@@ -1838,7 +1931,7 @@ export const EXPLORATION_CATEGORY_STYLES: Record<
     text: "text-success",
     dot: "bg-success",
   },
-  Custom: { bg: "bg-input", text: "text-body", dot: "bg-muted" },
+  Custom: { bg: "bg-accent-light", text: "text-accent", dot: "bg-accent" },
   Favorites: { bg: "bg-brand-light", text: "text-brand-text", dot: "bg-brand" },
 };
 
