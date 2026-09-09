@@ -13,13 +13,16 @@ export interface ChartPatternOptions {
   tolerancePct: number;
   /** Max range width (%) for long-base patterns */
   maxBaseRangePct: number;
+  /** Minimum valley/peak depth (%) between double-top/bottom peaks */
+  minReversalDepthPct: number;
 }
 
 const DEFAULT_OPTIONS: ChartPatternOptions = {
   lookback: 60,
   minPolePct: 6,
-  tolerancePct: 2.5,
+  tolerancePct: 2,
   maxBaseRangePct: 12,
+  minReversalDepthPct: 4,
 };
 
 function windowSlice(
@@ -35,6 +38,138 @@ function near(a: number, b: number, tolerancePct: number): boolean {
   const mid = (a + b) / 2;
   if (mid === 0) return false;
   return Math.abs(a - b) / mid <= tolerancePct / 100;
+}
+
+function windowExtremes(bars: OhlcvBar[]) {
+  const high = Math.max(...bars.map((b) => b.high));
+  const low = Math.min(...bars.map((b) => b.low));
+  return { high, low, range: high - low };
+}
+
+function crossesBelow(bars: OhlcvBar[], level: number): boolean {
+  const current = bars[bars.length - 1]!;
+  const prev = bars[bars.length - 2]!;
+  return current.close < level && prev.close >= level;
+}
+
+function crossesAbove(bars: OhlcvBar[], level: number): boolean {
+  const current = bars[bars.length - 1]!;
+  const prev = bars[bars.length - 2]!;
+  return current.close > level && prev.close <= level;
+}
+
+interface DoubleTopCandidate {
+  firstPeak: number;
+  secondPeak: number;
+  neckline: number;
+}
+
+function validateDoubleTopCandidate(
+  bars: OhlcvBar[],
+  idxA: number,
+  idxB: number,
+  options: ChartPatternOptions,
+): DoubleTopCandidate | null {
+  if (idxB - idxA < 8) return null;
+
+  const highA = bars[idxA]!.high;
+  const highB = bars[idxB]!.high;
+  if (!near(highA, highB, options.tolerancePct)) return null;
+  if (highB > highA * 1.03) return null;
+
+  const between = bars.slice(idxA + 1, idxB);
+  if (between.length < 4) return null;
+
+  const neckline = Math.min(...between.map((b) => b.low));
+  const avgPeak = (highA + highB) / 2;
+  if (avgPeak <= 0) return null;
+
+  const valleyDepthPct = ((avgPeak - neckline) / avgPeak) * 100;
+  if (valleyDepthPct < options.minReversalDepthPct) return null;
+
+  const { high: windowHigh, range } = windowExtremes(bars);
+  if (range <= 0) return null;
+  if (highA < windowHigh - range * 0.18) return null;
+  if (highB < windowHigh - range * 0.18) return null;
+
+  const priorBars = Math.min(12, idxA);
+  if (priorBars >= 3) {
+    const priorLow = Math.min(
+      ...bars.slice(idxA - priorBars, idxA).map((b) => b.low),
+    );
+    if (priorLow <= 0) return null;
+    const rallyPct = ((highA - priorLow) / priorLow) * 100;
+    if (rallyPct < options.minReversalDepthPct) return null;
+  }
+
+  const barsSinceSecondPeak = bars.length - 1 - idxB;
+  const maxLag = Math.max(8, Math.floor(bars.length * 0.3));
+  if (barsSinceSecondPeak < 1 || barsSinceSecondPeak > maxLag) return null;
+
+  const afterSecondPeak = bars.slice(idxB + 1, bars.length - 1);
+  if (afterSecondPeak.length > 0) {
+    const belowNeckline = afterSecondPeak.filter((b) => b.close < neckline).length;
+    if (belowNeckline > afterSecondPeak.length * 0.35) return null;
+  }
+
+  return { firstPeak: idxA, secondPeak: idxB, neckline };
+}
+
+interface DoubleBottomCandidate {
+  firstTrough: number;
+  secondTrough: number;
+  neckline: number;
+}
+
+function validateDoubleBottomCandidate(
+  bars: OhlcvBar[],
+  idxA: number,
+  idxB: number,
+  options: ChartPatternOptions,
+): DoubleBottomCandidate | null {
+  if (idxB - idxA < 8) return null;
+
+  const lowA = bars[idxA]!.low;
+  const lowB = bars[idxB]!.low;
+  if (!near(lowA, lowB, options.tolerancePct)) return null;
+  if (lowB < lowA * 0.97) return null;
+
+  const between = bars.slice(idxA + 1, idxB);
+  if (between.length < 4) return null;
+
+  const neckline = Math.max(...between.map((b) => b.high));
+  const avgTrough = (lowA + lowB) / 2;
+  if (avgTrough <= 0) return null;
+
+  const peakHeightPct = ((neckline - avgTrough) / avgTrough) * 100;
+  if (peakHeightPct < options.minReversalDepthPct) return null;
+
+  const { low: windowLow, range } = windowExtremes(bars);
+  if (range <= 0) return null;
+  if (lowA > windowLow + range * 0.18) return null;
+  if (lowB > windowLow + range * 0.18) return null;
+
+  const priorBars = Math.min(12, idxA);
+  if (priorBars >= 3) {
+    const priorHigh = Math.max(
+      ...bars.slice(idxA - priorBars, idxA).map((b) => b.high),
+    );
+    if (priorHigh <= 0) return null;
+    const declinePct = ((priorHigh - lowA) / priorHigh) * 100;
+    if (declinePct < options.minReversalDepthPct) return null;
+  }
+
+  const barsSinceSecondTrough = bars.length - 1 - idxB;
+  const maxLag = Math.max(8, Math.floor(bars.length * 0.3));
+  if (barsSinceSecondTrough < 1 || barsSinceSecondTrough > maxLag) return null;
+
+  const afterSecondTrough = bars.slice(idxB + 1, bars.length - 1);
+  if (afterSecondTrough.length > 0) {
+    const aboveNeckline = afterSecondTrough.filter((b) => b.close > neckline).length;
+    if (aboveNeckline > afterSecondTrough.length * 0.35) return null;
+  }
+
+  return { firstTrough: idxA, secondTrough: idxB, neckline };
 }
 
 function swingHighs(bars: OhlcvBar[], radius = 2): number[] {
@@ -201,28 +336,24 @@ function detectDoubleBottom(
   const lows = swingLows(bars, 3);
   if (lows.length < 2) return false;
 
-  let best: { a: number; b: number; peak: number } | null = null;
+  let best: DoubleBottomCandidate | null = null;
   for (let i = 0; i < lows.length - 1; i++) {
     for (let j = i + 1; j < lows.length; j++) {
-      const idxA = lows[i]!;
-      const idxB = lows[j]!;
-      if (idxB - idxA < 5) continue;
-      const lowA = bars[idxA]!.low;
-      const lowB = bars[idxB]!.low;
-      if (!near(lowA, lowB, options.tolerancePct)) continue;
-      const between = bars.slice(idxA + 1, idxB);
-      if (between.length < 3) continue;
-      const peak = Math.max(...between.map((b) => b.high));
-      if (!best || peak > best.peak) {
-        best = { a: idxA, b: idxB, peak };
+      const candidate = validateDoubleBottomCandidate(
+        bars,
+        lows[i]!,
+        lows[j]!,
+        options,
+      );
+      if (!candidate) continue;
+      if (!best || candidate.secondTrough > best.secondTrough) {
+        best = candidate;
       }
     }
   }
   if (!best) return false;
 
-  const current = bars[bars.length - 1]!;
-  const prev = bars[bars.length - 2]!;
-  return current.close > best.peak && prev.close <= best.peak;
+  return crossesAbove(bars, best.neckline);
 }
 
 function detectDoubleTop(
@@ -233,28 +364,24 @@ function detectDoubleTop(
   const highs = swingHighs(bars, 3);
   if (highs.length < 2) return false;
 
-  let best: { a: number; b: number; trough: number } | null = null;
+  let best: DoubleTopCandidate | null = null;
   for (let i = 0; i < highs.length - 1; i++) {
     for (let j = i + 1; j < highs.length; j++) {
-      const idxA = highs[i]!;
-      const idxB = highs[j]!;
-      if (idxB - idxA < 5) continue;
-      const highA = bars[idxA]!.high;
-      const highB = bars[idxB]!.high;
-      if (!near(highA, highB, options.tolerancePct)) continue;
-      const between = bars.slice(idxA + 1, idxB);
-      if (between.length < 3) continue;
-      const trough = Math.min(...between.map((b) => b.low));
-      if (!best || trough < best.trough) {
-        best = { a: idxA, b: idxB, trough };
+      const candidate = validateDoubleTopCandidate(
+        bars,
+        highs[i]!,
+        highs[j]!,
+        options,
+      );
+      if (!candidate) continue;
+      if (!best || candidate.secondPeak > best.secondPeak) {
+        best = candidate;
       }
     }
   }
   if (!best) return false;
 
-  const current = bars[bars.length - 1]!;
-  const prev = bars[bars.length - 2]!;
-  return current.close < best.trough && prev.close >= best.trough;
+  return crossesBelow(bars, best.neckline);
 }
 
 function detectHeadAndShoulders(
@@ -278,9 +405,11 @@ function detectHeadAndShoulders(
 
     const necklineSlice = bars.slice(left, right + 1);
     const neckline = Math.min(...necklineSlice.map((b) => b.low));
-    const current = bars[bars.length - 1]!;
-    const prev = bars[bars.length - 2]!;
-    if (current.close < neckline && prev.close >= neckline) {
+    const barsSinceRightShoulder = bars.length - 1 - right;
+    const maxLag = Math.max(8, Math.floor(bars.length * 0.3));
+    if (barsSinceRightShoulder < 1 || barsSinceRightShoulder > maxLag) continue;
+
+    if (crossesBelow(bars, neckline)) {
       return true;
     }
   }
