@@ -11,6 +11,7 @@ import {
   buildHeadAndShouldersBars,
   buildLongBaseBreakdownBars,
   buildLongBaseBreakoutBars,
+  buildStaleHighDowntrendBars,
   buildUptrendBars,
 } from "../src/lib/engine/chart-pattern-fixtures";
 
@@ -118,6 +119,11 @@ const cases: Case[] = [
     name: "cup and handle fixture",
     bars: buildCupAndHandleBars(),
     expect: { cup_and_handle: true },
+  },
+  {
+    name: "stale highs downtrend (no double top)",
+    bars: buildStaleHighDowntrendBars(),
+    expect: { double_top: false, double_bottom: false },
   },
   {
     name: "downtrend negative control",

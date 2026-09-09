@@ -1,5 +1,9 @@
 import type { OhlcvBar } from "@/lib/types";
 import { getImplementedChartPatternIds } from "@/lib/patterns/chart-pattern-catalog";
+import {
+  detectDoubleBottomAt,
+  detectDoubleTopAt,
+} from "@/lib/engine/chart-pattern-swings";
 
 export const CHART_PATTERN_IDS = getImplementedChartPatternIds();
 
@@ -330,182 +334,20 @@ function detectDescendingTriangle(
   return crossesBelow(bars, support);
 }
 
-interface DoubleTopCandidate {
-  firstPeak: number;
-  secondPeak: number;
-  neckline: number;
-}
-
-function validateDoubleTopCandidate(
-  bars: OhlcvBar[],
-  idxA: number,
-  idxB: number,
-  options: ChartPatternOptions,
-): DoubleTopCandidate | null {
-  if (idxB - idxA < 8) return null;
-
-  const highA = bars[idxA]!.high;
-  const highB = bars[idxB]!.high;
-  if (!near(highA, highB, options.tolerancePct * 1.25)) return null;
-  if (highB > highA * 1.02) return null;
-
-  const between = bars.slice(idxA + 1, idxB);
-  if (between.length < 4) return null;
-
-  const neckline = Math.min(...between.map((b) => b.low));
-  const avgPeak = (highA + highB) / 2;
-  if (avgPeak <= 0) return null;
-
-  const valleyDepthPct = pctChange(neckline, avgPeak);
-  if (valleyDepthPct < options.minReversalDepthPct) return null;
-
-  const { high: windowHigh, range } = windowExtremes(bars);
-  if (range <= 0) return null;
-  if (highA < windowHigh - range * 0.15) return null;
-  if (highB < windowHigh - range * 0.15) return null;
-
-  const priorBars = Math.min(12, idxA);
-  if (priorBars >= 3) {
-    const priorLow = Math.min(
-      ...bars.slice(idxA - priorBars, idxA).map((b) => b.low),
-    );
-    if (priorLow <= 0) return null;
-    if (pctChange(priorLow, highA) < options.minReversalDepthPct) return null;
-  }
-
-  const minRecentIdx = Math.floor(bars.length * 0.55);
-  if (idxB < minRecentIdx) return null;
-
-  const barsSinceSecondPeak = bars.length - 1 - idxB;
-  const maxLag = maxCompletionLag(bars);
-  if (barsSinceSecondPeak < 1 || barsSinceSecondPeak > maxLag) return null;
-
-  const afterSecondPeak = bars.slice(idxB + 1, bars.length - 1);
-  if (afterSecondPeak.length > 0) {
-    const belowNeckline = afterSecondPeak.filter((b) => b.close < neckline).length;
-    if (belowNeckline > afterSecondPeak.length * 0.25) return null;
-    const retestLow = Math.min(...afterSecondPeak.map((b) => b.low));
-    if (retestLow > neckline * 1.04) return null;
-  }
-
-  return { firstPeak: idxA, secondPeak: idxB, neckline };
-}
-
-interface DoubleBottomCandidate {
-  firstTrough: number;
-  secondTrough: number;
-  neckline: number;
-}
-
-function validateDoubleBottomCandidate(
-  bars: OhlcvBar[],
-  idxA: number,
-  idxB: number,
-  options: ChartPatternOptions,
-): DoubleBottomCandidate | null {
-  if (idxB - idxA < 8) return null;
-
-  const lowA = bars[idxA]!.low;
-  const lowB = bars[idxB]!.low;
-  if (!near(lowA, lowB, options.tolerancePct * 1.25)) return null;
-  if (lowB < lowA * 0.98) return null;
-
-  const between = bars.slice(idxA + 1, idxB);
-  if (between.length < 4) return null;
-
-  const neckline = Math.max(...between.map((b) => b.high));
-  const avgTrough = (lowA + lowB) / 2;
-  if (avgTrough <= 0) return null;
-
-  const peakHeightPct = pctChange(avgTrough, neckline);
-  if (peakHeightPct < options.minReversalDepthPct) return null;
-
-  const { low: windowLow, range } = windowExtremes(bars);
-  if (range <= 0) return null;
-  if (lowA > windowLow + range * 0.15) return null;
-  if (lowB > windowLow + range * 0.15) return null;
-
-  const priorBars = Math.min(12, idxA);
-  if (priorBars >= 3) {
-    const priorHigh = Math.max(
-      ...bars.slice(idxA - priorBars, idxA).map((b) => b.high),
-    );
-    if (priorHigh <= 0) return null;
-    if (pctChange(priorHigh, lowA) > -options.minReversalDepthPct) return null;
-  }
-
-  const minRecentIdx = Math.floor(bars.length * 0.55);
-  if (idxB < minRecentIdx) return null;
-
-  const barsSinceSecondTrough = bars.length - 1 - idxB;
-  const maxLag = maxCompletionLag(bars);
-  if (barsSinceSecondTrough < 1 || barsSinceSecondTrough > maxLag) return null;
-
-  const afterSecondTrough = bars.slice(idxB + 1, bars.length - 1);
-  if (afterSecondTrough.length > 0) {
-    const aboveNeckline = afterSecondTrough.filter((b) => b.close > neckline).length;
-    if (aboveNeckline > afterSecondTrough.length * 0.25) return null;
-    const rallyHigh = Math.max(...afterSecondTrough.map((b) => b.high));
-    if (rallyHigh < neckline * 0.96) return null;
-  }
-
-  return { firstTrough: idxA, secondTrough: idxB, neckline };
-}
-
 function detectDoubleBottom(
   bars: OhlcvBar[],
-  options: ChartPatternOptions,
+  _options: ChartPatternOptions,
 ): boolean {
   if (bars.length < 24) return false;
-  const lows = swingLows(bars, 2);
-  if (lows.length < 2) return false;
-
-  let best: DoubleBottomCandidate | null = null;
-  for (let i = 0; i < lows.length - 1; i++) {
-    for (let j = i + 1; j < lows.length; j++) {
-      const candidate = validateDoubleBottomCandidate(
-        bars,
-        lows[i]!,
-        lows[j]!,
-        options,
-      );
-      if (!candidate) continue;
-      if (!best || candidate.secondTrough > best.secondTrough) {
-        best = candidate;
-      }
-    }
-  }
-  if (!best) return false;
-
-  return crossesAbove(bars, best.neckline);
+  return detectDoubleBottomAt(bars, bars.length - 1);
 }
 
 function detectDoubleTop(
   bars: OhlcvBar[],
-  options: ChartPatternOptions,
+  _options: ChartPatternOptions,
 ): boolean {
   if (bars.length < 24) return false;
-  const highs = swingHighs(bars, 2);
-  if (highs.length < 2) return false;
-
-  let best: DoubleTopCandidate | null = null;
-  for (let i = 0; i < highs.length - 1; i++) {
-    for (let j = i + 1; j < highs.length; j++) {
-      const candidate = validateDoubleTopCandidate(
-        bars,
-        highs[i]!,
-        highs[j]!,
-        options,
-      );
-      if (!candidate) continue;
-      if (!best || candidate.secondPeak > best.secondPeak) {
-        best = candidate;
-      }
-    }
-  }
-  if (!best) return false;
-
-  return crossesBelow(bars, best.neckline);
+  return detectDoubleTopAt(bars, bars.length - 1);
 }
 
 function detectHeadAndShoulders(

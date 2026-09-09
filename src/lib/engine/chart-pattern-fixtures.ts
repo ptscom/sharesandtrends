@@ -379,6 +379,44 @@ export function buildCupAndHandleBars(): OhlcvBar[] {
   return bars;
 }
 
+/** Early similar highs then long decline — must NOT be a double top */
+export function buildStaleHighDowntrendBars(): OhlcvBar[] {
+  const bars: OhlcvBar[] = [];
+  let price = 110;
+  for (let i = 0; i < 60; i++) {
+    let open = price;
+    let close = price;
+    let high = price;
+    let low = price;
+
+    if (i < 10) {
+      close = price + 0.8;
+      high = close + 0.5;
+      low = open - 0.3;
+    } else if (i === 14) {
+      high = 118;
+      close = 117.2;
+      low = 116.5;
+    } else if (i > 14 && i < 22) {
+      close = 116 - (i - 14) * 0.6;
+      high = close + 0.4;
+      low = close - 0.5;
+    } else if (i === 26) {
+      high = 117.5;
+      close = 116.8;
+      low = 116;
+    } else if (i > 26) {
+      close = 116.5 - (i - 26) * 1.1;
+      high = close + 0.35;
+      low = close - 0.45;
+    }
+
+    bars.push(bar(i, open, high, low, close));
+    price = close;
+  }
+  return bars;
+}
+
 export function buildLongBaseBreakoutBars(): OhlcvBar[] {
   const bars: OhlcvBar[] = [];
   for (let i = 0; i < 60; i++) {
