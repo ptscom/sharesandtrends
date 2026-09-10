@@ -89,7 +89,6 @@ import {
 } from "@/lib/patterns/exploration-strategies";
 import type { StrategyPreset } from "@/lib/patterns/strategies";
 import { STRATEGY_PRESETS } from "@/lib/patterns/strategies";
-import type { LibraryFilterId } from "@/lib/patterns/strategy-ui";
 import {
   getPattern,
   listPatterns,
@@ -201,7 +200,8 @@ export function ExploreClient() {
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   const [query, setQuery] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState<LibraryFilterId>("all");
+  const [categoryFilter, setCategoryFilter] =
+    useState<ExplorationCategoryId>("all");
   const [minWinRate, setMinWinRate] = useState(70);
   const [minTrades, setMinTrades] = useState(5);
   const [signalTodayOnly, setSignalTodayOnly] = useState(false);
@@ -217,22 +217,6 @@ export function ExploreClient() {
     () => [...STRATEGY_PRESETS, ...customStrategies],
     [customStrategies],
   );
-
-  const filteredPresets = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return allPresets.filter((preset) => {
-      if (categoryFilter !== "all" && preset.category !== categoryFilter) {
-        return false;
-      }
-      if (!q) return true;
-      return (
-        preset.pattern.name.toLowerCase().includes(q) ||
-        preset.category.toLowerCase().includes(q) ||
-        preset.id.toLowerCase().includes(q) ||
-        preset.entryLogic.toLowerCase().includes(q)
-      );
-    });
-  }, [allPresets, query, categoryFilter]);
 
   const activePreset = allPresets.find((p) => p.id === selectedId);
   const strategyName =
@@ -1017,7 +1001,7 @@ export function ExploreClient() {
 
               {timeframeMode === "mtf" ? (
                 <ExploreMtfStrategySelector
-                  presets={filteredPresets}
+                  presets={allPresets}
                   slots={mtfSlots}
                   modifiedPresetIds={modifiedPresetIds}
                   exitMode={mtfExitMode}
@@ -1034,7 +1018,7 @@ export function ExploreClient() {
                 />
               ) : (
                 <ExploreStrategySelector
-                  presets={filteredPresets}
+                  presets={allPresets}
                   selectedId={selectedId}
                   modifiedPresetIds={modifiedPresetIds}
                   query={query}

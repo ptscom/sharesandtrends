@@ -33,7 +33,7 @@ import {
   STRATEGY_PRESETS,
   type StrategyPreset,
 } from "@/lib/patterns/strategies";
-import type { LibraryFilterId } from "@/lib/patterns/strategy-ui";
+import type { ExplorationCategoryId } from "@/lib/explore/exploration-presets";
 import { listPatterns } from "@/lib/storage/patterns";
 import { getPriceBarsBatch, listSymbols } from "@/lib/storage/prices";
 import {
@@ -59,7 +59,8 @@ export function BacktestClient() {
   >({});
   const [storedSymbols, setStoredSymbols] = useState<string[]>([]);
   const [query, setQuery] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState<LibraryFilterId>("all");
+  const [categoryFilter, setCategoryFilter] =
+    useState<ExplorationCategoryId>("all");
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState({ done: 0, total: 0 });
   const [results, setResults] = useState<BacktestSweepRow[]>([]);
@@ -73,22 +74,6 @@ export function BacktestClient() {
     () => [...STRATEGY_PRESETS, ...customPresets],
     [customPresets],
   );
-
-  const filteredPresets = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return allPresets.filter((preset) => {
-      if (categoryFilter !== "all" && preset.category !== categoryFilter) {
-        return false;
-      }
-      if (!q) return true;
-      return (
-        preset.pattern.name.toLowerCase().includes(q) ||
-        preset.category.toLowerCase().includes(q) ||
-        preset.id.toLowerCase().includes(q) ||
-        preset.entryLogic.toLowerCase().includes(q)
-      );
-    });
-  }, [allPresets, query, categoryFilter]);
 
   const selectedStrategies = useMemo(
     () =>
@@ -336,7 +321,7 @@ export function BacktestClient() {
 
           {labView === "setup" && setupStep === "strategies" && (
             <StrategySelector
-              presets={filteredPresets}
+              presets={allPresets}
               selectedIds={selectedIds}
               strategyConfigs={strategyConfigs}
               query={query}

@@ -1,12 +1,12 @@
 "use client";
 
 import type { MouseEvent } from "react";
-import type { StrategyPreset } from "@/lib/patterns/strategies";
+import { ExploreCategoryTabs } from "@/components/explore/ExploreCategoryTabs";
 import {
-  LIBRARY_FILTERS,
-  categoryStyle,
-  type LibraryFilterId,
-} from "@/lib/patterns/strategy-ui";
+  explorationCategoryStyle,
+  type ExplorationCategoryId,
+} from "@/lib/explore/exploration-presets";
+import type { StrategyPreset } from "@/lib/patterns/strategies";
 import type { MtfExitMode, MtfSlot } from "@/lib/patterns/mtf-combine";
 import type { PatternDefinition } from "@/lib/types";
 
@@ -21,12 +21,12 @@ interface ExploreMtfStrategySelectorProps {
   modifiedPresetIds: string[];
   exitMode: MtfExitMode;
   query: string;
-  categoryFilter: LibraryFilterId;
+  categoryFilter: ExplorationCategoryId;
   activeSlot: MtfSlot;
   onActiveSlotChange: (slot: MtfSlot) => void;
   onExitModeChange: (mode: MtfExitMode) => void;
   onQueryChange: (query: string) => void;
-  onCategoryChange: (filter: LibraryFilterId) => void;
+  onCategoryChange: (filter: ExplorationCategoryId) => void;
   onSelect: (slot: MtfSlot, preset: StrategyPreset) => void;
   onClearSlot: (slot: MtfSlot) => void;
   onOpenSettings: (slot: MtfSlot, id: string, e: MouseEvent) => void;
@@ -57,10 +57,35 @@ export function ExploreMtfStrategySelector({
   onOpenSettings,
 }: ExploreMtfStrategySelectorProps) {
   const hasFilters = Boolean(slots.weekly || slots.monthly);
+  const q = query.trim().toLowerCase();
+  const visiblePresets = presets.filter((preset) => {
+    if (categoryFilter === "custom") return preset.category === "Custom";
+    if (categoryFilter === "favorites") return false;
+    if (
+      categoryFilter !== "all" &&
+      categoryFilter !== "Candlesticks" &&
+      preset.category !== categoryFilter
+    ) {
+      return false;
+    }
+    if (categoryFilter === "Candlesticks") return false;
+    if (!q) return true;
+    return (
+      preset.pattern.name.toLowerCase().includes(q) ||
+      preset.category.toLowerCase().includes(q) ||
+      preset.entryLogic.toLowerCase().includes(q) ||
+      preset.defaultParams.toLowerCase().includes(q)
+    );
+  });
 
   return (
     <section className="ui-panel p-6">
-      <div>
+      <ExploreCategoryTabs
+        category={categoryFilter}
+        onChange={onCategoryChange}
+      />
+
+      <div className="mt-4">
         <p className="ui-eyebrow">Step 2</p>
         <h2 className="ui-section-title mt-2">Multi-timeframe strategy</h2>
         <p className="ui-helper mt-1">
@@ -134,31 +159,18 @@ export function ExploreMtfStrategySelector({
           </p>
         )}
 
-        <div className="mt-3 flex flex-col gap-3 sm:flex-row">
+        <div className="mt-3">
           <input
             value={query}
             onChange={(e) => onQueryChange(e.target.value)}
             placeholder="Search strategies…"
-            className="ui-input flex-1"
+            className="ui-input w-full"
           />
-          <select
-            value={categoryFilter}
-            onChange={(e) =>
-              onCategoryChange(e.target.value as LibraryFilterId)
-            }
-            className="ui-input w-full sm:w-48"
-          >
-            {LIBRARY_FILTERS.map((filter) => (
-              <option key={filter.id} value={filter.id}>
-                {filter.label}
-              </option>
-            ))}
-          </select>
         </div>
 
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {presets.map((preset) => {
-            const style = categoryStyle(preset.category);
+          {visiblePresets.map((preset) => {
+            const style = explorationCategoryStyle(preset.category);
             const isSelected = slots[activeSlot]?.id === preset.id;
             const modified = modifiedPresetIds.includes(preset.id);
 

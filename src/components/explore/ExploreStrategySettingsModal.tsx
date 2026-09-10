@@ -46,9 +46,9 @@ export function ExploreStrategySettingsModal({
   const subtitle = useMemo(() => {
     if (settingsSubtitle) return settingsSubtitle;
     if (explorationPreset) {
-      return "Tune entry parameters the same way as indicator exploration. Exit and backtest settings are below.";
+      return "Entry parameters match indicator exploration. Configure signal exit and time exit below — whichever triggers first closes the trade.";
     }
-    return "Adjust indicator periods, thresholds, and backtest settings.";
+    return "Adjust entry, signal exit, time exit, and backtest settings.";
   }, [explorationPreset, settingsSubtitle]);
 
   useEffect(() => {
@@ -107,36 +107,38 @@ export function ExploreStrategySettingsModal({
 
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 space-y-6">
           {explorationPreset && onExplorationParamsChange ? (
-            <>
-              <section>
-                <p className="ui-field-label">Entry parameters</p>
-                <div className="mt-3">
-                  <ExplorationParamFields
-                    paramDefs={explorationPreset.params}
-                    params={draftParams}
-                    onChange={handleExplorationParamsChange}
-                  />
-                </div>
-              </section>
-              <section>
-                <OptimizationPanel
-                  pattern={pattern}
-                  onChange={onChange}
-                  hideGroups={
-                    hideBacktestSettings
-                      ? ["indicator", "threshold", "backtest"]
-                      : ["indicator", "threshold"]
-                  }
+            <section>
+              <p className="ui-field-label">Entry parameters</p>
+              <div className="mt-3">
+                <ExplorationParamFields
+                  paramDefs={explorationPreset.params}
+                  params={draftParams}
+                  onChange={handleExplorationParamsChange}
                 />
-              </section>
-            </>
+              </div>
+            </section>
           ) : (
             <OptimizationPanel
               pattern={pattern}
               onChange={onChange}
-              hideGroups={hideBacktestSettings ? ["backtest"] : []}
+              includeGroups={["indicator", "entry"]}
             />
           )}
+
+          <OptimizationPanel
+            pattern={pattern}
+            onChange={onChange}
+            includeGroups={["signal_exit"]}
+            emptyMessage="No signal exit configured yet."
+          />
+
+          <OptimizationPanel
+            pattern={pattern}
+            onChange={onChange}
+            includeGroups={
+              hideBacktestSettings ? ["time_exit"] : ["time_exit", "backtest"]
+            }
+          />
         </div>
 
         <div className="flex items-center justify-end gap-2 border-t border-border px-5 py-3">

@@ -6,7 +6,12 @@ import type {
   PatternDefinition,
 } from "@/lib/types";
 
-export type OptimizationVarGroup = "indicator" | "threshold" | "backtest";
+export type OptimizationVarGroup =
+  | "indicator"
+  | "entry"
+  | "signal_exit"
+  | "time_exit"
+  | "backtest";
 
 export interface OptimizationVar {
   id: string;
@@ -69,18 +74,24 @@ function thresholdLabel(path: string, op: string): string {
   return `${sectionLabel} ${op}${side}`;
 }
 
+function thresholdGroup(root: string): OptimizationVarGroup {
+  if (root === "exit") return "signal_exit";
+  return "entry";
+}
+
 function extractThresholdVars(
   expr: Expression | undefined,
   root: string,
 ): OptimizationVar[] {
   if (!expr) return [];
   const vars: OptimizationVar[] = [];
+  const group = thresholdGroup(root);
 
   walkExpression(expr, root, (node, path) => {
     if (node.left && !isExpression(node.left) && "value" in node.left) {
       vars.push({
         id: `threshold:${path}.left`,
-        group: "threshold",
+        group,
         label: thresholdLabel(path, node.op),
         type: Number.isInteger(node.left.value) ? "int" : "float",
         value: node.left.value,
@@ -92,7 +103,7 @@ function extractThresholdVars(
     if (node.right && !isExpression(node.right) && "value" in node.right) {
       vars.push({
         id: `threshold:${path}.right`,
-        group: "threshold",
+        group,
         label: thresholdLabel(path, node.op),
         type: Number.isInteger(node.right.value) ? "int" : "float",
         value: node.right.value,
@@ -107,7 +118,7 @@ function extractThresholdVars(
 }
 
 function extractBacktestVars(backtest: BacktestConfig): OptimizationVar[] {
-  const vars: OptimizationVar[] = [
+  return [
     {
       id: "backtest:entryOn",
       group: "backtest",
@@ -117,12 +128,14 @@ function extractBacktestVars(backtest: BacktestConfig): OptimizationVar[] {
       options: ["close", "next_open"],
     },
     {
-      id: "backtest:exitOn",
-      group: "backtest",
-      label: "Exit mode",
-      type: "enum",
-      value: backtest.exitOn,
-      options: ["opposite_signal", "fixed_hold"],
+      id: "backtest:holdDays",
+      group: "time_exit",
+      label: "Hold days",
+      type: "int",
+      value: backtest.holdDays ?? 10,
+      min: 1,
+      max: 252,
+      step: 1,
     },
     {
       id: "backtest:minTrades",
@@ -135,21 +148,6 @@ function extractBacktestVars(backtest: BacktestConfig): OptimizationVar[] {
       step: 1,
     },
   ];
-
-  if (backtest.exitOn === "fixed_hold") {
-    vars.push({
-      id: "backtest:holdDays",
-      group: "backtest",
-      label: "Hold days",
-      type: "int",
-      value: backtest.holdDays ?? 10,
-      min: 1,
-      max: 252,
-      step: 1,
-    });
-  }
-
-  return vars;
 }
 
 export function extractOptimizationVars(
@@ -253,9 +251,6 @@ export function applyOptimizationVar(
   if (id.startsWith("backtest:")) {
     const key = id.replace("backtest:", "") as keyof BacktestConfig;
     const backtest = { ...pattern.backtest, [key]: value };
-    if (key === "exitOn" && value !== "fixed_hold") {
-      delete backtest.holdDays;
-    }
     return { ...pattern, backtest };
   }
 
