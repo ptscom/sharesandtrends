@@ -60,6 +60,17 @@ function walkExpression(
   }
 }
 
+/** Signal aliases that use 0/1 encoding; threshold literals are not user-tunable. */
+const INTERNAL_SIGNAL_ALIASES = new Set(["dormant_break"]);
+
+function isInternalThreshold(node: Expression): boolean {
+  const leftRef =
+    node.left && !isExpression(node.left) && "ref" in node.left
+      ? node.left.ref
+      : null;
+  return leftRef != null && INTERNAL_SIGNAL_ALIASES.has(leftRef);
+}
+
 function thresholdLabel(path: string, op: string): string {
   const section = path.split(".")[0] ?? path;
   const sectionLabel =
@@ -88,6 +99,8 @@ function extractThresholdVars(
   const group = thresholdGroup(root);
 
   walkExpression(expr, root, (node, path) => {
+    if (isInternalThreshold(node)) return;
+
     if (node.left && !isExpression(node.left) && "value" in node.left) {
       vars.push({
         id: `threshold:${path}.left`,
