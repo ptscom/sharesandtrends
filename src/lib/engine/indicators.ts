@@ -53,6 +53,88 @@ function priorRolling(
   });
 }
 
+type OhlcField = "open" | "high" | "low" | "close";
+
+function barField(bar: OhlcvBar, field: OhlcField): number {
+  return bar[field];
+}
+
+function computeDormantPriceBreak(
+  bars: OhlcvBar[],
+  lookback: number,
+  source: OhlcField,
+  minCross: number,
+  direction: "up" | "down",
+): { signal: (number | null)[]; level: (number | null)[] } {
+  const field = bars.map((bar) => barField(bar, source));
+  const signal: (number | null)[] = [];
+  const level: (number | null)[] = [];
+
+  for (let i = 0; i < bars.length; i++) {
+    const current = field[i];
+    if (current == null || !Number.isFinite(current)) {
+      signal.push(null);
+      level.push(null);
+      continue;
+    }
+
+    if (i < lookback) {
+      signal.push(0);
+      level.push(null);
+      continue;
+    }
+
+    let matchedLevel: number | null = null;
+
+    for (let j = 0; j <= i - lookback; j++) {
+      const pricePoint = field[j];
+      if (pricePoint == null || !Number.isFinite(pricePoint)) continue;
+
+      if (direction === "up") {
+        if (current <= pricePoint + minCross) continue;
+
+        let dormant = true;
+        for (let k = j + 1; k < i; k++) {
+          if (field[k]! >= pricePoint) {
+            dormant = false;
+            break;
+          }
+        }
+        if (!dormant) continue;
+
+        if (matchedLevel === null || pricePoint > matchedLevel) {
+          matchedLevel = pricePoint;
+        }
+      } else {
+        if (current >= pricePoint - minCross) continue;
+
+        let dormant = true;
+        for (let k = j + 1; k < i; k++) {
+          if (field[k]! <= pricePoint) {
+            dormant = false;
+            break;
+          }
+        }
+        if (!dormant) continue;
+
+        if (matchedLevel === null || pricePoint < matchedLevel) {
+          matchedLevel = pricePoint;
+        }
+      }
+    }
+
+    if (matchedLevel !== null) {
+      signal.push(1);
+      level.push(matchedLevel);
+    } else {
+      signal.push(0);
+      level.push(null);
+    }
+  }
+
+  return { signal, level };
+}
+
 function priorRollingRangePct(
   bars: OhlcvBar[],
   period: number,
@@ -362,6 +444,22 @@ function computeOnBars(
     case "rolling_range_pct": {
       const length = Number(params.length ?? 10);
       result[def.alias] = priorRollingRangePct(bars, length);
+      break;
+    }
+    case "dormant_price_break": {
+      const lookback = Number(params.lookback ?? 200);
+      const minCross = Number(params.minCross ?? 0.001);
+      const direction = String(params.direction ?? "up") === "down" ? "down" : "up";
+      const source = (params.source as OhlcField) ?? "high";
+      const dormant = computeDormantPriceBreak(
+        bars,
+        lookback,
+        source,
+        minCross,
+        direction,
+      );
+      result[def.alias] = dormant.signal;
+      result[`${def.alias}_level`] = dormant.level;
       break;
     }
     case "momentum": {

@@ -438,6 +438,7 @@ export const INDICATOR_SHORT_NAMES: Record<string, string> = {
   rolling_high: "Rolling High",
   rolling_low: "Rolling Low",
   rolling_range_pct: "Rolling Range %",
+  dormant_price_break: "Dormant Price Break",
   volume_sma: "Vol SMA",
   candle_pattern: "Candle",
   chart_pattern: "Chart",

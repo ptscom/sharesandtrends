@@ -126,9 +126,14 @@ export function inferExplorationParams(
       }
       case "lookback": {
         const source = pattern.indicators.find((indicator) =>
-          ["rolling_high", "rolling_low", "rolling_range_pct", "chart_pattern", "darvas_box"].includes(
-            indicator.type,
-          ),
+          [
+            "rolling_high",
+            "rolling_low",
+            "rolling_range_pct",
+            "dormant_price_break",
+            "chart_pattern",
+            "darvas_box",
+          ].includes(indicator.type),
         );
         const lookback = source ? indicatorPeriod(source) : null;
         if (lookback !== null) params.lookback = lookback;
@@ -146,11 +151,19 @@ export function inferExplorationParams(
       case "threshold":
         if (entryValue !== null) params.threshold = entryValue;
         break;
-      case "price":
+      case "price": {
         if (entryLeft && ["open", "high", "low", "close"].includes(entryLeft)) {
           params.price = entryLeft;
+          break;
+        }
+        const dormant = pattern.indicators.find(
+          (indicator) => indicator.type === "dormant_price_break",
+        );
+        if (dormant?.params.source) {
+          params.price = String(dormant.params.source);
         }
         break;
+      }
       case "op":
         params.op = entry.op;
         break;

@@ -425,31 +425,45 @@ function buildTightRangeHighBreakout(
   };
 }
 
-function buildRollingExtremeBreak(
-  direction: "high" | "low",
+function dormantBreakEntry(op: string): Expression {
+  const normalized = String(op);
+  if (normalized === "crosses_below") {
+    return expr("crosses_above", "dormant_break", 0.5);
+  }
+  if (normalized === "gt" || normalized === "gte" || normalized === "lt" || normalized === "lte") {
+    return expr(normalized as Expression["op"], "dormant_break", 0.5);
+  }
+  return expr("crosses_above", "dormant_break", 0.5);
+}
+
+function buildDormantPriceBreak(
+  direction: "up" | "down",
   params: Record<string, number | string>,
   timeframeMode: ExploreTimeframeMode,
   name: string,
 ): PatternDefinition {
   const lookback = Number(params.lookback ?? 200);
-  const defaultPrice = direction === "high" ? "high" : "low";
-  const defaultOp = direction === "high" ? "crosses_above" : "crosses_below";
+  const defaultPrice = direction === "up" ? "high" : "low";
+  const defaultOp = direction === "up" ? "crosses_above" : "crosses_below";
   const price = String(params.price ?? defaultPrice);
-  const op = String(params.op ?? defaultOp) as Expression["op"];
-  const alias = direction === "high" ? "rolling_high" : "rolling_low";
-  const indicatorType = direction === "high" ? "rolling_high" : "rolling_low";
+  const op = String(params.op ?? defaultOp);
 
   return {
     name,
     indicators: [
       {
-        alias,
-        type: indicatorType,
-        params: { length: lookback },
+        alias: "dormant_break",
+        type: "dormant_price_break",
+        params: {
+          lookback,
+          source: price,
+          minCross: 0.001,
+          direction,
+        },
         timeframe: toTf(timeframeMode),
       },
     ],
-    entry: expr(op, price, alias),
+    entry: dormantBreakEntry(op),
     backtest: { entryOn: "close", exitOn: "opposite_signal" },
   };
 }
@@ -1571,7 +1585,7 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
     category: "Breakout",
     kind: "price_breakout",
     description:
-      "Price high breaks above the highest high of the prior N bars (not all-time high)",
+      "Price crosses above an exact prior price point last hit at least N bars ago (by at least 0.001)",
     params: [
       LOOKBACK_PARAM,
       {
@@ -1590,12 +1604,12 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
       },
     ],
     buildPattern: (params, tf) =>
-      buildRollingExtremeBreak("high", params, tf, "New High After Lookback"),
+      buildDormantPriceBreak("up", params, tf, "New High After Lookback"),
     describe: (params) => {
       const lookback = Number(params.lookback ?? 200);
       const price = String(params.price ?? "high");
       const op = String(params.op ?? "crosses_above");
-      return `${priceLabel(price)} ${opLabel(op).toLowerCase()} ${lookback}-bar high`;
+      return `${priceLabel(price)} ${opLabel(op).toLowerCase()} price point dormant ${lookback}+ bars`;
     },
   },
   {
@@ -1639,7 +1653,7 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
     category: "Breakout",
     kind: "price_breakout",
     description:
-      "Price low breaks below the lowest low of the prior N bars",
+      "Price crosses below an exact prior price point last hit at least N bars ago (by at least 0.001)",
     params: [
       LOOKBACK_PARAM,
       {
@@ -1658,12 +1672,12 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
       },
     ],
     buildPattern: (params, tf) =>
-      buildRollingExtremeBreak("low", params, tf, "New Low After Lookback"),
+      buildDormantPriceBreak("down", params, tf, "New Low After Lookback"),
     describe: (params) => {
       const lookback = Number(params.lookback ?? 200);
       const price = String(params.price ?? "low");
       const op = String(params.op ?? "crosses_below");
-      return `${priceLabel(price)} ${opLabel(op).toLowerCase()} ${lookback}-bar low`;
+      return `${priceLabel(price)} ${opLabel(op).toLowerCase()} price point dormant ${lookback}+ bars`;
     },
   },
   {

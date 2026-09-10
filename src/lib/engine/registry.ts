@@ -239,6 +239,28 @@ export const INDICATOR_REGISTRY: IndicatorDefinition[] = [
     outputs: ["rolling_range_pct"],
   },
   {
+    id: "dormant_price_break",
+    name: "Dormant Price Break",
+    category: "price",
+    params: {
+      lookback: { type: "int", default: 200, min: 2, max: 1000, label: "Min bars since last hit" },
+      source: {
+        type: "enum",
+        default: "high",
+        options: ["open", "high", "low", "close"],
+        label: "Price field",
+      },
+      minCross: { type: "float", default: 0.001, min: 0.0001, max: 1, label: "Min cross margin" },
+      direction: {
+        type: "enum",
+        default: "up",
+        options: ["up", "down"],
+        label: "Direction",
+      },
+    },
+    outputs: ["signal", "level"],
+  },
+  {
     id: "momentum",
     name: "Price Momentum %",
     category: "momentum",
