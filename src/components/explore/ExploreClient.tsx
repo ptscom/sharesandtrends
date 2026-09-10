@@ -65,7 +65,10 @@ import {
 } from "@/lib/explore/exploration-filter-key";
 import type { ExplorePath } from "@/lib/explore/indicator-models";
 import { patternToPreset } from "@/lib/patterns/custom";
-import { EMA_CROSS_PATTERN } from "@/lib/patterns/defaults";
+import {
+  DEFAULT_STRATEGY_PRESET_ID,
+  EMA_CROSS_PATTERN,
+} from "@/lib/patterns/defaults";
 import {
   combineMtfPatterns,
   formatMtfExitModeLabel,
@@ -177,11 +180,11 @@ export function ExploreClient() {
   >(null);
   const [lastScanPath, setLastScanPath] = useState<ExplorePath | null>(null);
 
-  const [selectedId, setSelectedId] = useState("ema-cross");
+  const [selectedId, setSelectedId] = useState(DEFAULT_STRATEGY_PRESET_ID);
   const [pattern, setPattern] = useState<PatternDefinition>(EMA_CROSS_PATTERN);
   const [timeframeMode, setTimeframeMode] = useState<ExploreTimeframeMode>("1D");
   const [mtfSlots, setMtfSlots] = useState<Record<MtfSlot, MtfSlotSelection | null>>({
-    daily: { id: "ema-cross", pattern: EMA_CROSS_PATTERN },
+    daily: { id: DEFAULT_STRATEGY_PRESET_ID, pattern: EMA_CROSS_PATTERN },
     weekly: null,
     monthly: null,
   });
@@ -555,7 +558,7 @@ export function ExploreClient() {
 
   useEffect(() => {
     if (searchParams.get("patternId")) return;
-    void getEffectivePreset("ema-cross").then(({ pattern: next }) => {
+    void getEffectivePreset(DEFAULT_STRATEGY_PRESET_ID).then(({ pattern: next }) => {
       setPattern(structuredClone(next));
     });
   }, [searchParams]);

@@ -21,7 +21,10 @@ import {
   type RuleOp,
   type SimpleRule,
 } from "@/lib/patterns/rule-builder";
-import { EMA_CROSS_PATTERN } from "@/lib/patterns/defaults";
+import {
+  DEFAULT_STRATEGY_PRESET_ID,
+  EMA_CROSS_PATTERN,
+} from "@/lib/patterns/defaults";
 import { STRATEGY_PRESETS } from "@/lib/patterns/strategies";
 import {
   deletePattern,
@@ -45,8 +48,10 @@ const RULE_OPS: { value: RuleOp; label: string }[] = [
 export function StrategyBuilder() {
   const router = useRouter();
   const [pattern, setPattern] = useState<PatternDefinition>(EMA_CROSS_PATTERN);
-  const [selectedSource, setSelectedSource] = useState("ema-cross");
-  const [editingId, setEditingId] = useState<string | null>("ema-cross");
+  const [selectedSource, setSelectedSource] = useState(DEFAULT_STRATEGY_PRESET_ID);
+  const [editingId, setEditingId] = useState<string | null>(
+    DEFAULT_STRATEGY_PRESET_ID,
+  );
   const [isModified, setIsModified] = useState(false);
   const [modifiedPresetIds, setModifiedPresetIds] = useState<string[]>([]);
   const [savedPatterns, setSavedPatterns] = useState<PatternDefinition[]>([]);
@@ -85,7 +90,7 @@ export function StrategyBuilder() {
   }, [refreshSaved]);
 
   useEffect(() => {
-    void getEffectivePreset("ema-cross").then(({ pattern, isModified }) => {
+    void getEffectivePreset(DEFAULT_STRATEGY_PRESET_ID).then(({ pattern, isModified }) => {
       setPattern(structuredClone(pattern));
       setIsModified(isModified);
     });
@@ -246,7 +251,7 @@ export function StrategyBuilder() {
       }
       setEditingId(null);
       setPattern(EMA_CROSS_PATTERN);
-      setSelectedSource("ema-cross");
+      setSelectedSource(DEFAULT_STRATEGY_PRESET_ID);
       setStatus("Custom strategy deleted.");
       setTimeout(() => setStatus(null), 4000);
     } catch (err) {

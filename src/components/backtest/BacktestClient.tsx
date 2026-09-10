@@ -28,7 +28,11 @@ import {
   type StrategySweepState,
 } from "@/lib/engine/param-sweep";
 import { getEffectivePreset } from "@/lib/patterns/preset-store";
-import { STRATEGY_PRESETS, type StrategyPreset } from "@/lib/patterns/strategies";
+import {
+  DEFAULT_STRATEGY_PRESET_ID,
+  STRATEGY_PRESETS,
+  type StrategyPreset,
+} from "@/lib/patterns/strategies";
 import type { LibraryFilterId } from "@/lib/patterns/strategy-ui";
 import { listPatterns } from "@/lib/storage/patterns";
 import { getPriceBarsBatch, listSymbols } from "@/lib/storage/prices";
@@ -44,7 +48,9 @@ export function BacktestClient() {
   const [selectedSymbols, setSelectedSymbols] = useState<string[]>([]);
   const [useAllStored, setUseAllStored] = useState(false);
   const [symbolsInitialized, setSymbolsInitialized] = useState(false);
-  const [selectedIds, setSelectedIds] = useState<string[]>(["ema-cross"]);
+  const [selectedIds, setSelectedIds] = useState<string[]>([
+    DEFAULT_STRATEGY_PRESET_ID,
+  ]);
   const [settingsStrategyId, setSettingsStrategyId] = useState<string | null>(
     null,
   );
