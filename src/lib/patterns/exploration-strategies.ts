@@ -289,3 +289,179 @@ export function getExplorationStrategyPreset(
   if (!exploration) return undefined;
   return explorationPresetToStrategy(exploration);
 }
+
+function indicatorPeriod(indicator: PatternDefinition["indicators"][number]): number | null {
+  const raw =
+    indicator.params.length ??
+    indicator.params.period ??
+    indicator.params.lookback ??
+    indicator.params.maPeriod;
+  return raw === undefined ? null : Number(raw);
+}
+
+export function inferExplorationParams(
+  preset: ExplorationPreset,
+  pattern: PatternDefinition,
+): Record<string, number | string> {
+  const params = defaultParams(preset);
+  const entry = pattern.entry;
+  const entryLeft = refName(entry.left);
+  const entryRight = refName(entry.right);
+  const entryValue = thresholdValue(entry.right);
+
+  for (const def of preset.params) {
+    switch (def.key) {
+      case "period": {
+        const period = indicatorPeriod(pattern.indicators[0]!);
+        if (period !== null) params.period = period;
+        break;
+      }
+      case "fastPeriod": {
+        const fast =
+          pattern.indicators.find((indicator) => indicator.alias === "fast") ??
+          pattern.indicators[0];
+        const period = fast ? indicatorPeriod(fast) : null;
+        if (period !== null) params.fastPeriod = period;
+        break;
+      }
+      case "slowPeriod": {
+        const slow =
+          pattern.indicators.find((indicator) => indicator.alias === "slow") ??
+          pattern.indicators[1];
+        const period = slow ? indicatorPeriod(slow) : null;
+        if (period !== null) params.slowPeriod = period;
+        break;
+      }
+      case "lookback": {
+        const source = pattern.indicators.find((indicator) =>
+          ["rolling_high", "rolling_low", "rolling_range_pct", "chart_pattern", "darvas_box"].includes(
+            indicator.type,
+          ),
+        );
+        const lookback = source ? indicatorPeriod(source) : null;
+        if (lookback !== null) params.lookback = lookback;
+        break;
+      }
+      case "maxRangePct": {
+        const filterValue = thresholdValue(pattern.filters?.right);
+        if (filterValue !== null) params.maxRangePct = filterValue;
+        break;
+      }
+      case "threshold":
+        if (entryValue !== null) params.threshold = entryValue;
+        break;
+      case "price":
+        if (entryLeft && ["open", "high", "low", "close"].includes(entryLeft)) {
+          params.price = entryLeft;
+        }
+        break;
+      case "op":
+        params.op = entry.op;
+        break;
+      case "band": {
+        const bandRef = entryRight ?? "";
+        if (bandRef.includes("upper")) params.band = "upper";
+        else if (bandRef.includes("lower")) params.band = "lower";
+        else if (bandRef.includes("middle")) params.band = "middle";
+        break;
+      }
+      case "std": {
+        const bb = pattern.indicators.find((indicator) => indicator.type === "bb");
+        if (bb?.params.stdDev !== undefined) params.std = Number(bb.params.stdDev);
+        break;
+      }
+      case "pct": {
+        const envelope = pattern.indicators.find(
+          (indicator) => indicator.type === "envelope",
+        );
+        if (envelope?.params.pct !== undefined) params.pct = Number(envelope.params.pct);
+        break;
+      }
+      case "fast": {
+        const macd = pattern.indicators.find((indicator) => indicator.type === "macd");
+        if (macd?.params.fast !== undefined) params.fast = Number(macd.params.fast);
+        break;
+      }
+      case "slow": {
+        const macd = pattern.indicators.find((indicator) => indicator.type === "macd");
+        if (macd?.params.slow !== undefined) params.slow = Number(macd.params.slow);
+        break;
+      }
+      case "signal": {
+        const macd = pattern.indicators.find((indicator) => indicator.type === "macd");
+        if (macd?.params.signal !== undefined) {
+          params.signal = Number(macd.params.signal);
+        } else {
+          const trix = pattern.indicators.find((indicator) => indicator.type === "trix");
+          if (trix?.params.signal !== undefined) {
+            params.signal = Number(trix.params.signal);
+          }
+        }
+        break;
+      }
+      case "k": {
+        const stoch = pattern.indicators.find(
+          (indicator) => indicator.type === "stochastic",
+        );
+        if (stoch?.params.period !== undefined) params.k = Number(stoch.params.period);
+        break;
+      }
+      case "d": {
+        const stoch = pattern.indicators.find(
+          (indicator) => indicator.type === "stochastic",
+        );
+        if (stoch?.params.signal !== undefined) params.d = Number(stoch.params.signal);
+        break;
+      }
+      case "rsiPeriod": {
+        const stochRsi = pattern.indicators.find(
+          (indicator) => indicator.type === "stoch_rsi",
+        );
+        if (stochRsi?.params.rsiPeriod !== undefined) {
+          params.rsiPeriod = Number(stochRsi.params.rsiPeriod);
+        }
+        break;
+      }
+      case "stochPeriod": {
+        const stochRsi = pattern.indicators.find(
+          (indicator) => indicator.type === "stoch_rsi",
+        );
+        if (stochRsi?.params.stochPeriod !== undefined) {
+          params.stochPeriod = Number(stochRsi.params.stochPeriod);
+        }
+        break;
+      }
+      case "minDays":
+        if (pattern.filters?.minBars) params.minDays = pattern.filters.minBars;
+        break;
+      case "priorCompare":
+        if (pattern.filters?.op === "streak_above") params.priorCompare = "above";
+        else if (pattern.filters?.op === "streak_below") params.priorCompare = "below";
+        break;
+      default:
+        break;
+    }
+  }
+
+  return params;
+}
+
+export function rebuildStrategyPattern(
+  presetId: string,
+  params: Record<string, number | string>,
+  existing?: PatternDefinition,
+  timeframeMode: "1D" | "1W" | "1M" | "mtf" = "1D",
+): PatternDefinition {
+  const preset = EXPLORATION_PRESETS.find((item) => item.id === presetId);
+  if (!preset) {
+    throw new Error(`Unknown exploration preset: ${presetId}`);
+  }
+
+  const rebuilt = explorationPresetToStrategy(preset, params, timeframeMode);
+  return {
+    ...rebuilt.pattern,
+    id: existing?.id ?? presetId,
+    exit: existing?.exit ?? rebuilt.pattern.exit,
+    backtest: existing?.backtest ?? rebuilt.pattern.backtest,
+  };
+}

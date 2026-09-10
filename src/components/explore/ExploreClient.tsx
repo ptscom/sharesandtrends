@@ -83,6 +83,10 @@ import {
   isBuiltInPresetId,
   listModifiedPresetIds,
 } from "@/lib/patterns/preset-store";
+import {
+  inferExplorationParams,
+  rebuildStrategyPattern,
+} from "@/lib/patterns/exploration-strategies";
 import type { StrategyPreset } from "@/lib/patterns/strategies";
 import { STRATEGY_PRESETS } from "@/lib/patterns/strategies";
 import type { LibraryFilterId } from "@/lib/patterns/strategy-ui";
@@ -631,6 +635,20 @@ export function ExploreClient() {
       ? pattern
       : (mtfSlots[settingsTarget]?.pattern ?? null);
 
+  const settingsPresetId =
+    settingsTarget === "single"
+      ? selectedId
+      : (mtfSlots[settingsTarget]?.id ?? null);
+
+  const strategyExplorationPreset = settingsPresetId
+    ? getExplorationPreset(settingsPresetId)
+    : null;
+
+  const strategyExplorationParams = useMemo(() => {
+    if (!strategyExplorationPreset || !settingsPattern) return undefined;
+    return inferExplorationParams(strategyExplorationPreset, settingsPattern);
+  }, [strategyExplorationPreset, settingsPattern]);
+
   const isMtfFilterSettings =
     settingsTarget === "weekly" || settingsTarget === "monthly";
 
@@ -657,6 +675,26 @@ export function ExploreClient() {
       });
     },
     [settingsTarget],
+  );
+
+  const handleStrategyExplorationParamsChange = useCallback(
+    (params: Record<string, number | string>) => {
+      if (!settingsPresetId || !strategyExplorationPreset) return;
+      const next = rebuildStrategyPattern(
+        settingsPresetId,
+        params,
+        settingsPattern ?? undefined,
+        timeframeMode,
+      );
+      updateSettingsPattern(next);
+    },
+    [
+      settingsPresetId,
+      strategyExplorationPreset,
+      settingsPattern,
+      timeframeMode,
+      updateSettingsPattern,
+    ],
   );
 
   const saveStrategySettings = useCallback(async () => {
@@ -1071,6 +1109,8 @@ export function ExploreClient() {
         open={settingsOpen}
         pattern={settingsPattern}
         strategyName={settingsStrategyName}
+        explorationPreset={strategyExplorationPreset}
+        explorationParams={strategyExplorationParams}
         settingsSubtitle={
           isMtfFilterSettings
             ? "Adjust filter indicator parameters and entry thresholds only."
@@ -1080,6 +1120,7 @@ export function ExploreClient() {
         onClose={() => setSettingsOpen(false)}
         onSave={() => void saveStrategySettings()}
         onChange={updateSettingsPattern}
+        onExplorationParamsChange={handleStrategyExplorationParamsChange}
       />
 
       {presetForSettings && (
