@@ -1,4 +1,8 @@
 import { runBacktest } from "@/lib/engine/backtest";
+import {
+  type BacktestRunSettings,
+  filterBarsForBacktest,
+} from "@/lib/engine/backtest-run-settings";
 import type { TradeSettings } from "@/lib/engine/trade-settings";
 import { buildSweepVarsForStrategy } from "@/lib/patterns/exploration-sweep-vars";
 import { normalizeExplorationStrategyPattern } from "@/lib/patterns/exploration-sweep-vars";
@@ -98,17 +102,25 @@ export function generateSweepValues(config: SweepVarConfig): (number | string)[]
 export function generateParamCombos(
   vars: SweepVarConfig[],
 ): Record<string, number | string>[] {
-  const active = vars.filter((v) => v.enabled);
-  if (active.length === 0) return [{}];
+  const fixedVars = vars.filter((v) => v.enabled && !v.sweep);
+  const sweepVars = vars.filter((v) => v.enabled && v.sweep);
 
-  const valueLists = active.map((v) => ({
+  const fixedCombo = Object.fromEntries(
+    fixedVars.map((v) => [v.id, v.value]),
+  );
+
+  if (sweepVars.length === 0) {
+    return [fixedCombo];
+  }
+
+  const valueLists = sweepVars.map((v) => ({
     id: v.id,
     values: generateSweepValues(v),
   }));
 
   if (valueLists.some((list) => list.values.length === 0)) return [];
 
-  const combos = valueLists.reduce<Record<string, number | string>[]>(
+  const sweepCombos = valueLists.reduce<Record<string, number | string>[]>(
     (acc, { id, values }) =>
       acc.flatMap((combo) =>
         values.map((value) => ({ ...combo, [id]: value })),
@@ -116,7 +128,7 @@ export function generateParamCombos(
     [{}],
   );
 
-  return combos;
+  return sweepCombos.map((combo) => ({ ...fixedCombo, ...combo }));
 }
 
 export function countParamCombos(vars: SweepVarConfig[]): number {
@@ -153,6 +165,7 @@ export interface RunSweepOptions {
   symbols: string[];
   priceData: Record<string, import("@/lib/types").OhlcvBar[]>;
   tradeSettings?: TradeSettings;
+  runSettings?: BacktestRunSettings;
   onProgress?: (done: number, total: number) => void;
   maxCombosPerStrategy?: number;
   maxTotalRuns?: number;
@@ -194,6 +207,7 @@ export async function runParameterSweep(
     priceData,
     onProgress,
     tradeSettings,
+    runSettings,
     maxCombosPerStrategy = MAX_COMBOS_PER_STRATEGY,
     maxTotalRuns = MAX_TOTAL_RUNS,
   } = options;
@@ -226,7 +240,10 @@ export async function runParameterSweep(
       for (const symbol of symbols) {
         if (done >= maxTotalRuns) break;
 
-        const bars = priceData[symbol];
+        const rawBars = priceData[symbol];
+        const bars = rawBars
+          ? filterBarsForBacktest(rawBars, runSettings ?? { dateFrom: null, dateTo: null })
+          : undefined;
         if (!bars || bars.length < 60) {
           done += 1;
           onProgress?.(done, total);

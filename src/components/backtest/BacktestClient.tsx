@@ -14,6 +14,11 @@ import { StrategySettingsModal } from "@/components/backtest/StrategySettingsMod
 import { TradeSettingsPanel } from "@/components/backtest/TradeSettingsPanel";
 import { SymbolSelector } from "@/components/shared/SymbolSelector";
 import {
+  DEFAULT_BACKTEST_RUN_SETTINGS,
+  formatBacktestRunSettingsSummary,
+  type BacktestRunSettings,
+} from "@/lib/engine/backtest-run-settings";
+import {
   DEFAULT_TRADE_SETTINGS,
   formatTradeSettingsSummary,
   type TradeSettings,
@@ -69,6 +74,9 @@ export function BacktestClient() {
   const [customPresets, setCustomPresets] = useState<StrategyPreset[]>([]);
   const [tradeSettings, setTradeSettings] =
     useState<TradeSettings>(DEFAULT_TRADE_SETTINGS);
+  const [runSettings, setRunSettings] = useState<BacktestRunSettings>(
+    DEFAULT_BACKTEST_RUN_SETTINGS,
+  );
 
   const allPresets = useMemo(
     () => [...STRATEGY_PRESETS, ...customPresets],
@@ -120,7 +128,7 @@ export function BacktestClient() {
         ? selectedStrategies[0]!.name
         : `${selectedStrategies.length} strategies`;
 
-  const tradeSummary = formatTradeSettingsSummary(tradeSettings);
+  const tradeSummary = `${formatBacktestRunSettingsSummary(runSettings)} · ${formatTradeSettingsSummary(tradeSettings)}`;
 
   useEffect(() => {
     void listSymbols().then((list) => {
@@ -231,6 +239,16 @@ export function BacktestClient() {
       setError(estimate.warnings[0]!);
       return;
     }
+    if (
+      runSettings.dateFrom &&
+      runSettings.dateTo &&
+      runSettings.dateFrom > runSettings.dateTo
+    ) {
+      setError("Backtest date range: From must be on or before To.");
+      setLabView("setup");
+      setSetupStep("trade");
+      return;
+    }
 
     setRunning(true);
     setProgress({ done: 0, total: estimate.total });
@@ -247,6 +265,7 @@ export function BacktestClient() {
         symbols: universe,
         priceData,
         tradeSettings,
+        runSettings,
         onProgress: (done, total) => setProgress({ done, total }),
       });
 
@@ -264,7 +283,15 @@ export function BacktestClient() {
     } finally {
       setRunning(false);
     }
-  }, [selectedStrategies, selectedSymbols, useAllStored, storedSymbols, estimate, tradeSettings]);
+  }, [
+    selectedStrategies,
+    selectedSymbols,
+    useAllStored,
+    storedSymbols,
+    estimate,
+    tradeSettings,
+    runSettings,
+  ]);
 
   const goToSetup = (step: BacktestSetupStep) => {
     startTransition(() => {
@@ -339,6 +366,8 @@ export function BacktestClient() {
             <TradeSettingsPanel
               settings={tradeSettings}
               onChange={setTradeSettings}
+              runSettings={runSettings}
+              onRunSettingsChange={setRunSettings}
             />
           )}
 
@@ -346,6 +375,7 @@ export function BacktestClient() {
             <ConsolidatedResultsPanel
               rows={results}
               completedAt={completedAt}
+              dateRangeSummary={formatBacktestRunSettingsSummary(runSettings)}
             />
           )}
         </main>

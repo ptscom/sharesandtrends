@@ -50,14 +50,63 @@ function groupBy<T>(
   return map;
 }
 
+function primaryParamLabel(rows: BacktestSweepRow[]): string {
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    counts.set(row.paramLabel, (counts.get(row.paramLabel) ?? 0) + 1);
+  }
+  const sorted = [...counts.entries()].sort(
+    (a, b) => b[1] - a[1] || a[0].localeCompare(b[0]),
+  );
+  return sorted[0]?.[0] ?? "Default";
+}
+
+/** One backtest run per symbol (avoids double-counting when parameter sweep is enabled). */
+export function pickCanonicalRows(rows: BacktestSweepRow[]): BacktestSweepRow[] {
+  if (rows.length === 0) return [];
+
+  const byStrategy = groupBy(rows, (row) => row.strategyId);
+  const canonical: BacktestSweepRow[] = [];
+
+  for (const strategyRows of byStrategy.values()) {
+    const label = primaryParamLabel(strategyRows);
+    const bySymbol = groupBy(strategyRows, (row) => row.symbol);
+    for (const symbolRows of bySymbol.values()) {
+      const row =
+        symbolRows.find((item) => item.paramLabel === label) ?? symbolRows[0]!;
+      canonical.push(row);
+    }
+  }
+
+  return canonical;
+}
+
 function makeMetrics(rows: BacktestSweepRow[]): LayerMetrics {
-  const trades = rows.flatMap((row) => row.trades);
+  const canonicalRows = pickCanonicalRows(rows);
+  const trades = canonicalRows.flatMap((row) => row.trades);
   return {
     runs: rows.length,
-    symbolCount: new Set(rows.map((row) => row.symbol)).size,
-    strategyCount: new Set(rows.map((row) => row.strategyId)).size,
+    symbolCount: new Set(canonicalRows.map((row) => row.symbol)).size,
+    strategyCount: new Set(canonicalRows.map((row) => row.strategyId)).size,
     paramSets: new Set(
       rows.map((row) => `${row.strategyId}|${row.paramLabel}`),
+    ).size,
+    stats: computeStats(trades),
+    trades,
+  };
+}
+
+function makeMetricsFromCanonicalRows(
+  canonicalRows: BacktestSweepRow[],
+  allRows: BacktestSweepRow[],
+): LayerMetrics {
+  const trades = canonicalRows.flatMap((row) => row.trades);
+  return {
+    runs: allRows.length,
+    symbolCount: new Set(canonicalRows.map((row) => row.symbol)).size,
+    strategyCount: new Set(canonicalRows.map((row) => row.strategyId)).size,
+    paramSets: new Set(
+      allRows.map((row) => `${row.strategyId}|${row.paramLabel}`),
     ).size,
     stats: computeStats(trades),
     trades,
@@ -94,28 +143,37 @@ function buildSymbolNodesForStrategy(
   strategyId: string,
   strategyRows: BacktestSweepRow[],
 ): ConsolidatedNode[] {
+  const label = primaryParamLabel(strategyRows);
   const bySymbol = groupBy(strategyRows, (row) => row.symbol);
   return [...bySymbol.entries()]
-    .map(([symbol, symbolRows]) => ({
-      id: `strategy|${strategyId}|symbol|${symbol}`,
-      kind: "symbol" as const,
-      label: symbol,
-      metrics: makeMetrics(symbolRows),
-      children: [],
-    }))
+    .map(([symbol, symbolRows]) => {
+      const row =
+        symbolRows.find((item) => item.paramLabel === label) ?? symbolRows[0]!;
+      return {
+        id: `strategy|${strategyId}|symbol|${symbol}`,
+        kind: "symbol" as const,
+        label: symbol,
+        metrics: makeMetricsFromCanonicalRows([row], symbolRows),
+        children: [],
+      };
+    })
     .sort((a, b) => a.label.localeCompare(b.label));
 }
 
 function buildStrategyBranch(rows: BacktestSweepRow[]): ConsolidatedNode[] {
   const byStrategy = groupBy(rows, (row) => row.strategyId);
   return [...byStrategy.entries()]
-    .map(([strategyId, strategyRows]) => ({
-      id: `strategy|${strategyId}`,
-      kind: "strategy" as const,
-      label: strategyRows[0]!.strategyName,
-      metrics: makeMetrics(strategyRows),
-      children: buildSymbolNodesForStrategy(strategyId, strategyRows),
-    }))
+    .map(([strategyId, strategyRows]) => {
+      const children = buildSymbolNodesForStrategy(strategyId, strategyRows);
+      const canonicalRows = pickCanonicalRows(strategyRows);
+      return {
+        id: `strategy|${strategyId}`,
+        kind: "strategy" as const,
+        label: strategyRows[0]!.strategyName,
+        metrics: makeMetricsFromCanonicalRows(canonicalRows, strategyRows),
+        children,
+      };
+    })
     .sort((a, b) => a.label.localeCompare(b.label));
 }
 
@@ -152,11 +210,22 @@ function makeRoot(
   rows: BacktestSweepRow[],
   children: ConsolidatedNode[],
 ): ConsolidatedNode {
+  const canonicalRows = pickCanonicalRows(rows);
+  const trades = children.flatMap((child) => child.metrics.trades);
   return {
     id,
     kind,
     label,
-    metrics: makeMetrics(rows),
+    metrics: {
+      runs: rows.length,
+      symbolCount: new Set(canonicalRows.map((row) => row.symbol)).size,
+      strategyCount: children.length,
+      paramSets: new Set(
+        rows.map((row) => `${row.strategyId}|${row.paramLabel}`),
+      ).size,
+      stats: computeStats(trades),
+      trades,
+    },
     children,
   };
 }

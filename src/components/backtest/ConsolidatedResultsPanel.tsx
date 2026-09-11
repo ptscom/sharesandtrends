@@ -16,6 +16,7 @@ import type { BacktestStats, Trade } from "@/lib/types";
 interface ConsolidatedResultsPanelProps {
   rows: BacktestSweepRow[];
   completedAt?: string | null;
+  dateRangeSummary?: string | null;
 }
 
 type DrillLevel = "strategies" | "symbols" | "trades";
@@ -66,6 +67,20 @@ export function ConsolidatedResultsPanel({
     if (level === "symbols" && strategyNode) return strategyNode.metrics.stats;
     return model.portfolio.metrics.stats;
   }, [level, symbolNode, strategyNode, model.portfolio.metrics.stats]);
+
+  const tradesCountHint = useMemo(() => {
+    if (level === "symbols" && strategyNode) {
+      const fromSymbols = strategyNode.children.reduce(
+        (sum, child) => sum + child.metrics.stats.trades,
+        0,
+      );
+      return `Total trades across ${strategyNode.children.length} symbols (one run per symbol). Sum of symbol rows: ${fromSymbols}.`;
+    }
+    if (level === "strategies") {
+      return "Trades count each closed position once per symbol (primary parameter set when sweeps are enabled).";
+    }
+    return null;
+  }, [level, strategyNode]);
 
   if (rows.length === 0) return null;
 
@@ -181,6 +196,9 @@ export function ConsolidatedResultsPanel({
 
       <div className="mt-5">
         <MetricsGrid stats={contextMetrics} />
+        {tradesCountHint && (
+          <p className="ui-helper mt-2">{tradesCountHint}</p>
+        )}
       </div>
 
       <div className="mt-6">
