@@ -1,6 +1,6 @@
 import type { OhlcvBar, PatternDefinition } from "@/lib/types";
 import { getPriceBarsBatch } from "@/lib/storage/prices";
-import type { IndicatorScanRun } from "@/lib/explore/exploration-models";
+import type { IndicatorScanRun, ExplorationFilter } from "@/lib/explore/exploration-models";
 import type { ExploreTimeframeMode } from "@/lib/patterns/mtf-combine";
 import type { ScanProgressPhase } from "@/lib/engine/scan-worker-client";
 
@@ -11,6 +11,7 @@ export interface IndicatorWorkerScanOptions {
   filterName: string;
   filterDescription: string;
   timeframeMode: ExploreTimeframeMode;
+  filter?: ExplorationFilter;
   onProgress?: (done: number, total: number, phase: ScanProgressPhase) => void;
 }
 
@@ -38,6 +39,7 @@ export async function runIndicatorScanInWorker(
     filterName,
     filterDescription,
     timeframeMode,
+    filter,
     onProgress,
   } = options;
 
@@ -89,6 +91,7 @@ export async function runIndicatorScanInWorker(
       filterName,
       filterDescription,
       timeframeMode,
+      filter,
     });
   });
 }

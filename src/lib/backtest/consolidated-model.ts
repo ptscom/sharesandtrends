@@ -90,6 +90,22 @@ function buildParameterNodes(rows: BacktestSweepRow[]): ConsolidatedNode[] {
     .sort((a, b) => a.label.localeCompare(b.label));
 }
 
+function buildSymbolNodesForStrategy(
+  strategyId: string,
+  strategyRows: BacktestSweepRow[],
+): ConsolidatedNode[] {
+  const bySymbol = groupBy(strategyRows, (row) => row.symbol);
+  return [...bySymbol.entries()]
+    .map(([symbol, symbolRows]) => ({
+      id: `strategy|${strategyId}|symbol|${symbol}`,
+      kind: "symbol" as const,
+      label: symbol,
+      metrics: makeMetrics(symbolRows),
+      children: [],
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+}
+
 function buildStrategyBranch(rows: BacktestSweepRow[]): ConsolidatedNode[] {
   const byStrategy = groupBy(rows, (row) => row.strategyId);
   return [...byStrategy.entries()]
@@ -98,7 +114,7 @@ function buildStrategyBranch(rows: BacktestSweepRow[]): ConsolidatedNode[] {
       kind: "strategy" as const,
       label: strategyRows[0]!.strategyName,
       metrics: makeMetrics(strategyRows),
-      children: buildParameterNodes(strategyRows),
+      children: buildSymbolNodesForStrategy(strategyId, strategyRows),
     }))
     .sort((a, b) => a.label.localeCompare(b.label));
 }
@@ -171,6 +187,30 @@ export function buildConsolidatedModel(
   };
 }
 
+export function listStrategySummaries(
+  model: ConsolidatedModel,
+): ConsolidatedNode[] {
+  return model.portfolio.children;
+}
+
+export function findStrategyNode(
+  model: ConsolidatedModel,
+  strategyId: string,
+): ConsolidatedNode | null {
+  return model.portfolio.children.find((node) => node.id === `strategy|${strategyId}`) ?? null;
+}
+
+export function findSymbolNode(
+  strategyNode: ConsolidatedNode,
+  symbol: string,
+): ConsolidatedNode | null {
+  return (
+    strategyNode.children.find(
+      (node) => node.id === `${strategyNode.id}|symbol|${symbol}`,
+    ) ?? null
+  );
+}
+
 export function getViewRoot(
   model: ConsolidatedModel,
   view: ResultsView,
@@ -234,20 +274,19 @@ export function exportLayerCsv(node: ConsolidatedNode): void {
     return;
   }
 
-  const row = node.row;
-  if (!row) return;
+  const trades = node.row?.trades ?? node.metrics.trades;
+  if (trades.length === 0) return;
 
   const header =
-    "Entry,Exit,Side,Entry Price,Exit Price,Hold Days,Return %";
-  const lines = row.trades.map(
+    "Entry Date,Exit Date,Side,Entry Price,Exit Price,Hold Days,Return %";
+  const lines = trades.map(
     (trade) =>
       `${trade.entryDate},${trade.exitDate},${trade.side},${trade.entryPrice.toFixed(2)},${trade.exitPrice.toFixed(2)},${trade.holdDays},${trade.returnPct.toFixed(2)}`,
   );
-  downloadCsv(
-    `${sanitizeFilename(row.symbol)}-${sanitizeFilename(row.paramLabel)}-trades.csv`,
-    header,
-    lines,
-  );
+  const filename = node.row
+    ? `${sanitizeFilename(node.row.symbol)}-${sanitizeFilename(node.row.paramLabel)}-trades.csv`
+    : `${sanitizeFilename(node.label)}-trades.csv`;
+  downloadCsv(filename, header, lines);
 }
 
 export function exportAllRunsCsv(rows: BacktestSweepRow[]): void {

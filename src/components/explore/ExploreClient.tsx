@@ -46,9 +46,13 @@ import {
   summarizeExplorationFilters,
 } from "@/lib/explore/exploration-models";
 import {
+  normalizeExplorationDescription,
+  resolveExplorationDescription,
+} from "@/lib/explore/exploration-description";
+import {
   DEFAULT_EXPLORATION_PRESET_ID,
   getExplorationPreset,
-  type ExplorationFilterId,
+  type ExplorationCategoryId,
 } from "@/lib/explore/exploration-presets";
 import {
   describeExplorationFilter,
@@ -61,7 +65,10 @@ import {
 } from "@/lib/explore/exploration-filter-key";
 import type { ExplorePath } from "@/lib/explore/indicator-models";
 import { patternToPreset } from "@/lib/patterns/custom";
-import { EMA_CROSS_PATTERN } from "@/lib/patterns/defaults";
+import {
+  DEFAULT_STRATEGY_PRESET_ID,
+  EMA_CROSS_PATTERN,
+} from "@/lib/patterns/defaults";
 import {
   combineMtfPatterns,
   formatMtfExitModeLabel,
@@ -76,9 +83,12 @@ import {
   isBuiltInPresetId,
   listModifiedPresetIds,
 } from "@/lib/patterns/preset-store";
+import {
+  inferExplorationParams,
+  rebuildStrategyPattern,
+} from "@/lib/patterns/exploration-strategies";
 import type { StrategyPreset } from "@/lib/patterns/strategies";
 import { STRATEGY_PRESETS } from "@/lib/patterns/strategies";
-import type { LibraryFilterId } from "@/lib/patterns/strategy-ui";
 import {
   getPattern,
   listPatterns,
@@ -90,6 +100,10 @@ import {
   listExplorations,
   saveExploration,
 } from "@/lib/storage/explorations";
+import {
+  loadExplorationFavorites,
+  saveExplorationFavorites,
+} from "@/lib/storage/exploration-favorites";
 import { saveIndicatorScanRun } from "@/lib/storage/indicator-scans";
 import { listSymbols } from "@/lib/storage/prices";
 import {
@@ -111,6 +125,7 @@ function createDefaultExplorationFilter(
   return {
     source: "preset",
     name: preset.name,
+    description: preset.description,
     timeframeMode,
     presetId: preset.id,
     params: defaultParamsForPreset(preset),
@@ -136,6 +151,7 @@ export function ExploreClient() {
       const filter = {
         source: "preset" as const,
         name: preset.name,
+        description: preset.description,
         timeframeMode: "1D" as ExploreTimeframeMode,
         presetId: preset.id,
         params: defaultParamsForPreset(preset),
@@ -144,7 +160,10 @@ export function ExploreClient() {
     });
   const [explorationQuery, setExplorationQuery] = useState("");
   const [explorationCategoryFilter, setExplorationCategoryFilter] =
-    useState<ExplorationFilterId>("all");
+    useState<ExplorationCategoryId>("all");
+  const [explorationFavoriteKeys, setExplorationFavoriteKeys] = useState<
+    Set<string>
+  >(() => new Set());
   const [presetSettingsId, setPresetSettingsId] = useState<string | null>(null);
   const [builderOpen, setBuilderOpen] = useState(false);
   const [runHistoryOpen, setRunHistoryOpen] = useState(false);
@@ -164,11 +183,11 @@ export function ExploreClient() {
   >(null);
   const [lastScanPath, setLastScanPath] = useState<ExplorePath | null>(null);
 
-  const [selectedId, setSelectedId] = useState("ema-cross");
+  const [selectedId, setSelectedId] = useState(DEFAULT_STRATEGY_PRESET_ID);
   const [pattern, setPattern] = useState<PatternDefinition>(EMA_CROSS_PATTERN);
   const [timeframeMode, setTimeframeMode] = useState<ExploreTimeframeMode>("1D");
   const [mtfSlots, setMtfSlots] = useState<Record<MtfSlot, MtfSlotSelection | null>>({
-    daily: { id: "ema-cross", pattern: EMA_CROSS_PATTERN },
+    daily: { id: DEFAULT_STRATEGY_PRESET_ID, pattern: EMA_CROSS_PATTERN },
     weekly: null,
     monthly: null,
   });
@@ -181,7 +200,8 @@ export function ExploreClient() {
   const [settingsOpen, setSettingsOpen] = useState(false);
 
   const [query, setQuery] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState<LibraryFilterId>("all");
+  const [categoryFilter, setCategoryFilter] =
+    useState<ExplorationCategoryId>("all");
   const [minWinRate, setMinWinRate] = useState(70);
   const [minTrades, setMinTrades] = useState(5);
   const [signalTodayOnly, setSignalTodayOnly] = useState(false);
@@ -197,22 +217,6 @@ export function ExploreClient() {
     () => [...STRATEGY_PRESETS, ...customStrategies],
     [customStrategies],
   );
-
-  const filteredPresets = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return allPresets.filter((preset) => {
-      if (categoryFilter !== "all" && preset.category !== categoryFilter) {
-        return false;
-      }
-      if (!q) return true;
-      return (
-        preset.pattern.name.toLowerCase().includes(q) ||
-        preset.category.toLowerCase().includes(q) ||
-        preset.id.toLowerCase().includes(q) ||
-        preset.entryLogic.toLowerCase().includes(q)
-      );
-    });
-  }, [allPresets, query, categoryFilter]);
 
   const activePreset = allPresets.find((p) => p.id === selectedId);
   const strategyName =
@@ -321,6 +325,7 @@ export function ExploreClient() {
           [key]: {
             source: "preset",
             name: preset.name,
+            description: preset.description,
             timeframeMode: explorationTimeframeMode,
             presetId,
             params: defaultParamsForPreset(preset),
@@ -334,6 +339,16 @@ export function ExploreClient() {
   const reloadSavedExplorations = useCallback(async () => {
     const list = await listExplorations();
     setSavedExplorations(list);
+  }, []);
+
+  const toggleExplorationFavorite = useCallback((key: string) => {
+    setExplorationFavoriteKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      saveExplorationFavorites([...next]);
+      return next;
+    });
   }, []);
 
   const toggleSavedExploration = useCallback(
@@ -355,6 +370,7 @@ export function ExploreClient() {
           [key]: {
             source: "builder",
             name: saved.name,
+            description: saved.description,
             savedId: saved.id,
             timeframeMode: explorationTimeframeMode,
             builder: saved.builder,
@@ -384,11 +400,12 @@ export function ExploreClient() {
     async (
       name: string,
       builder: NonNullable<ExplorationFilter["builder"]>,
-      editingSavedId?: string,
+      options?: { savedId?: string; description?: string },
     ) => {
       const saved = await saveExploration({
-        id: editingSavedId,
+        id: options?.savedId,
         name,
+        description: normalizeExplorationDescription(options?.description ?? ""),
         builder,
       });
       await reloadSavedExplorations();
@@ -399,6 +416,7 @@ export function ExploreClient() {
         [key]: {
           source: "builder",
           name: saved.name,
+          description: saved.description,
           savedId: saved.id,
           timeframeMode: explorationTimeframeMode,
           builder: saved.builder,
@@ -407,6 +425,24 @@ export function ExploreClient() {
       setBuilderOpen(false);
     },
     [explorationTimeframeMode, reloadSavedExplorations],
+  );
+
+  const updateExplorationFilterDescription = useCallback(
+    (key: string, description: string) => {
+      setSelectedExplorationFilters((prev) => {
+        const filter = prev[key];
+        if (!filter) return prev;
+        return {
+          ...prev,
+          [key]: {
+            ...filter,
+            description:
+              normalizeExplorationDescription(description) || undefined,
+          },
+        };
+      });
+    },
+    [],
   );
 
   const openExplorationHistory = useCallback(
@@ -505,11 +541,12 @@ export function ExploreClient() {
       setModifiedPresetIds(modified);
     })();
     void reloadSavedExplorations();
+    setExplorationFavoriteKeys(new Set(loadExplorationFavorites()));
   }, [reloadSavedExplorations]);
 
   useEffect(() => {
     if (searchParams.get("patternId")) return;
-    void getEffectivePreset("ema-cross").then(({ pattern: next }) => {
+    void getEffectivePreset(DEFAULT_STRATEGY_PRESET_ID).then(({ pattern: next }) => {
       setPattern(structuredClone(next));
     });
   }, [searchParams]);
@@ -582,6 +619,20 @@ export function ExploreClient() {
       ? pattern
       : (mtfSlots[settingsTarget]?.pattern ?? null);
 
+  const settingsPresetId =
+    settingsTarget === "single"
+      ? selectedId
+      : (mtfSlots[settingsTarget]?.id ?? null);
+
+  const strategyExplorationPreset = settingsPresetId
+    ? getExplorationPreset(settingsPresetId)
+    : null;
+
+  const strategyExplorationParams = useMemo(() => {
+    if (!strategyExplorationPreset || !settingsPattern) return undefined;
+    return inferExplorationParams(strategyExplorationPreset, settingsPattern);
+  }, [strategyExplorationPreset, settingsPattern]);
+
   const isMtfFilterSettings =
     settingsTarget === "weekly" || settingsTarget === "monthly";
 
@@ -608,6 +659,26 @@ export function ExploreClient() {
       });
     },
     [settingsTarget],
+  );
+
+  const handleStrategyExplorationParamsChange = useCallback(
+    (params: Record<string, number | string>) => {
+      if (!settingsPresetId || !strategyExplorationPreset) return;
+      const next = rebuildStrategyPattern(
+        settingsPresetId,
+        params,
+        settingsPattern ?? undefined,
+        timeframeMode,
+      );
+      updateSettingsPattern(next);
+    },
+    [
+      settingsPresetId,
+      strategyExplorationPreset,
+      settingsPattern,
+      timeframeMode,
+      updateSettingsPattern,
+    ],
   );
 
   const saveStrategySettings = useCallback(async () => {
@@ -699,8 +770,9 @@ export function ExploreClient() {
             pattern: patternForScan,
             filterKey,
             filterName: filter.name,
-            filterDescription: describeExplorationFilter(filter),
+            filterDescription: resolveExplorationDescription(filter),
             timeframeMode: filter.timeframeMode,
+            filter,
             onProgress: (done, total, phase) => {
               setScanPhase(phase);
               const completedExplorations = index;
@@ -891,12 +963,15 @@ export function ExploreClient() {
               <ExploreExplorationSelector
                 selectedFilters={selectedExplorationFilters}
                 savedExplorations={savedExplorations}
+                favoriteKeys={explorationFavoriteKeys}
                 query={explorationQuery}
                 categoryFilter={explorationCategoryFilter}
-                onQueryChange={setExplorationQuery}
                 onCategoryChange={setExplorationCategoryFilter}
+                onQueryChange={setExplorationQuery}
                 onTogglePreset={toggleExplorationPreset}
                 onToggleSaved={toggleSavedExploration}
+                onToggleFavorite={toggleExplorationFavorite}
+                onUpdateFilterDescription={updateExplorationFilterDescription}
                 onDeleteSaved={(id) => void handleDeleteSavedExploration(id)}
                 onOpenPresetSettings={openExplorationPresetSettings}
                 onOpenHistory={openExplorationHistory}
@@ -926,7 +1001,7 @@ export function ExploreClient() {
 
               {timeframeMode === "mtf" ? (
                 <ExploreMtfStrategySelector
-                  presets={filteredPresets}
+                  presets={allPresets}
                   slots={mtfSlots}
                   modifiedPresetIds={modifiedPresetIds}
                   exitMode={mtfExitMode}
@@ -943,7 +1018,7 @@ export function ExploreClient() {
                 />
               ) : (
                 <ExploreStrategySelector
-                  presets={filteredPresets}
+                  presets={allPresets}
                   selectedId={selectedId}
                   modifiedPresetIds={modifiedPresetIds}
                   query={query}
@@ -1018,6 +1093,8 @@ export function ExploreClient() {
         open={settingsOpen}
         pattern={settingsPattern}
         strategyName={settingsStrategyName}
+        explorationPreset={strategyExplorationPreset}
+        explorationParams={strategyExplorationParams}
         settingsSubtitle={
           isMtfFilterSettings
             ? "Adjust filter indicator parameters and entry thresholds only."
@@ -1027,6 +1104,7 @@ export function ExploreClient() {
         onClose={() => setSettingsOpen(false)}
         onSave={() => void saveStrategySettings()}
         onChange={updateSettingsPattern}
+        onExplorationParamsChange={handleStrategyExplorationParamsChange}
       />
 
       {presetForSettings && (
@@ -1046,9 +1124,13 @@ export function ExploreClient() {
               : {}
           }
           paramDefs={presetForSettings.params}
-          description={presetForSettings.description}
+          description={
+            selectedExplorationFilters[presetFilterKey(presetForSettings.id)]
+              ?.description?.trim() ||
+            presetForSettings.description
+          }
           onClose={() => setPresetSettingsId(null)}
-          onSave={(params) => {
+          onSave={(params, description) => {
             const key = presetFilterKey(presetForSettings.id);
             setExplorePath("indicator");
             setSelectedExplorationFilters((prev) => ({
@@ -1056,6 +1138,7 @@ export function ExploreClient() {
               [key]: {
                 source: "preset",
                 name: presetForSettings.name,
+                description: normalizeExplorationDescription(description),
                 timeframeMode: explorationTimeframeMode,
                 presetId: presetForSettings.id,
                 params,
@@ -1088,6 +1171,12 @@ export function ExploreClient() {
           );
           return custom?.name;
         })()}
+        initialDescription={(() => {
+          const custom = Object.values(selectedExplorationFilters).find(
+            (filter) => filter.source === "builder",
+          );
+          return custom?.description;
+        })()}
         editingSavedId={(() => {
           const custom = Object.values(selectedExplorationFilters).find(
             (filter) => filter.source === "builder" && filter.savedId,
@@ -1095,8 +1184,8 @@ export function ExploreClient() {
           return custom?.savedId ?? null;
         })()}
         onClose={() => setBuilderOpen(false)}
-        onAdd={(name, builder, savedId) =>
-          void handleAddToExploration(name, builder, savedId)
+        onAdd={(name, builder, options) =>
+          void handleAddToExploration(name, builder, options)
         }
       />
     </div>

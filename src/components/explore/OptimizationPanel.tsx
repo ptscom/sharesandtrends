@@ -12,60 +12,96 @@ interface OptimizationPanelProps {
   pattern: PatternDefinition;
   onChange: (pattern: PatternDefinition) => void;
   hideGroups?: OptimizationVarGroup[];
+  includeGroups?: OptimizationVarGroup[];
+  emptyMessage?: string;
 }
 
 const GROUP_LABELS: Record<OptimizationVarGroup, string> = {
-  indicator: "Indicator parameters",
-  threshold: "Signal thresholds",
+  indicator: "Entry parameters",
+  entry: "Entry parameters",
+  signal_exit: "Signal exit",
+  time_exit: "Time exit",
   backtest: "Backtest settings",
 };
+
+const GROUP_HELP: Partial<Record<OptimizationVarGroup, string>> = {
+  signal_exit:
+    "Exits when the signal rule fires. Whichever comes first — signal exit or time exit — closes the trade.",
+  time_exit:
+    "Exits after the hold period. Whichever comes first — signal exit or time exit — closes the trade.",
+};
+
+const ALL_GROUPS: OptimizationVarGroup[] = [
+  "indicator",
+  "entry",
+  "signal_exit",
+  "time_exit",
+  "backtest",
+];
 
 export function OptimizationPanel({
   pattern,
   onChange,
   hideGroups = [],
+  includeGroups,
+  emptyMessage = "No tunable parameters for this section.",
 }: OptimizationPanelProps) {
   const hidden = new Set(hideGroups);
-  const vars = extractOptimizationVars(pattern);
-  const grouped = vars.reduce<Record<OptimizationVarGroup, OptimizationVar[]>>(
-    (acc, v) => {
-      acc[v.group].push(v);
-      return acc;
-    },
-    { indicator: [], threshold: [], backtest: [] },
-  );
+  const included = includeGroups ? new Set(includeGroups) : null;
+  const vars = extractOptimizationVars(pattern).filter((variable) => {
+    if (included && !included.has(variable.group)) return false;
+    if (hidden.has(variable.group)) return false;
+    return true;
+  });
 
-  if (vars.length === 0) {
-    return (
-      <p className="text-sm text-muted">No tunable parameters for this strategy.</p>
-    );
+  const grouped = ALL_GROUPS.map((group) => ({
+    group,
+    items: vars.filter((variable) => variable.group === group),
+  })).filter((section) => section.items.length > 0);
+
+  const mergedEntry = vars.filter(
+    (variable) => variable.group === "indicator" || variable.group === "entry",
+  );
+  const sections = [
+    ...(mergedEntry.length > 0 && (!included || included.has("indicator") || included.has("entry"))
+      ? [{ group: "entry" as OptimizationVarGroup, items: mergedEntry }]
+      : []),
+    ...grouped.filter(
+      (section) => section.group !== "indicator" && section.group !== "entry",
+    ),
+  ];
+
+  if (sections.length === 0) {
+    return <p className="text-sm text-muted">{emptyMessage}</p>;
   }
 
   return (
     <div className="space-y-6">
-      {(Object.keys(grouped) as OptimizationVarGroup[]).map((group) => {
-        if (hidden.has(group)) return null;
-        const items = grouped[group];
-        if (items.length === 0) return null;
-        return (
-          <div key={group}>
-            <p className="ui-field-label">
-              {GROUP_LABELS[group]}
+      {sections.map((section) => (
+        <div key={section.group}>
+          <p className="ui-field-label">{GROUP_LABELS[section.group]}</p>
+          {GROUP_HELP[section.group] && (
+            <p className="mt-1 text-xs text-muted">{GROUP_HELP[section.group]}</p>
+          )}
+          {section.group === "signal_exit" && !pattern.exit && (
+            <p className="mt-2 rounded-lg border border-dashed border-border bg-bg px-3 py-2 text-sm text-muted">
+              No signal exit configured yet. Trades will exit on the time rule
+              until you add a signal exit.
             </p>
-            <div className="mt-3 grid gap-3 sm:grid-cols-2">
-              {items.map((v) => (
-                <VarInput
-                  key={v.id}
-                  variable={v}
-                  onChange={(value) =>
-                    onChange(applyOptimizationVar(pattern, v.id, value))
-                  }
-                />
-              ))}
-            </div>
+          )}
+          <div className="mt-3 grid gap-3 sm:grid-cols-2">
+            {section.items.map((variable) => (
+              <VarInput
+                key={variable.id}
+                variable={variable}
+                onChange={(value) =>
+                  onChange(applyOptimizationVar(pattern, variable.id, value))
+                }
+              />
+            ))}
           </div>
-        );
-      })}
+        </div>
+      ))}
     </div>
   );
 }

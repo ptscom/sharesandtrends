@@ -1,30 +1,56 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { ExplorationParamFields } from "@/components/explore/ExplorationParamFields";
 import { OptimizationPanel } from "@/components/explore/OptimizationPanel";
+import type { ExplorationPreset } from "@/lib/explore/exploration-presets";
 import type { PatternDefinition } from "@/lib/types";
 
 interface ExploreStrategySettingsModalProps {
   open: boolean;
   pattern: PatternDefinition | null;
   strategyName: string;
+  explorationPreset?: ExplorationPreset | null;
+  explorationParams?: Record<string, number | string>;
   settingsSubtitle?: string;
   hideBacktestSettings?: boolean;
   onClose: () => void;
   onSave: () => void;
   onChange: (pattern: PatternDefinition) => void;
+  onExplorationParamsChange?: (
+    params: Record<string, number | string>,
+  ) => void;
 }
 
 export function ExploreStrategySettingsModal({
   open,
   pattern,
   strategyName,
-  settingsSubtitle = "Adjust indicator periods, thresholds, and backtest settings.",
+  explorationPreset,
+  explorationParams,
+  settingsSubtitle,
   hideBacktestSettings = false,
   onClose,
   onSave,
   onChange,
+  onExplorationParamsChange,
 }: ExploreStrategySettingsModalProps) {
+  const [draftParams, setDraftParams] = useState(explorationParams ?? {});
+
+  useEffect(() => {
+    if (open && explorationParams) {
+      setDraftParams(explorationParams);
+    }
+  }, [open, explorationParams]);
+
+  const subtitle = useMemo(() => {
+    if (settingsSubtitle) return settingsSubtitle;
+    if (explorationPreset) {
+      return "Entry parameters match indicator exploration. Configure signal exit and time exit below — whichever triggers first closes the trade.";
+    }
+    return "Adjust entry, signal exit, time exit, and backtest settings.";
+  }, [explorationPreset, settingsSubtitle]);
+
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -39,6 +65,13 @@ export function ExploreStrategySettingsModal({
   }, [open, onClose]);
 
   if (!open || !pattern) return null;
+
+  const handleExplorationParamsChange = (
+    params: Record<string, number | string>,
+  ) => {
+    setDraftParams(params);
+    onExplorationParamsChange?.(params);
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center">
@@ -60,7 +93,7 @@ export function ExploreStrategySettingsModal({
             <h2 id="explore-settings-title" className="ui-page-title">
               {strategyName}
             </h2>
-            <p className="ui-helper mt-0.5">{settingsSubtitle}</p>
+            <p className="ui-helper mt-0.5">{subtitle}</p>
           </div>
           <button
             type="button"
@@ -72,11 +105,39 @@ export function ExploreStrategySettingsModal({
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
+        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4 space-y-6">
+          {explorationPreset && onExplorationParamsChange ? (
+            <section>
+              <p className="ui-field-label">Entry parameters</p>
+              <div className="mt-3">
+                <ExplorationParamFields
+                  paramDefs={explorationPreset.params}
+                  params={draftParams}
+                  onChange={handleExplorationParamsChange}
+                />
+              </div>
+            </section>
+          ) : (
+            <OptimizationPanel
+              pattern={pattern}
+              onChange={onChange}
+              includeGroups={["indicator", "entry"]}
+            />
+          )}
+
           <OptimizationPanel
             pattern={pattern}
             onChange={onChange}
-            hideGroups={hideBacktestSettings ? ["backtest"] : []}
+            includeGroups={["signal_exit"]}
+            emptyMessage="No signal exit configured yet."
+          />
+
+          <OptimizationPanel
+            pattern={pattern}
+            onChange={onChange}
+            includeGroups={
+              hideBacktestSettings ? ["time_exit"] : ["time_exit", "backtest"]
+            }
           />
         </div>
 

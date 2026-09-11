@@ -53,7 +53,8 @@ export function StrategySettingsModal({
               {config.name}
             </h2>
             <p className="ui-helper mt-0.5">
-              Configure fixed values or sweep ranges for each parameter.
+              Configure entry parameters, signal exit, and time exit. Whichever
+              exit triggers first closes the trade.
             </p>
           </div>
           <button

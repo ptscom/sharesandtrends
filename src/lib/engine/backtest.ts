@@ -188,12 +188,13 @@ export function runBacktest(
       shouldExit = true;
       exitPrice = tradeExit.exitPrice;
     } else if (!tradeSettings?.overrideSignalExit || !activeTradeRules) {
-      if (config.exitOn === "opposite_signal" && exitMask[i]) {
+      if (pattern.exit && exitMask[i]) {
         shouldExit = true;
       }
       if (
-        config.exitOn === "fixed_hold" &&
+        !shouldExit &&
         config.holdDays &&
+        config.holdDays > 0 &&
         i - entryIndex >= config.holdDays
       ) {
         shouldExit = true;
