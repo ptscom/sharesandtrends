@@ -142,11 +142,9 @@ export function runBacktest(
   let entryPrice = 0;
 
   for (let i = 1; i < ctx.dates.length; i++) {
-    if (!filterMask[i]) continue;
-
     const bar = ctx.bars[i];
 
-    if (!inTrade && entryMask[i]) {
+    if (!inTrade && filterMask[i] && entryMask[i]) {
       const entryIdx =
         config.entryOn === "next_open" && i + 1 < ctx.bars.length
           ? i + 1
