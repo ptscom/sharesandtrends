@@ -241,7 +241,9 @@ export function BacktestClient() {
       });
 
       const rows = await runParameterSweep({
-        strategies: selectedStrategies,
+        strategies: selectedStrategies.map((strategy) =>
+          createStrategySweepState(strategy.id, strategy.name, strategy.pattern),
+        ),
         symbols: universe,
         priceData,
         tradeSettings,

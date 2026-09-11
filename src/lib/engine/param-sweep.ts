@@ -1,8 +1,9 @@
 import { runBacktest } from "@/lib/engine/backtest";
 import type { TradeSettings } from "@/lib/engine/trade-settings";
+import { buildSweepVarsForStrategy } from "@/lib/patterns/exploration-sweep-vars";
+import { normalizeExplorationStrategyPattern } from "@/lib/patterns/exploration-sweep-vars";
 import {
   applyOptimizationVar,
-  extractOptimizationVars,
   type OptimizationVar,
 } from "@/lib/patterns/optimization";
 import type { BacktestStats, PatternDefinition, Trade } from "@/lib/types";
@@ -62,11 +63,12 @@ export function createStrategySweepState(
   name: string,
   pattern: PatternDefinition,
 ): StrategySweepState {
+  const normalized = normalizeExplorationStrategyPattern(id, pattern);
   return {
     id,
     name,
-    pattern: structuredClone(pattern),
-    vars: extractOptimizationVars(pattern).map(optimizationVarToSweepConfig),
+    pattern: normalized,
+    vars: buildSweepVarsForStrategy(id, normalized),
   };
 }
 
@@ -214,7 +216,11 @@ export async function runParameterSweep(
     );
 
     for (const combo of combos) {
-      const pattern = applyParamCombo(strategy.pattern, combo);
+      const basePattern = normalizeExplorationStrategyPattern(
+        strategy.id,
+        strategy.pattern,
+      );
+      const pattern = applyParamCombo(basePattern, combo);
       const paramLabel = formatParamLabel(strategy.vars, combo);
 
       for (const symbol of symbols) {

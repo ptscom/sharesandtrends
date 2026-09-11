@@ -1,8 +1,19 @@
 "use client";
 
-import { useEffect } from "react";
-import { StrategySweepPanel } from "@/components/backtest/StrategySweepPanel";
+import { useEffect, useMemo, useState } from "react";
+import { ExplorationParamFields } from "@/components/explore/ExplorationParamFields";
+import { OptimizationPanel } from "@/components/explore/OptimizationPanel";
+import { getExplorationPreset } from "@/lib/explore/exploration-presets";
+import {
+  buildSweepVarsForStrategy,
+  normalizeExplorationStrategyPattern,
+} from "@/lib/patterns/exploration-sweep-vars";
+import {
+  inferExplorationParams,
+  rebuildStrategyPattern,
+} from "@/lib/patterns/exploration-strategies";
 import type { StrategySweepState } from "@/lib/engine/param-sweep";
+import type { PatternDefinition } from "@/lib/types";
 
 interface StrategySettingsModalProps {
   open: boolean;
@@ -17,6 +28,21 @@ export function StrategySettingsModal({
   onClose,
   onChange,
 }: StrategySettingsModalProps) {
+  const explorationPreset = config ? getExplorationPreset(config.id) : null;
+
+  const explorationParams = useMemo(() => {
+    if (!explorationPreset || !config) return undefined;
+    return inferExplorationParams(explorationPreset, config.pattern);
+  }, [explorationPreset, config]);
+
+  const [draftParams, setDraftParams] = useState(explorationParams ?? {});
+
+  useEffect(() => {
+    if (open && explorationParams) {
+      setDraftParams(explorationParams);
+    }
+  }, [open, explorationParams]);
+
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -31,6 +57,33 @@ export function StrategySettingsModal({
   }, [open, onClose]);
 
   if (!open || !config) return null;
+
+  const updatePattern = (nextPattern: PatternDefinition) => {
+    const normalized = normalizeExplorationStrategyPattern(config.id, nextPattern);
+    onChange({
+      ...config,
+      pattern: normalized,
+      vars: buildSweepVarsForStrategy(config.id, normalized),
+    });
+  };
+
+  const handleExplorationParamsChange = (
+    params: Record<string, number | string>,
+  ) => {
+    if (!explorationPreset) return;
+    setDraftParams(params);
+    const rebuilt = rebuildStrategyPattern(
+      config.id,
+      params,
+      config.pattern,
+      "1D",
+    );
+    onChange({
+      ...config,
+      pattern: rebuilt,
+      vars: buildSweepVarsForStrategy(config.id, rebuilt),
+    });
+  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-end justify-center p-4 sm:items-center">
@@ -53,8 +106,9 @@ export function StrategySettingsModal({
               {config.name}
             </h2>
             <p className="ui-helper mt-0.5">
-              Configure entry parameters, signal exit, and time exit. Whichever
-              exit triggers first closes the trade.
+              {explorationPreset
+                ? "Entry parameters match indicator exploration. Configure signal exit and time exit below — whichever triggers first closes the trade."
+                : "Configure entry parameters, signal exit, and time exit. Whichever exit triggers first closes the trade."}
             </p>
           </div>
           <button
@@ -67,8 +121,31 @@ export function StrategySettingsModal({
           </button>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
-          <StrategySweepPanel config={config} onChange={onChange} hideTitle />
+        <div className="min-h-0 flex-1 space-y-6 overflow-y-auto px-5 py-4">
+          {explorationPreset ? (
+            <section>
+              <p className="ui-field-label">Entry parameters</p>
+              <div className="mt-3">
+                <ExplorationParamFields
+                  paramDefs={explorationPreset.params}
+                  params={draftParams}
+                  onChange={handleExplorationParamsChange}
+                />
+              </div>
+            </section>
+          ) : (
+            <OptimizationPanel
+              pattern={config.pattern}
+              onChange={updatePattern}
+              includeGroups={["indicator", "entry"]}
+            />
+          )}
+
+          <OptimizationPanel
+            pattern={config.pattern}
+            onChange={updatePattern}
+            includeGroups={["signal_exit", "time_exit", "backtest"]}
+          />
         </div>
 
         <div className="flex items-center justify-end border-t border-border px-5 py-3">
