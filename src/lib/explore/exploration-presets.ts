@@ -436,6 +436,41 @@ function dormantBreakEntry(op: string): Expression {
   return expr("crosses_above", "dormant_break", 0.5);
 }
 
+const MOVE_PERCENT_PARAM: ExplorationParamDef = {
+  key: "movePercent",
+  label: "Move % (day)",
+  type: "float",
+  default: 10,
+  min: 0.5,
+  max: 50,
+};
+
+function buildPercentageMover(
+  direction: "up" | "down",
+  params: Record<string, number | string>,
+  timeframeMode: ExploreTimeframeMode,
+  name: string,
+): PatternDefinition {
+  const movePercent = Number(params.movePercent ?? 10);
+  const price = String(params.price ?? "close");
+  const threshold = direction === "up" ? movePercent : -movePercent;
+  const op = (direction === "up" ? "gte" : "lte") as Expression["op"];
+
+  return {
+    name,
+    indicators: [
+      {
+        alias: "daily_return_pct",
+        type: "daily_return_pct",
+        params: { source: price },
+        timeframe: toTf(timeframeMode),
+      },
+    ],
+    entry: expr(op, "daily_return_pct", threshold),
+    backtest: { entryOn: "close", exitOn: "opposite_signal" },
+  };
+}
+
 function buildDormantPriceBreak(
   direction: "up" | "down",
   params: Record<string, number | string>,
@@ -1886,6 +1921,56 @@ export const EXPLORATION_PRESETS: ExplorationPreset[] = [
       return `Long base breakdown (${lookback} bar lookback)`;
     },
   },
+  {
+    id: "exp-percentage-mover-up",
+    name: "Percentage Mover Up",
+    category: "Momentum",
+    kind: "percent_mover",
+    description:
+      "Signal when the stock rises at least X% in one day (close vs prior close); measure forward returns over 3, 5, and 10 days",
+    params: [
+      MOVE_PERCENT_PARAM,
+      {
+        key: "price",
+        label: "Price",
+        type: "enum",
+        default: "close",
+        options: OHLC_OPTIONS,
+      },
+    ],
+    buildPattern: (params, tf) =>
+      buildPercentageMover("up", params, tf, "Percentage Mover Up"),
+    describe: (params) => {
+      const move = Number(params.movePercent ?? 10);
+      const price = String(params.price ?? "close");
+      return `${priceLabel(price)} daily return ≥ +${move}%`;
+    },
+  },
+  {
+    id: "exp-percentage-mover-down",
+    name: "Percentage Mover Down",
+    category: "Momentum",
+    kind: "percent_mover",
+    description:
+      "Signal when the stock falls at least X% in one day (close vs prior close); measure forward returns over 3, 5, and 10 days",
+    params: [
+      MOVE_PERCENT_PARAM,
+      {
+        key: "price",
+        label: "Price",
+        type: "enum",
+        default: "close",
+        options: OHLC_OPTIONS,
+      },
+    ],
+    buildPattern: (params, tf) =>
+      buildPercentageMover("down", params, tf, "Percentage Mover Down"),
+    describe: (params) => {
+      const move = Number(params.movePercent ?? 10);
+      const price = String(params.price ?? "close");
+      return `${priceLabel(price)} daily return ≤ -${move}%`;
+    },
+  },
 ];
 
 export function getExplorationPreset(id: string): ExplorationPreset | undefined {
@@ -1901,6 +1986,7 @@ export const EXPLORATION_CATEGORY_TABS = [
   { id: "Volatility", label: "Volatility" },
   { id: "Breakout", label: "Breakout" },
   { id: "Trend", label: "Trend" },
+  { id: "Momentum", label: "Momentum" },
   { id: "Candlesticks", label: "Candlesticks" },
   { id: "Chart patterns", label: "Chart patterns" },
   { id: "favorites", label: "Favorites" },
@@ -1931,6 +2017,11 @@ export const EXPLORATION_CATEGORY_STYLES: Record<
     dot: "bg-success",
   },
   Trend: { bg: "bg-info-light", text: "text-info", dot: "bg-info" },
+  Momentum: {
+    bg: "bg-accent-light",
+    text: "text-accent",
+    dot: "bg-accent",
+  },
   Candlesticks: { bg: "bg-input", text: "text-body", dot: "bg-muted" },
   "Chart patterns": {
     bg: "bg-success-light",

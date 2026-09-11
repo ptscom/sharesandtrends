@@ -471,6 +471,15 @@ function computeOnBars(
       });
       break;
     }
+    case "daily_return_pct": {
+      result[def.alias] = input.map((c, i) => {
+        if (i < 1) return null;
+        const prev = input[i - 1];
+        if (!prev || prev === 0) return null;
+        return ((c / prev - 1) * 100);
+      });
+      break;
+    }
     case "zscore": {
       const length = Number(params.length ?? 20);
       const sma = SMA.calculate({ period: length, values: input });

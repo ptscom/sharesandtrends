@@ -261,6 +261,20 @@ export const INDICATOR_REGISTRY: IndicatorDefinition[] = [
     outputs: ["signal", "level"],
   },
   {
+    id: "daily_return_pct",
+    name: "Daily Return %",
+    category: "momentum",
+    params: {
+      source: {
+        type: "enum",
+        default: "close",
+        options: ["open", "high", "low", "close"],
+        label: "Price field",
+      },
+    },
+    outputs: ["daily_return_pct"],
+  },
+  {
     id: "momentum",
     name: "Price Momentum %",
     category: "momentum",

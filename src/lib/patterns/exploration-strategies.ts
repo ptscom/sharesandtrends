@@ -151,6 +151,9 @@ export function inferExplorationParams(
       case "threshold":
         if (entryValue !== null) params.threshold = entryValue;
         break;
+      case "movePercent":
+        if (entryValue !== null) params.movePercent = Math.abs(entryValue);
+        break;
       case "price": {
         if (entryLeft && ["open", "high", "low", "close"].includes(entryLeft)) {
           params.price = entryLeft;
@@ -161,6 +164,13 @@ export function inferExplorationParams(
         );
         if (dormant?.params.source) {
           params.price = String(dormant.params.source);
+          break;
+        }
+        const dailyRet = pattern.indicators.find(
+          (indicator) => indicator.type === "daily_return_pct",
+        );
+        if (dailyRet?.params.source) {
+          params.price = String(dailyRet.params.source);
         }
         break;
       }
