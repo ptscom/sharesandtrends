@@ -9,6 +9,10 @@ import {
   type FetchJob,
   type FetchJobResult,
 } from "@/lib/data/fetch-prices-client";
+import {
+  buildMissingDataReport,
+  type MissingDataRow,
+} from "@/lib/data/missing-bars";
 import { findStaleSymbols } from "@/lib/data/stale-symbols";
 import { listSymbolInventory, listSymbols } from "@/lib/storage/prices";
 import { DataBackupPanel } from "./DataBackupPanel";
@@ -20,6 +24,7 @@ export function DataManager() {
   const [fixing, setFixing] = useState(false);
   const [progress, setProgress] = useState({ done: 0, total: 0 });
   const [results, setResults] = useState<FetchJobResult[]>([]);
+  const [missingData, setMissingData] = useState<MissingDataRow[]>([]);
   const [customSymbol, setCustomSymbol] = useState("");
   const [inventoryRefreshKey, setInventoryRefreshKey] = useState(0);
 
@@ -41,12 +46,13 @@ export function DataManager() {
       setFixing(mode === "fix");
       setLastJobMode(mode);
       setResults([]);
+      setMissingData([]);
       setProgress({ done: 0, total: jobs.length });
 
       const out = await runFetchJobs(jobs, {
         onProgress: (done, total) => setProgress({ done, total }),
       });
-      setResults(out);
+      let finalResults = out;
 
       const failed = out.filter((row) => row.error);
       if (failed.length > 0) {
@@ -57,13 +63,15 @@ export function DataManager() {
         const retried = await runFetchJobs(retryJobs, {
           onProgress: (done, total) => setProgress({ done, total }),
         });
-        const merged = [...out];
+        finalResults = [...out];
         for (const row of retried) {
-          const index = merged.findIndex((item) => item.symbol === row.symbol);
-          if (index >= 0) merged[index] = row;
+          const index = finalResults.findIndex((item) => item.symbol === row.symbol);
+          if (index >= 0) finalResults[index] = row;
         }
-        setResults(merged);
       }
+
+      setResults(finalResults);
+      setMissingData(await buildMissingDataReport(jobs, finalResults));
 
       setLoading(false);
       setFixing(false);
@@ -349,6 +357,44 @@ export function DataManager() {
               </tbody>
             </table>
           </div>
+        </section>
+      )}
+
+      {results.length > 0 && !loading && (
+        <section className="ui-panel p-6">
+          <h2 className="ui-section-title">Missing data</h2>
+          <p className="ui-helper mt-2">
+            Weekdays without a stored bar in the fetched range (holidays and
+            market closures may appear here).
+          </p>
+          {missingData.length === 0 ? (
+            <p className="mt-4 text-sm text-success">
+              No gaps detected for symbols in this run.
+            </p>
+          ) : (
+            <div className="mt-4 max-h-80 overflow-auto">
+              <table className="w-full text-left text-sm">
+                <thead>
+                  <tr className="border-b border-border text-muted">
+                    <th className="py-2 pr-4">Symbol</th>
+                    <th className="py-2">Data missing</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {missingData.map((row) => (
+                    <tr key={row.symbol} className="border-b border-border/40">
+                      <td className="py-2 pr-4 font-mono font-semibold align-top">
+                        {row.symbol}
+                      </td>
+                      <td className="py-2 font-mono text-xs sm:text-sm">
+                        {row.missing}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </section>
       )}
     </div>
