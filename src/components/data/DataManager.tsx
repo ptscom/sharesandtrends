@@ -364,12 +364,14 @@ export function DataManager() {
         <section className="ui-panel p-6">
           <h2 className="ui-section-title">Missing data</h2>
           <p className="ui-helper mt-2">
-            Weekdays without a stored bar in the fetched range (holidays and
-            market closures may appear here).
+            Last 30 days only. Uses the highest bar count in this run as the
+            reference and lists trading dates other symbols are missing (no
+            holiday calendar required).
           </p>
           {missingData.length === 0 ? (
             <p className="mt-4 text-sm text-success">
-              No gaps detected for symbols in this run.
+              No relative gaps in the last 30 days (needs at least two symbols
+              in the run to compare).
             </p>
           ) : (
             <div className="mt-4 max-h-80 overflow-auto">
