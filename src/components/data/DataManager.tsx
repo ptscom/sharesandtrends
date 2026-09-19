@@ -4,6 +4,7 @@ import { useCallback, useState } from "react";
 import { DEFAULT_WATCHLIST } from "@/lib/data/default-universe";
 import { mergePriceBars } from "@/lib/storage/prices";
 import type { OhlcvBar } from "@/lib/types";
+import { DataBackupPanel } from "./DataBackupPanel";
 import { StoredDataInventory } from "./StoredDataInventory";
 
 interface FetchResult {
@@ -70,6 +71,11 @@ export function DataManager() {
       <StoredDataInventory
         refreshKey={inventoryRefreshKey}
         onChanged={refreshInventory}
+      />
+
+      <DataBackupPanel
+        refreshKey={inventoryRefreshKey}
+        onRestored={refreshInventory}
       />
 
       <section className="ui-panel p-6">
