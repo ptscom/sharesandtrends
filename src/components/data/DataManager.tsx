@@ -11,6 +11,7 @@ import {
 } from "@/lib/data/fetch-prices-client";
 import { findStaleSymbols } from "@/lib/data/stale-symbols";
 import { listSymbolInventory, listSymbols } from "@/lib/storage/prices";
+import { DataBackupPanel } from "./DataBackupPanel";
 import { StoredDataInventory } from "./StoredDataInventory";
 
 export function DataManager() {
@@ -172,6 +173,8 @@ export function DataManager() {
         onFixData={() => void runFixData()}
         fixing={fixing}
       />
+
+      <DataBackupPanel onRestored={refreshInventory} />
 
       <section className="ui-panel p-6">
         <p className="ui-eyebrow">Update</p>
