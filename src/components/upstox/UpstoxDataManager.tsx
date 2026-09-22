@@ -6,7 +6,6 @@ import {
   currentRowsToCsv,
   downloadTextFile,
   failuresToCsv,
-  historicalRowsToCsv,
 } from "@/lib/upstox/csv";
 import {
   type HistoricalPreset,
@@ -14,7 +13,12 @@ import {
   todayYmd,
 } from "@/lib/upstox/date-ranges";
 import {
+  downloadFilteredHistoricalCsv,
+  downloadFullHistoricalCsv,
+} from "@/lib/upstox/export-historical-csv";
+import {
   collectJobErrors,
+  computeProgress,
   createHistoricalJob,
   runHistoricalJob,
   type JobProgress,
@@ -31,8 +35,9 @@ import {
   countHistoricalStats,
   deleteHistoricalDatabase,
   deleteHistoricalSymbol,
-  listAllHistoricalRows,
+  getLatestHistoricalJob,
   listIncompleteHistoricalJobs,
+  queryHistoricalRows,
   saveHistoricalJob,
   syncAllUpstoxHistoricalToPrices,
 } from "@/lib/storage/upstox-historical";
@@ -70,8 +75,12 @@ export function UpstoxDataManager() {
   const [currentSearch, setCurrentSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(0);
 
-  const [historicalRows, setHistoricalRows] = useState<HistoricalPriceRow[]>([]);
+  const [historicalPageRows, setHistoricalPageRows] = useState<HistoricalPriceRow[]>([]);
+  const [historicalTotal, setHistoricalTotal] = useState(0);
+  const [historicalLoading, setHistoricalLoading] = useState(false);
   const [dbStats, setDbStats] = useState({ rowCount: 0, symbolCount: 0 });
+  const [storeReady, setStoreReady] = useState(false);
+  const [storeError, setStoreError] = useState<string | null>(null);
   const [histPreset, setHistPreset] = useState<HistoricalPreset>("1y");
   const [histFrom, setHistFrom] = useState("");
   const [histTo, setHistTo] = useState(todayYmd());
@@ -82,23 +91,63 @@ export function UpstoxDataManager() {
   const [histErrors, setHistErrors] = useState<UpstoxDataError[]>([]);
   const [histRunning, setHistRunning] = useState(false);
   const stopRef = useRef(false);
+  const autoOpenedHistoricalRef = useRef(false);
+
+  const loadHistoricalPage = useCallback(async () => {
+    setHistoricalLoading(true);
+    setStoreError(null);
+    try {
+      const { rows, total } = await queryHistoricalRows({
+        page: histPage,
+        pageSize: PAGE_SIZE,
+        symbolQuery: histSearch,
+      });
+      setHistoricalPageRows(rows);
+      setHistoricalTotal(total);
+    } catch (e) {
+      setStoreError(e instanceof Error ? e.message : "Failed to read stored data.");
+      setHistoricalPageRows([]);
+      setHistoricalTotal(0);
+    } finally {
+      setHistoricalLoading(false);
+    }
+  }, [histPage, histSearch]);
 
   const refreshHistoricalStore = useCallback(async () => {
-    const [rows, stats] = await Promise.all([
-      listAllHistoricalRows(),
-      countHistoricalStats(),
-    ]);
-    setHistoricalRows(rows);
-    setDbStats(stats);
+    setStoreError(null);
+    try {
+      const stats = await countHistoricalStats();
+      setDbStats(stats);
+      if (stats.rowCount > 0 && !autoOpenedHistoricalRef.current) {
+        autoOpenedHistoricalRef.current = true;
+        setTab("historical");
+      }
+    } catch (e) {
+      setStoreError(e instanceof Error ? e.message : "Failed to read IndexedDB.");
+    } finally {
+      setStoreReady(true);
+    }
   }, []);
 
   useEffect(() => {
     void refreshHistoricalStore();
+  }, [refreshHistoricalStore]);
+
+  useEffect(() => {
+    if (!storeReady) return;
+    void loadHistoricalPage();
+  }, [histPage, histSearch, storeReady, loadHistoricalPage]);
+
+  useEffect(() => {
     void (async () => {
       const incomplete = await listIncompleteHistoricalJobs();
-      if (incomplete.length > 0) {
-        setHistJob(incomplete.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0]);
-      }
+      const job =
+        incomplete.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0] ??
+        (await getLatestHistoricalJob());
+      if (!job) return;
+      setHistJob(job);
+      setHistProgress(computeProgress(job, 1));
+      setHistErrors(collectJobErrors(job));
     })();
     void fetch("/top1000.json")
       .then((r) => r.json())
@@ -106,7 +155,7 @@ export function UpstoxDataManager() {
         if (Array.isArray(data.symbols)) setTop1000(data.symbols);
       })
       .catch(() => undefined);
-  }, [refreshHistoricalStore]);
+  }, []);
 
   const resolvedSymbols = useMemo(() => {
     if (symbolMode === "top1000") return top1000;
@@ -170,7 +219,9 @@ export function UpstoxDataManager() {
     setHistJob(finished);
     setHistErrors(collectJobErrors(finished));
     setHistRunning(false);
+    setHistPage(0);
     await refreshHistoricalStore();
+    await loadHistoricalPage();
   }, [
     histRunning,
     resolvedSymbols,
@@ -178,6 +229,7 @@ export function UpstoxDataManager() {
     histFrom,
     histTo,
     refreshHistoricalStore,
+    loadHistoricalPage,
   ]);
 
   const resumeHistoricalJob = useCallback(async () => {
@@ -229,22 +281,10 @@ export function UpstoxDataManager() {
     return rows;
   }, [currentRows, currentSearch]);
 
-  const filteredHistorical = useMemo(() => {
-    const q = histSearch.trim().toUpperCase();
-    return q
-      ? historicalRows.filter((r) => r.symbol.includes(q))
-      : historicalRows;
-  }, [historicalRows, histSearch]);
-
   const currentPageRows = filteredCurrent.slice(
     currentPage * PAGE_SIZE,
     (currentPage + 1) * PAGE_SIZE,
   );
-  const histPageRows = filteredHistorical.slice(
-    histPage * PAGE_SIZE,
-    (histPage + 1) * PAGE_SIZE,
-  );
-
   const estCompletionNote =
     histProgress && histProgress.remaining > 0
       ? `~${Math.ceil(histProgress.remaining / Math.max(1, histProgress.activeLanes))} symbol batches remaining (estimate varies with throttling).`
@@ -252,6 +292,25 @@ export function UpstoxDataManager() {
 
   return (
     <div className="space-y-6">
+      <section className="ui-panel p-4">
+        <p className="text-sm">
+          <span className="font-semibold">Stored EOD:</span>{" "}
+          {storeReady
+            ? `${dbStats.rowCount.toLocaleString()} rows · ${dbStats.symbolCount} symbols`
+            : "Loading…"}
+          {dbStats.rowCount > 0 && tab === "current" && (
+            <span className="text-muted">
+              {" "}
+              — data is on the <strong>Upstox EOD Historical</strong> tab (Current
+              Day is not saved across refresh).
+            </span>
+          )}
+        </p>
+        {storeError && (
+          <p className="mt-2 text-sm text-danger">{storeError}</p>
+        )}
+      </section>
+
       <div className="flex flex-wrap gap-2 border-b border-border pb-2">
         <button
           type="button"
@@ -482,10 +541,7 @@ export function UpstoxDataManager() {
                 type="button"
                 className="ui-btn-secondary"
                 onClick={() =>
-                  downloadTextFile(
-                    `upstox-eod-all-${todayYmd()}.csv`,
-                    historicalRowsToCsv(historicalRows),
-                  )
+                  void downloadFullHistoricalCsv(`upstox-eod-all-${todayYmd()}.csv`)
                 }
               >
                 Download full EOD database CSV
@@ -493,10 +549,11 @@ export function UpstoxDataManager() {
               <button
                 type="button"
                 className="ui-btn-secondary"
+                disabled={historicalTotal === 0}
                 onClick={() =>
-                  downloadTextFile(
+                  void downloadFilteredHistoricalCsv(
                     `upstox-eod-filtered-${todayYmd()}.csv`,
-                    historicalRowsToCsv(filteredHistorical),
+                    histSearch,
                   )
                 }
               >
@@ -558,12 +615,18 @@ export function UpstoxDataManager() {
             </label>
             <PriceTable
               mode="historical"
-              rows={histPageRows}
-              emptyLabel="No stored EOD rows yet."
+              rows={historicalPageRows}
+              emptyLabel={
+                historicalLoading
+                  ? "Loading stored rows…"
+                  : dbStats.rowCount > 0
+                    ? "No rows match this search."
+                    : "No stored EOD rows yet."
+              }
             />
             <Pagination
               page={histPage}
-              total={filteredHistorical.length}
+              total={historicalTotal}
               pageSize={PAGE_SIZE}
               onChange={setHistPage}
             />
@@ -587,7 +650,7 @@ function Pagination({
   onChange: (p: number) => void;
 }) {
   const pages = Math.max(1, Math.ceil(total / pageSize));
-  if (total <= pageSize) return null;
+  if (total === 0) return null;
   return (
     <div className="mt-3 flex items-center gap-3 text-sm">
       <button

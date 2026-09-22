@@ -55,19 +55,74 @@ export async function listHistoricalRowsForSymbol(
     .sort((a, b) => a.date.localeCompare(b.date));
 }
 
+function mapRow(record: UpstoxHistoricalRowRecord): HistoricalPriceRow {
+  const { symbol, date, open, high, low, close, volume } = record;
+  return { symbol, date, open, high, low, close, volume };
+}
+
+/** Paginated read — avoids loading hundreds of thousands of rows into memory. */
+export async function queryHistoricalRows(options: {
+  page: number;
+  pageSize: number;
+  symbolQuery?: string;
+}): Promise<{ rows: HistoricalPriceRow[]; total: number }> {
+  const db = getDb();
+  const page = Math.max(0, options.page);
+  const pageSize = Math.max(1, options.pageSize);
+  const q = options.symbolQuery?.trim().toUpperCase() ?? "";
+
+  if (q) {
+    const collection = db.upstoxHistorical.where("symbol").startsWith(q);
+    const total = await collection.count();
+    const raw = await collection.offset(page * pageSize).limit(pageSize).toArray();
+    const rows = raw.map(mapRow).sort((a, b) =>
+      a.symbol === b.symbol
+        ? a.date.localeCompare(b.date)
+        : a.symbol.localeCompare(b.symbol),
+    );
+    return { rows, total };
+  }
+
+  const total = await db.upstoxHistorical.count();
+  const raw = await db.upstoxHistorical
+    .orderBy("id")
+    .offset(page * pageSize)
+    .limit(pageSize)
+    .toArray();
+  const rows = raw.map(mapRow);
+  return { rows, total };
+}
+
+/** Full export via cursor (for CSV download). */
+export async function forEachHistoricalRowBatch(
+  batchSize: number,
+  fn: (rows: HistoricalPriceRow[]) => void | Promise<void>,
+): Promise<void> {
+  const db = getDb();
+  let offset = 0;
+  for (;;) {
+    const batch = await db.upstoxHistorical
+      .orderBy("id")
+      .offset(offset)
+      .limit(batchSize)
+      .toArray();
+    if (batch.length === 0) break;
+    await fn(batch.map(mapRow));
+    offset += batch.length;
+  }
+}
+
 export async function listAllHistoricalRows(): Promise<HistoricalPriceRow[]> {
   const db = getDb();
-  const rows = await db.upstoxHistorical.toArray();
+  const count = await db.upstoxHistorical.count();
+  if (count > 10_000) {
+    throw new Error(
+      `Too many rows (${count}) to load at once. Use paginated query or CSV export.`,
+    );
+  }
+  const rows = await db.upstoxHistorical.orderBy("id").toArray();
   return rows
-    .map(({ symbol, date, open, high, low, close, volume }) => ({
-      symbol,
-      date,
-      open,
-      high,
-      low,
-      close,
-      volume,
-    }))
+    .map(mapRow)
     .sort((a, b) =>
       a.symbol === b.symbol
         ? a.date.localeCompare(b.date)
@@ -109,6 +164,12 @@ export async function getHistoricalJob(id: string): Promise<HistoricalJob | unde
 export async function listIncompleteHistoricalJobs(): Promise<HistoricalJob[]> {
   const db = getDb();
   return db.upstoxJobs.filter((job) => !job.complete).toArray();
+}
+
+export async function getLatestHistoricalJob(): Promise<HistoricalJob | undefined> {
+  const db = getDb();
+  const jobs = await db.upstoxJobs.orderBy("updatedAt").reverse().limit(1).toArray();
+  return jobs[0];
 }
 
 export async function setInstrumentCacheDate(cacheDate: string, payload: string): Promise<void> {

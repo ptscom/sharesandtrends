@@ -24,6 +24,21 @@ export function currentRowsToCsv(rows: CurrentPriceRow[]): string {
   return [header, ...lines].join("\n");
 }
 
+export function historicalRowToCsvLine(row: HistoricalPriceRow): string {
+  return [
+    escapeCsv(row.symbol),
+    escapeCsv(row.date),
+    escapeCsv(row.open),
+    escapeCsv(row.high),
+    escapeCsv(row.low),
+    escapeCsv(row.close),
+    escapeCsv(row.volume),
+  ].join(",");
+}
+
+export const HISTORICAL_CSV_HEADER =
+  "symbol,date,open,high,low,close,volume";
+
 export function historicalRowsToCsv(rows: HistoricalPriceRow[]): string {
   const header = "symbol,date,open,high,low,close,volume";
   const sorted = [...rows].sort((a, b) =>
