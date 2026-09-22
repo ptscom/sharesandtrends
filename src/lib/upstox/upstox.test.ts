@@ -2,7 +2,15 @@ import { describe, expect, it, beforeEach } from "vitest";
 import { buildInstrumentMap, setInstrumentMapForTests, clearInstrumentCache } from "@/lib/upstox/instruments";
 import { parseHistoricalCandle, parseLiveOhlc, parseSymbolList } from "@/lib/upstox/parse";
 import { assignSymbolsToLanes, distributeRoundRobin } from "@/lib/upstox/distribute";
-import { TokenRateLimiter, RATE_LIMITS } from "@/lib/upstox/rate-limiter";
+import {
+  getSharedLimiterForToken,
+  resetSharedLimitersForTests,
+} from "@/lib/upstox/limiter-registry";
+import {
+  TokenRateLimiter,
+  RATE_LIMITS,
+  UPSTOX_OFFICIAL_LIMITS,
+} from "@/lib/upstox/rate-limiter";
 import { isRetryableStatus } from "@/lib/upstox/retry-fetch";
 import { dedupeTokens, createTokenLanes, activeLanes } from "@/lib/upstox/tokens";
 import { pendingSymbols, retryableFailedSymbols } from "@/lib/upstox/historical-job-runner";
@@ -101,6 +109,27 @@ describe("multi-token distribution", () => {
 });
 
 describe("rate limiter", () => {
+  it("stays below Upstox official caps", () => {
+    expect(RATE_LIMITS.maxPerSecond).toBeLessThanOrEqual(
+      UPSTOX_OFFICIAL_LIMITS.perSecond,
+    );
+    expect(RATE_LIMITS.maxPerMinute).toBeLessThanOrEqual(
+      UPSTOX_OFFICIAL_LIMITS.perMinute,
+    );
+    expect(RATE_LIMITS.maxPer30Minutes).toBeLessThanOrEqual(
+      UPSTOX_OFFICIAL_LIMITS.per30Minutes,
+    );
+  });
+
+  it("shares one limiter per access token across lanes", () => {
+    resetSharedLimitersForTests();
+    const lanes = createTokenLanes(["same-token", "same-token"]);
+    expect(lanes[0].limiter).toBe(lanes[1].limiter);
+    expect(getSharedLimiterForToken("same-token")).toBe(lanes[0].limiter);
+    const other = createTokenLanes(["other"])[0];
+    expect(other.limiter).not.toBe(lanes[0].limiter);
+  });
+
   it("isolates limits per token instance", async () => {
     const a = new TokenRateLimiter({ ...RATE_LIMITS, maxPerSecond: 1 });
     const b = new TokenRateLimiter({ ...RATE_LIMITS, maxPerSecond: 1 });

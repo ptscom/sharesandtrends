@@ -1,6 +1,7 @@
 import { gunzipSync } from "node:zlib";
 import { normalizeSymbol } from "@/lib/upstox/parse";
 import type { ResolvedInstrument } from "@/lib/upstox/types";
+import { getSharedLimiterForToken } from "@/lib/upstox/limiter-registry";
 import { upstoxFetch } from "@/lib/upstox/retry-fetch";
 
 const COMPLETE_URL =
@@ -89,7 +90,11 @@ async function searchInstrument(
   const params = new URLSearchParams();
   params.set("query", symbol);
   const url = `${SEARCH_URL}?${params.toString()}`;
-  const { response } = await upstoxFetch(url, { method: "GET", token });
+  const { response } = await upstoxFetch(
+    url,
+    { method: "GET", token },
+    { limiter: getSharedLimiterForToken(token) },
+  );
   if (!response.ok) return null;
   const data = (await response.json()) as { data?: BodRow[] };
   const rows = data.data ?? [];

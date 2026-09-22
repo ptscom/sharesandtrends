@@ -40,10 +40,12 @@ async function fetchCurrentBatch(
   params.set("interval", "1d");
   const url = `${OHLC_URL}?${params.toString()}`;
 
-  const result = await lane.limiter.run(async () => {
-    requestCount.value += 1;
-    return upstoxFetch(url, { method: "GET", token: lane.token });
-  });
+  requestCount.value += 1;
+  const result = await upstoxFetch(
+    url,
+    { method: "GET", token: lane.token },
+    { limiter: lane.limiter },
+  );
 
   const { response } = result;
   if (response.status === 401 || response.status === 403) {
@@ -192,10 +194,12 @@ async function fetchHistoricalForSymbol(
     const pathKey = encodeURIComponent(instrumentKey);
     const url = `https://api.upstox.com/v3/historical-candle/${pathKey}/days/1/${chunk.toDate}/${chunk.fromDate}`;
 
-    const { response } = await lane.limiter.run(async () => {
-      requestCount.value += 1;
-      return upstoxFetch(url, { method: "GET", token: lane.token });
-    });
+    requestCount.value += 1;
+    const { response } = await upstoxFetch(
+      url,
+      { method: "GET", token: lane.token },
+      { limiter: lane.limiter },
+    );
 
     if (response.status === 401 || response.status === 403) {
       lane.markInvalid(authErrorMessage(response.status));

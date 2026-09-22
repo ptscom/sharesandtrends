@@ -7,8 +7,11 @@ import {
 } from "@/lib/storage/upstox-historical";
 import { v4 as uuidv4 } from "uuid";
 
-/** Parallel symbol workers (each calls server; server uses token lanes). */
-export const HISTORICAL_CLIENT_CONCURRENCY = 20;
+/**
+ * Parallel browser → server jobs. Upstox rate limits are enforced on the
+ * server via shared per-token limiters (10/s, 500/min, 2000/30min caps).
+ */
+export const HISTORICAL_CLIENT_CONCURRENCY = 12;
 
 /** Symbols per HTTP request — server parallelizes across token lanes. */
 export const HISTORICAL_SYMBOLS_PER_REQUEST = 5;

@@ -1,4 +1,5 @@
-import { TokenRateLimiter } from "@/lib/upstox/rate-limiter";
+import { getSharedLimiterForToken } from "@/lib/upstox/limiter-registry";
+import type { TokenRateLimiter } from "@/lib/upstox/rate-limiter";
 
 export function envFallbackTokens(): string[] {
   const keys = [
@@ -43,13 +44,14 @@ export function resolveRequestTokens(body: {
 export class TokenLane {
   readonly id: number;
   readonly token: string;
-  readonly limiter = new TokenRateLimiter();
+  readonly limiter: TokenRateLimiter;
   invalid = false;
   invalidReason?: string;
 
   constructor(id: number, token: string) {
     this.id = id;
     this.token = token;
+    this.limiter = getSharedLimiterForToken(token);
   }
 
   markInvalid(reason: string): void {

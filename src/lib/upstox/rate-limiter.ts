@@ -1,4 +1,11 @@
-/** Conservative Upstox limits per token lane. */
+/** Official Upstox standard API caps (per access token). */
+export const UPSTOX_OFFICIAL_LIMITS = {
+  perSecond: 10,
+  perMinute: 500,
+  per30Minutes: 2000,
+} as const;
+
+/** Applied limits per token — slightly under official caps. */
 export type RateLimitConfig = {
   maxPerSecond: number;
   maxPerMinute: number;
@@ -7,9 +14,9 @@ export type RateLimitConfig = {
 };
 
 export const RATE_LIMITS: RateLimitConfig = {
-  maxPerSecond: 8,
-  maxPerMinute: 420,
-  maxPer30Minutes: 1800,
+  maxPerSecond: 9,
+  maxPerMinute: 480,
+  maxPer30Minutes: 1950,
   maxHistoricalInFlight: 8,
 };
 

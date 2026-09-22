@@ -247,7 +247,8 @@ export function UpstoxDataManager() {
     setHistErrors(collectJobErrors(finished));
     setHistRunning(false);
     await refreshHistoricalStore();
-  }, [histJob, histRunning, refreshHistoricalStore]);
+    await loadHistoricalPage();
+  }, [histJob, histRunning, refreshHistoricalStore, loadHistoricalPage]);
 
   const retryFailedHistorical = useCallback(async () => {
     if (!histJob || histRunning) return;
@@ -267,7 +268,8 @@ export function UpstoxDataManager() {
     setHistErrors(collectJobErrors(finished));
     setHistRunning(false);
     await refreshHistoricalStore();
-  }, [histJob, histRunning, refreshHistoricalStore]);
+    await loadHistoricalPage();
+  }, [histJob, histRunning, refreshHistoricalStore, loadHistoricalPage]);
 
   const stopHistorical = () => {
     stopRef.current = true;
