@@ -26,6 +26,7 @@ import type {
   HistoricalPriceRow,
   UpstoxDataError,
 } from "@/lib/upstox/types";
+import { syncCurrentRowsToPrices } from "@/lib/upstox/sync-to-prices";
 import {
   countHistoricalStats,
   deleteHistoricalDatabase,
@@ -33,6 +34,7 @@ import {
   listAllHistoricalRows,
   listIncompleteHistoricalJobs,
   saveHistoricalJob,
+  syncAllUpstoxHistoricalToPrices,
 } from "@/lib/storage/upstox-historical";
 
 type Tab = "current" | "historical";
@@ -120,9 +122,11 @@ export function UpstoxDataManager() {
         mode: "current",
         symbols: resolvedSymbols,
       });
+      const tradingDate = todayYmd();
       setCurrentRows(data.rows);
       setCurrentErrors(data.errors);
-      setCurrentTradingDate(todayYmd());
+      setCurrentTradingDate(tradingDate);
+      await syncCurrentRowsToPrices(data.rows, tradingDate);
     } catch {
       setCurrentErrors([
         {
@@ -306,7 +310,8 @@ export function UpstoxDataManager() {
             <h2 className="ui-section-title">Current Day (latest snapshot)</h2>
             <p className="ui-helper mt-2">
               Live OHLC from Upstox `live_ohlc` (not tick-by-tick). Trading date:{" "}
-              {currentTradingDate}.
+              {currentTradingDate}. Successful fetches also update today&apos;s bar
+              in the backtest price database.
             </p>
             <div className="mt-4 flex flex-wrap gap-3">
               <button
@@ -364,7 +369,9 @@ export function UpstoxDataManager() {
             <h2 className="ui-section-title">Upstox EOD Historical</h2>
             <p className="ui-helper mt-2">
               Database: {dbStats.rowCount.toLocaleString()} rows across{" "}
-              {dbStats.symbolCount} symbols (IndexedDB, survives refresh).
+              {dbStats.symbolCount} symbols (IndexedDB, survives refresh). Each
+              download also merges into the shared price database used by
+              Explore and Backtest.
             </p>
             <div className="mt-4 flex flex-wrap gap-3">
               {(["1m", "1y", "5y", "10y", "custom"] as HistoricalPreset[]).map((p) => (
@@ -457,6 +464,19 @@ export function UpstoxDataManager() {
               </div>
             )}
             <div className="mt-4 flex flex-wrap gap-3">
+              <button
+                type="button"
+                className="ui-btn-secondary"
+                onClick={() =>
+                  void syncAllUpstoxHistoricalToPrices().then(({ symbols, bars }) => {
+                    window.alert(
+                      `Synced ${bars} bar(s) for ${symbols} symbol(s) into the backtest price database.`,
+                    );
+                  })
+                }
+              >
+                Sync all EOD → backtest DB
+              </button>
               <button
                 type="button"
                 className="ui-btn-secondary"

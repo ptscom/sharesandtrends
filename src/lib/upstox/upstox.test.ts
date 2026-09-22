@@ -7,6 +7,10 @@ import { isRetryableStatus } from "@/lib/upstox/retry-fetch";
 import { dedupeTokens, createTokenLanes, activeLanes } from "@/lib/upstox/tokens";
 import { pendingSymbols, retryableFailedSymbols } from "@/lib/upstox/historical-job-runner";
 import { mergeHistoricalRowsInMemory } from "@/lib/storage/upstox-historical";
+import {
+  currentRowToOhlcvBar,
+  historicalRowToOhlcvBar,
+} from "@/lib/upstox/sync-to-prices";
 import type { HistoricalJob } from "@/lib/upstox/types";
 
 describe("instrument resolution", () => {
@@ -147,6 +151,51 @@ describe("historical job resume", () => {
 
   it("lists retryable failed symbols", () => {
     expect(retryableFailedSymbols(baseJob)).toEqual(["B"]);
+  });
+});
+
+describe("sync to prices", () => {
+  it("converts historical rows with zero volume", () => {
+    const bar = historicalRowToOhlcvBar({
+      symbol: "TCS",
+      date: "2024-01-02",
+      open: 1,
+      high: 2,
+      low: 1,
+      close: 2,
+      volume: 0,
+    });
+    expect(bar?.volume).toBe(0);
+  });
+
+  it("skips incomplete historical rows", () => {
+    expect(
+      historicalRowToOhlcvBar({
+        symbol: "TCS",
+        date: "2024-01-02",
+        open: null,
+        high: 2,
+        low: 1,
+        close: 2,
+        volume: 1,
+      }),
+    ).toBeNull();
+  });
+
+  it("maps current-day snapshot to a daily bar", () => {
+    const bar = currentRowToOhlcvBar(
+      {
+        symbol: "RELIANCE",
+        open: 10,
+        high: 11,
+        low: 9,
+        close: 10.5,
+        volume: 100,
+      },
+      "2026-09-22",
+    );
+    expect(bar?.date).toBe("2026-09-22");
+    expect(bar?.close).toBe(10.5);
   });
 });
 

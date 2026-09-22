@@ -1,4 +1,5 @@
 import type { HistoricalJob, HistoricalPriceRow } from "@/lib/upstox/types";
+import { syncHistoricalRowsToPrices } from "@/lib/upstox/sync-to-prices";
 import type { UpstoxHistoricalRowRecord } from "@/lib/storage/db";
 import { getDb } from "@/lib/storage/db";
 
@@ -32,6 +33,7 @@ export async function mergeHistoricalRows(rows: HistoricalPriceRow[]): Promise<n
     .map((r) => ({ ...r, id: rowId(r.symbol, r.date) }));
   if (records.length === 0) return 0;
   await db.upstoxHistorical.bulkPut(records);
+  await syncHistoricalRowsToPrices(rows);
   return records.length;
 }
 
@@ -120,4 +122,14 @@ export async function getInstrumentCache(
   const db = getDb();
   const row = await db.upstoxInstrumentCache.get(cacheDate);
   return row?.payload;
+}
+
+/** Re-sync every Upstox EOD row into the shared backtest `prices` store. */
+export async function syncAllUpstoxHistoricalToPrices(): Promise<{
+  symbols: number;
+  bars: number;
+}> {
+  const rows = await listAllHistoricalRows();
+  const bars = await syncHistoricalRowsToPrices(rows);
+  return { symbols: new Set(rows.map((r) => r.symbol)).size, bars };
 }
