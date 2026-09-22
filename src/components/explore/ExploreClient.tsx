@@ -2,11 +2,21 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useCallback, useEffect, useMemo, useState, startTransition, type MouseEvent } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  startTransition,
+  type MouseEvent,
+} from "react";
 import { ExploreIndicatorResultsPanel } from "@/components/explore/ExploreIndicatorResultsPanel";
-import { ExploreIndicatorSelector } from "@/components/explore/ExploreIndicatorSelector";
-import { IndicatorComboBuilderModal } from "@/components/explore/IndicatorComboBuilderModal";
-import { IndicatorSettingsModal } from "@/components/explore/IndicatorSettingsModal";
+import { ExploreExplorationSelector } from "@/components/explore/ExploreExplorationSelector";
+import {
+  ExplorationBuilderModal,
+  ExplorationPresetSettingsModal,
+} from "@/components/explore/ExplorationBuilderModal";
+import { ExplorationRunHistoryModal } from "@/components/explore/ExplorationRunHistoryModal";
 import { ExploreMtfStrategySelector, type MtfSlotSelection } from "@/components/explore/ExploreMtfStrategySelector";
 import { ExplorePriceCacheFooter } from "@/components/explore/ExplorePriceCacheFooter";
 import { ExploreScanResultsPanel } from "@/components/explore/ExploreScanResultsPanel";
@@ -25,13 +35,26 @@ import { SymbolSelector } from "@/components/shared/SymbolSelector";
 import { DEFAULT_WATCHLIST } from "@/lib/data/default-universe";
 import { runIndicatorScanInWorker } from "@/lib/engine/indicator-scan-worker-client";
 import { runUniverseScanInWorker } from "@/lib/engine/scan-worker-client";
+import type {
+  ExplorationFilter,
+  IndicatorScanRun,
+  SavedExploration,
+} from "@/lib/explore/exploration-models";
 import {
-  createRegistryIndicatorItems,
-  summarizeEnabledIndicators,
-  type ExploreIndicatorItem,
-  type ExplorePath,
-  type IndicatorScanRun,
-} from "@/lib/explore/indicator-models";
+  defaultParamsForPreset,
+  summarizeExplorationFilter,
+} from "@/lib/explore/exploration-models";
+import {
+  DEFAULT_EXPLORATION_PRESET_ID,
+  getExplorationPreset,
+  type ExplorationFilterId,
+} from "@/lib/explore/exploration-presets";
+import {
+  describeExplorationFilter,
+  explorationFilterToPattern,
+} from "@/lib/explore/exploration-to-pattern";
+import { explorationFilterKey } from "@/lib/explore/exploration-filter-key";
+import type { ExplorePath } from "@/lib/explore/indicator-models";
 import { patternToPreset } from "@/lib/patterns/custom";
 import { EMA_CROSS_PATTERN } from "@/lib/patterns/defaults";
 import {
@@ -57,6 +80,12 @@ import {
   savePattern,
   saveScanRun,
 } from "@/lib/storage/patterns";
+import {
+  deleteExploration,
+  listExplorations,
+  saveExploration,
+} from "@/lib/storage/explorations";
+import { saveIndicatorScanRun } from "@/lib/storage/indicator-scans";
 import { listSymbols } from "@/lib/storage/prices";
 import {
   countSelectedSymbols,
@@ -70,27 +99,17 @@ const MTF_FILTER_LABELS: Record<"weekly" | "monthly", string> = {
   monthly: "Monthly filter",
 };
 
-function initIndicatorItemsByTf(): Record<
-  ExploreTimeframeMode,
-  ExploreIndicatorItem[]
-> {
+function createDefaultExplorationFilter(
+  timeframeMode: ExploreTimeframeMode,
+): ExplorationFilter {
+  const preset = getExplorationPreset(DEFAULT_EXPLORATION_PRESET_ID)!;
   return {
-    "1D": createRegistryIndicatorItems("1D"),
-    "1W": createRegistryIndicatorItems("1W"),
-    "1M": createRegistryIndicatorItems("1M"),
-    mtf: createRegistryIndicatorItems("mtf"),
+    source: "preset",
+    name: preset.name,
+    timeframeMode,
+    presetId: preset.id,
+    params: defaultParamsForPreset(preset),
   };
-}
-
-function disableAllIndicators(
-  byTf: Record<ExploreTimeframeMode, ExploreIndicatorItem[]>,
-): Record<ExploreTimeframeMode, ExploreIndicatorItem[]> {
-  return Object.fromEntries(
-    Object.entries(byTf).map(([tf, items]) => [
-      tf,
-      items.map((item) => ({ ...item, enabled: false })),
-    ]),
-  ) as Record<ExploreTimeframeMode, ExploreIndicatorItem[]>;
 }
 
 export function ExploreClient() {
@@ -104,18 +123,23 @@ export function ExploreClient() {
   const [symbolsInitialized, setSymbolsInitialized] = useState(false);
 
   const [explorePath, setExplorePath] = useState<ExplorePath | null>(null);
-  const [indicatorTimeframeMode, setIndicatorTimeframeMode] =
+  const [explorationTimeframeMode, setExplorationTimeframeMode] =
     useState<ExploreTimeframeMode>("1D");
-  const [indicatorItemsByTf, setIndicatorItemsByTf] = useState(
-    initIndicatorItemsByTf,
-  );
-  const [indicatorCombos, setIndicatorCombos] = useState<ExploreIndicatorItem[]>(
-    [],
-  );
-  const [indicatorSettingsId, setIndicatorSettingsId] = useState<string | null>(
-    null,
-  );
-  const [comboBuilderOpen, setComboBuilderOpen] = useState(false);
+  const [explorationFilter, setExplorationFilter] =
+    useState<ExplorationFilter | null>(null);
+  const [selectedExplorationPresetId, setSelectedExplorationPresetId] =
+    useState<string | null>(DEFAULT_EXPLORATION_PRESET_ID);
+  const [explorationQuery, setExplorationQuery] = useState("");
+  const [explorationCategoryFilter, setExplorationCategoryFilter] =
+    useState<ExplorationFilterId>("all");
+  const [presetSettingsId, setPresetSettingsId] = useState<string | null>(null);
+  const [builderOpen, setBuilderOpen] = useState(false);
+  const [runHistoryOpen, setRunHistoryOpen] = useState(false);
+  const [runHistoryFilterKey, setRunHistoryFilterKey] = useState("");
+  const [runHistoryFilterName, setRunHistoryFilterName] = useState("");
+  const [savedExplorations, setSavedExplorations] = useState<
+    SavedExploration[]
+  >([]);
   const [indicatorScan, setIndicatorScan] = useState<IndicatorScanRun | null>(
     null,
   );
@@ -201,19 +225,10 @@ export function ExploreClient() {
         ? `${strategyName} · ${formatMtfExitModeLabel(mtfExitMode)}`
         : `${formatTimeframeModeLabel(timeframeMode)}: ${strategyName}`;
 
-  const currentIndicatorItems = indicatorItemsByTf[indicatorTimeframeMode];
-  const currentCombos = indicatorCombos.filter(
-    (c) => c.timeframeMode === indicatorTimeframeMode,
-  );
-  const allEnabledIndicators = useMemo(() => {
-    const fromRegistry = Object.values(indicatorItemsByTf).flat();
-    return [...fromRegistry, ...indicatorCombos].filter((i) => i.enabled);
-  }, [indicatorItemsByTf, indicatorCombos]);
-
-  const indicatorSummary =
+  const explorationSummary =
     explorePath === "strategy"
       ? "Not used"
-      : summarizeEnabledIndicators(allEnabledIndicators);
+      : summarizeExplorationFilter(explorationFilter);
 
   const scanSummary = `${minWinRate}% win · ${minTrades}+ trades${
     signalTodayOnly ? " · signal today" : ""
@@ -221,12 +236,12 @@ export function ExploreClient() {
 
   const topBarStrategyLabel =
     explorePath === "indicator"
-      ? `Indicators: ${indicatorSummary}`
+      ? `Exploration: ${explorationSummary}`
       : strategyName;
 
   const resultCount =
     lastScanPath === "indicator"
-      ? (indicatorScan?.groups.reduce((n, g) => n + g.results.length, 0) ?? 0)
+      ? (indicatorScan?.results.length ?? 0)
       : (scan?.results.length ?? 0);
 
   const resolvePresetPattern = useCallback(
@@ -242,14 +257,120 @@ export function ExploreClient() {
 
   const activateStrategyPath = useCallback(() => {
     setExplorePath("strategy");
-    setIndicatorItemsByTf((prev) => disableAllIndicators(prev));
-    setIndicatorCombos((prev) =>
-      prev.map((combo) => ({ ...combo, enabled: false })),
-    );
+    setExplorationFilter(null);
+    setSelectedExplorationPresetId(null);
   }, []);
 
-  const activateIndicatorPath = useCallback(() => {
-    setExplorePath("indicator");
+  const activateExplorationPath = useCallback(
+    (filter?: ExplorationFilter) => {
+      setExplorePath("indicator");
+      if (filter) {
+        setExplorationFilter(filter);
+      } else if (!explorationFilter) {
+        const next = createDefaultExplorationFilter(explorationTimeframeMode);
+        setExplorationFilter(next);
+        setSelectedExplorationPresetId(DEFAULT_EXPLORATION_PRESET_ID);
+      }
+    },
+    [explorationFilter, explorationTimeframeMode],
+  );
+
+  const selectExplorationPreset = useCallback(
+    (presetId: string) => {
+      const preset = getExplorationPreset(presetId);
+      if (!preset) return;
+
+      const existingParams =
+        explorationFilter?.source === "preset" &&
+        explorationFilter.presetId === presetId
+          ? explorationFilter.params
+          : defaultParamsForPreset(preset);
+
+      activateExplorationPath({
+        source: "preset",
+        name: preset.name,
+        timeframeMode: explorationTimeframeMode,
+        presetId,
+        params: existingParams ?? defaultParamsForPreset(preset),
+      });
+      setSelectedExplorationPresetId(presetId);
+    },
+    [activateExplorationPath, explorationFilter, explorationTimeframeMode],
+  );
+
+  const reloadSavedExplorations = useCallback(async () => {
+    const list = await listExplorations();
+    setSavedExplorations(list);
+  }, []);
+
+  const selectSavedExploration = useCallback(
+    (savedId: string) => {
+      const saved = savedExplorations.find((item) => item.id === savedId);
+      if (!saved) return;
+
+      activateExplorationPath({
+        source: "builder",
+        name: saved.name,
+        savedId: saved.id,
+        timeframeMode: explorationTimeframeMode,
+        builder: saved.builder,
+      });
+      setSelectedExplorationPresetId(null);
+    },
+    [activateExplorationPath, explorationTimeframeMode, savedExplorations],
+  );
+
+  const handleDeleteSavedExploration = useCallback(
+    async (savedId: string) => {
+      await deleteExploration(savedId);
+      setSavedExplorations((prev) => prev.filter((item) => item.id !== savedId));
+      if (explorationFilter?.savedId === savedId) {
+        setExplorationFilter(null);
+        setSelectedExplorationPresetId(DEFAULT_EXPLORATION_PRESET_ID);
+      }
+    },
+    [explorationFilter?.savedId],
+  );
+
+  const handleAddToExploration = useCallback(
+    async (
+      name: string,
+      builder: NonNullable<ExplorationFilter["builder"]>,
+      editingSavedId?: string,
+    ) => {
+      const saved = await saveExploration({
+        id: editingSavedId,
+        name,
+        builder,
+      });
+      await reloadSavedExplorations();
+      activateExplorationPath({
+        source: "builder",
+        name: saved.name,
+        savedId: saved.id,
+        timeframeMode: explorationTimeframeMode,
+        builder: saved.builder,
+      });
+      setSelectedExplorationPresetId(null);
+      setBuilderOpen(false);
+    },
+    [activateExplorationPath, explorationTimeframeMode, reloadSavedExplorations],
+  );
+
+  const openExplorationHistory = useCallback(
+    (filterKey: string, filterName: string) => {
+      setRunHistoryFilterKey(filterKey);
+      setRunHistoryFilterName(filterName);
+      setRunHistoryOpen(true);
+    },
+    [],
+  );
+
+  const viewHistoricalExplorationRun = useCallback((run: IndicatorScanRun) => {
+    setIndicatorScan(run);
+    setScan(null);
+    setLastScanPath("indicator");
+    setLabView("results");
   }, []);
 
   const selectStrategy = useCallback(
@@ -281,71 +402,6 @@ export function ExploreClient() {
     },
     [resolvePresetPattern, activateStrategyPath],
   );
-
-  const toggleIndicator = useCallback(
-    (id: string, enabled: boolean) => {
-      if (enabled) activateIndicatorPath();
-
-      const inRegistry = currentIndicatorItems.some((item) => item.id === id);
-      if (inRegistry) {
-        setIndicatorItemsByTf((prev) => ({
-          ...prev,
-          [indicatorTimeframeMode]: prev[indicatorTimeframeMode].map((item) =>
-            item.id === id ? { ...item, enabled } : item,
-          ),
-        }));
-        return;
-      }
-
-      setIndicatorCombos((prev) =>
-        prev.map((combo) =>
-          combo.id === id ? { ...combo, enabled } : combo,
-        ),
-      );
-    },
-    [activateIndicatorPath, currentIndicatorItems, indicatorTimeframeMode],
-  );
-
-  const updateIndicatorItem = useCallback(
-    (
-      id: string,
-      params: Record<string, number | string>,
-      rule: ExploreIndicatorItem["rule"],
-    ) => {
-      const inRegistry = Object.values(indicatorItemsByTf)
-        .flat()
-        .some((item) => item.id === id);
-
-      if (inRegistry) {
-        setIndicatorItemsByTf((prev) => {
-          const next = { ...prev };
-          for (const tf of Object.keys(next) as ExploreTimeframeMode[]) {
-            next[tf] = next[tf].map((item) =>
-              item.id === id ? { ...item, params, rule } : item,
-            );
-          }
-          return next;
-        });
-        return;
-      }
-
-      setIndicatorCombos((prev) =>
-        prev.map((combo) =>
-          combo.id === id ? { ...combo, params, rule } : combo,
-        ),
-      );
-    },
-    [indicatorItemsByTf],
-  );
-
-  const editingIndicator = useMemo(() => {
-    if (!indicatorSettingsId) return null;
-    const fromRegistry = Object.values(indicatorItemsByTf)
-      .flat()
-      .find((item) => item.id === indicatorSettingsId);
-    if (fromRegistry) return fromRegistry;
-    return indicatorCombos.find((combo) => combo.id === indicatorSettingsId) ?? null;
-  }, [indicatorSettingsId, indicatorItemsByTf, indicatorCombos]);
 
   const clearMtfSlot = useCallback((slot: MtfSlot) => {
     if (slot === "daily") return;
@@ -394,7 +450,8 @@ export function ExploreClient() {
       setCustomStrategies(custom);
       setModifiedPresetIds(modified);
     })();
-  }, []);
+    void reloadSavedExplorations();
+  }, [reloadSavedExplorations]);
 
   useEffect(() => {
     if (searchParams.get("patternId")) return;
@@ -423,6 +480,12 @@ export function ExploreClient() {
     })();
   }, [searchParams]);
 
+  useEffect(() => {
+    setExplorationFilter((prev) =>
+      prev ? { ...prev, timeframeMode: explorationTimeframeMode } : prev,
+    );
+  }, [explorationTimeframeMode]);
+
   const openStrategySettings = (id: string, e: MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -444,6 +507,15 @@ export function ExploreClient() {
     }
     setSettingsTarget(slot);
     setSettingsOpen(true);
+  };
+
+  const openExplorationPresetSettings = (presetId: string, e: MouseEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (selectedExplorationPresetId !== presetId) {
+      selectExplorationPreset(presetId);
+    }
+    setPresetSettingsId(presetId);
   };
 
   const settingsPattern =
@@ -537,15 +609,15 @@ export function ExploreClient() {
     }
 
     if (!explorePath) {
-      setError("Select indicators or a strategy before scanning.");
+      setError("Select an exploration filter or a strategy before scanning.");
       setLabView("setup");
       setSetupStep("indicators");
       return;
     }
 
     if (explorePath === "indicator") {
-      if (allEnabledIndicators.length === 0) {
-        setError("Select at least one indicator to scan.");
+      if (!explorationFilter) {
+        setError("Select or build an exploration filter.");
         setLabView("setup");
         setSetupStep("indicators");
         return;
@@ -556,21 +628,28 @@ export function ExploreClient() {
       setScanProgress({ done: 0, total: universe.length });
 
       try {
+        const patternForScan = explorationFilterToPattern(explorationFilter);
+        const filterKey = explorationFilterKey(explorationFilter);
         const result = await runIndicatorScanInWorker({
           universe,
-          items: allEnabledIndicators,
+          pattern: patternForScan,
+          filterKey,
+          filterName: explorationFilter.name,
+          filterDescription: describeExplorationFilter(explorationFilter),
+          timeframeMode: explorationFilter.timeframeMode,
           onProgress: (done, total, phase) => {
             setScanPhase(phase);
             setScanProgress({ done, total });
           },
         });
 
+        await saveIndicatorScanRun(result);
         setIndicatorScan(result);
         setScan(null);
         setLastScanPath("indicator");
         setLabView("results");
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Indicator scan failed");
+        setError(err instanceof Error ? err.message : "Exploration scan failed");
       } finally {
         setScanning(false);
         setCacheRefreshKey((key) => key + 1);
@@ -596,7 +675,6 @@ export function ExploreClient() {
 
       let patternForScan: PatternDefinition;
       if (timeframeMode === "mtf") {
-        // Store combined MTF patterns under their own id — never overwrite presets.
         patternForScan = await savePattern({ ...built });
       } else {
         const p = { ...built, id: built.id ?? selectedId };
@@ -635,7 +713,7 @@ export function ExploreClient() {
     storedSymbols,
     useAllStored,
     explorePath,
-    allEnabledIndicators,
+    explorationFilter,
     buildPattern,
     timeframeMode,
     mtfSlots,
@@ -662,7 +740,11 @@ export function ExploreClient() {
     (symbolCount > 0 || storedSymbols.length > 0) &&
     explorePath !== null &&
     (explorePath === "strategy" ||
-      (explorePath === "indicator" && allEnabledIndicators.length > 0));
+      (explorePath === "indicator" && explorationFilter !== null));
+
+  const presetForSettings = presetSettingsId
+    ? getExplorationPreset(presetSettingsId)
+    : null;
 
   return (
     <div className="space-y-6">
@@ -704,7 +786,7 @@ export function ExploreClient() {
           setupStep={setupStep}
           explorePath={explorePath}
           symbolSummary={symbolSummary}
-          indicatorSummary={indicatorSummary}
+          indicatorSummary={explorationSummary}
           strategySummary={strategySummary}
           scanSummary={scanSummary}
           resultCount={resultCount}
@@ -729,22 +811,27 @@ export function ExploreClient() {
           {labView === "setup" && setupStep === "indicators" && (
             <div className="space-y-4">
               <ExploreTimeframeTabs
-                mode={indicatorTimeframeMode}
-                onChange={setIndicatorTimeframeMode}
+                mode={explorationTimeframeMode}
+                onChange={setExplorationTimeframeMode}
               />
-              <ExploreIndicatorSelector
-                items={currentIndicatorItems}
-                combos={currentCombos}
-                onToggle={toggleIndicator}
-                onOpenSettings={(id, e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setIndicatorSettingsId(id);
+              <ExploreExplorationSelector
+                filter={explorationFilter}
+                selectedPresetId={selectedExplorationPresetId}
+                savedExplorations={savedExplorations}
+                query={explorationQuery}
+                categoryFilter={explorationCategoryFilter}
+                onQueryChange={setExplorationQuery}
+                onCategoryChange={setExplorationCategoryFilter}
+                onSelectPreset={selectExplorationPreset}
+                onSelectSaved={selectSavedExploration}
+                onDeleteSaved={(id) => void handleDeleteSavedExploration(id)}
+                onOpenPresetSettings={openExplorationPresetSettings}
+                onOpenHistory={openExplorationHistory}
+                onOpenBuilder={() => {
+                  activateExplorationPath();
+                  setBuilderOpen(true);
                 }}
-                onOpenComboBuilder={() => setComboBuilderOpen(true)}
-                onRemoveCombo={(id) =>
-                  setIndicatorCombos((prev) => prev.filter((c) => c.id !== id))
-                }
+                onEditBuilder={() => setBuilderOpen(true)}
               />
             </div>
           )}
@@ -815,7 +902,15 @@ export function ExploreClient() {
           )}
 
           {labView === "results" && lastScanPath === "indicator" && indicatorScan && (
-            <ExploreIndicatorResultsPanel scan={indicatorScan} />
+            <ExploreIndicatorResultsPanel
+              scan={indicatorScan}
+              onOpenHistory={() =>
+                openExplorationHistory(
+                  indicatorScan.filterKey,
+                  indicatorScan.filterName,
+                )
+              }
+            />
           )}
         </main>
       </div>
@@ -837,31 +932,59 @@ export function ExploreClient() {
         onChange={updateSettingsPattern}
       />
 
-      {editingIndicator?.indicatorType && (
-        <IndicatorSettingsModal
-          open={Boolean(indicatorSettingsId)}
-          indicatorName={editingIndicator.name}
-          indicatorType={editingIndicator.indicatorType}
-          params={editingIndicator.params}
-          rule={editingIndicator.rule}
-          onClose={() => setIndicatorSettingsId(null)}
-          onSave={(params, rule) => {
-            if (indicatorSettingsId) {
-              updateIndicatorItem(indicatorSettingsId, params, rule);
-            }
-            setIndicatorSettingsId(null);
+      {presetForSettings && (
+        <ExplorationPresetSettingsModal
+          open={Boolean(presetSettingsId)}
+          presetName={presetForSettings.name}
+          params={
+            explorationFilter?.source === "preset" &&
+            explorationFilter.presetId === presetForSettings.id &&
+            explorationFilter.params
+              ? explorationFilter.params
+              : defaultParamsForPreset(presetForSettings)
+          }
+          paramDefs={presetForSettings.params}
+          description={presetForSettings.description}
+          onClose={() => setPresetSettingsId(null)}
+          onSave={(params) => {
+            activateExplorationPath({
+              source: "preset",
+              name: presetForSettings.name,
+              timeframeMode: explorationTimeframeMode,
+              presetId: presetForSettings.id,
+              params,
+            });
+            setSelectedExplorationPresetId(presetForSettings.id);
+            setPresetSettingsId(null);
           }}
         />
       )}
 
-      <IndicatorComboBuilderModal
-        open={comboBuilderOpen}
-        timeframeMode={indicatorTimeframeMode}
-        onClose={() => setComboBuilderOpen(false)}
-        onSave={(combo) => {
-          activateIndicatorPath();
-          setIndicatorCombos((prev) => [...prev, combo]);
-        }}
+      <ExplorationRunHistoryModal
+        open={runHistoryOpen}
+        filterKey={runHistoryFilterKey}
+        filterName={runHistoryFilterName}
+        onClose={() => setRunHistoryOpen(false)}
+        onSelectRun={viewHistoricalExplorationRun}
+      />
+
+      <ExplorationBuilderModal
+        open={builderOpen}
+        initial={
+          explorationFilter?.source === "builder"
+            ? (explorationFilter.builder ?? null)
+            : null
+        }
+        initialName={
+          explorationFilter?.source === "builder"
+            ? explorationFilter.name
+            : undefined
+        }
+        editingSavedId={explorationFilter?.savedId ?? null}
+        onClose={() => setBuilderOpen(false)}
+        onAdd={(name, builder, savedId) =>
+          void handleAddToExploration(name, builder, savedId)
+        }
       />
     </div>
   );
