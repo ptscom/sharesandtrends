@@ -286,7 +286,8 @@ export function UpstoxDataManager() {
               checked={symbolMode === "top1000"}
               onChange={() => setSymbolMode("top1000")}
             />
-            Fixed Top 1,000 ({top1000.length} loaded)
+            Fixed Top 1,000 ({top1000.length} loaded
+            {top1000.length > 0 && top1000.length < 1000 ? " — list incomplete" : ""})
           </label>
         </div>
         {symbolMode === "manual" && (

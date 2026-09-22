@@ -7,7 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "vitest run"
+    "test": "vitest run",
+    "generate:top1000": "node scripts/generate-top1000.mjs"
   },
   "dependencies": {
     "dexie": "^4.4.4",

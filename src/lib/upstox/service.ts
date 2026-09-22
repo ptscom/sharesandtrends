@@ -3,6 +3,7 @@ import { splitHistoricalChunks } from "@/lib/upstox/date-ranges";
 import { resolveInstruments } from "@/lib/upstox/instruments";
 import { normalizeSymbol, parseHistoricalCandle, parseLiveOhlc } from "@/lib/upstox/parse";
 import { upstoxFetch } from "@/lib/upstox/retry-fetch";
+import { RATE_LIMITS } from "@/lib/upstox/rate-limiter";
 import {
   activeLanes,
   createTokenLanes,
@@ -322,8 +323,8 @@ export async function fetchHistoricalEod(
     rows.push(...result.rows);
   });
 
-  const laneCount = Math.max(1, activeLanes(lanes).length);
-  const concurrency = Math.min(8, laneCount * 2);
+  const laneCount = Math.max(1, lanes.length);
+  const concurrency = Math.min(32, laneCount * RATE_LIMITS.maxHistoricalInFlight);
   let index = 0;
   const workers = Array.from({ length: concurrency }, async () => {
     while (index < tasks.length) {

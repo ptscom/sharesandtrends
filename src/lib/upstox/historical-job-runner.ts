@@ -1,10 +1,17 @@
 import { loadSessionTokens } from "@/lib/upstox/client-tokens";
 import type { HistoricalJob, UpstoxDataError, UpstoxDataResponse } from "@/lib/upstox/types";
+import type { HistoricalPriceRow } from "@/lib/upstox/types";
 import {
   mergeHistoricalRows,
   saveHistoricalJob,
 } from "@/lib/storage/upstox-historical";
 import { v4 as uuidv4 } from "uuid";
+
+/** Parallel symbol workers (each calls server; server uses token lanes). */
+export const HISTORICAL_CLIENT_CONCURRENCY = 20;
+
+/** Symbols per HTTP request — server parallelizes across token lanes. */
+export const HISTORICAL_SYMBOLS_PER_REQUEST = 5;
 
 export type JobProgress = {
   total: number;
@@ -18,17 +25,17 @@ export type JobProgress = {
 };
 
 async function postHistorical(
-  symbol: string,
+  symbols: string[],
   fromDate: string,
   toDate: string,
-): Promise<UpstoxDataResponse<import("@/lib/upstox/types").HistoricalPriceRow>> {
+): Promise<UpstoxDataResponse<HistoricalPriceRow>> {
   const accessTokens = loadSessionTokens();
   const res = await fetch("/api/upstox/data", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       mode: "historical",
-      symbols: [symbol],
+      symbols,
       fromDate,
       toDate,
       accessTokens: accessTokens.length > 0 ? accessTokens : undefined,
@@ -47,54 +54,82 @@ export function retryableFailedSymbols(job: HistoricalJob): string[] {
   return job.failedSymbols.filter((f) => f.retryable).map((f) => f.symbol);
 }
 
+function chunk<T>(items: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    out.push(items.slice(i, i + size));
+  }
+  return out;
+}
+
 export async function runHistoricalJob(
   job: HistoricalJob,
   options: {
     symbols?: string[];
     onProgress?: (progress: JobProgress, job: HistoricalJob) => void;
     shouldStop?: () => boolean;
+    concurrency?: number;
+    symbolsPerRequest?: number;
   },
 ): Promise<HistoricalJob> {
-  const queue =
+  const symbolList =
     options.symbols ??
     pendingSymbols(job).concat(retryableFailedSymbols(job));
-  const uniqueQueue = [...new Set(queue)];
+  const uniqueQueue = [...new Set(symbolList)];
+  const batches = chunk(uniqueQueue, options.symbolsPerRequest ?? HISTORICAL_SYMBOLS_PER_REQUEST);
+  const concurrency = options.concurrency ?? HISTORICAL_CLIENT_CONCURRENCY;
 
   let activeLanes = 1;
-  const updateJob = async (patch: Partial<HistoricalJob>) => {
-    Object.assign(job, patch, { updatedAt: new Date().toISOString() });
+  let batchIndex = 0;
+
+  const updateJob = async () => {
+    job.updatedAt = new Date().toISOString();
     await saveHistoricalJob(job);
     options.onProgress?.(computeProgress(job, activeLanes), job);
   };
 
-  for (const symbol of uniqueQueue) {
-    if (options.shouldStop?.()) {
-      job.stopped = true;
-      await updateJob({});
-      break;
-    }
-
-    const response = await postHistorical(symbol, job.fromDate, job.toDate);
+  const processBatch = async (symbols: string[]) => {
+    if (options.shouldStop?.()) return;
+    const response = await postHistorical(symbols, job.fromDate, job.toDate);
     activeLanes = response.activeLanes ?? activeLanes;
 
-    const symbolErrors = response.errors.filter((e) => e.symbol === symbol || e.symbol === "*");
-    if (symbolErrors.length > 0 && response.rows.length === 0) {
-      const err = symbolErrors[0];
-      job.failedSymbols = job.failedSymbols.filter((f) => f.symbol !== symbol);
-      job.failedSymbols.push({
-        symbol,
-        message: err.message,
-        retryable: err.retryable,
-        stage: err.stage,
-      });
-    } else {
-      await mergeHistoricalRows(response.rows);
-      if (!job.completedSymbols.includes(symbol)) {
-        job.completedSymbols.push(symbol);
+    if (response.errors.some((e) => e.symbol === "*") && response.rows.length === 0) {
+      for (const symbol of symbols) {
+        const err = response.errors.find((e) => e.symbol === symbol || e.symbol === "*");
+        if (!err) continue;
+        job.failedSymbols = job.failedSymbols.filter((f) => f.symbol !== symbol);
+        job.failedSymbols.push({
+          symbol,
+          message: err.message,
+          retryable: err.retryable,
+          stage: err.stage,
+        });
       }
-      job.failedSymbols = job.failedSymbols.filter((f) => f.symbol !== symbol);
-      for (const err of symbolErrors) {
-        if (err.symbol === symbol) {
+      await updateJob();
+      return;
+    }
+
+    if (response.rows.length > 0) {
+      await mergeHistoricalRows(response.rows);
+    }
+
+    for (const symbol of symbols) {
+      const symbolErrors = response.errors.filter((e) => e.symbol === symbol);
+      const hasRows = response.rows.some((r) => r.symbol === symbol);
+      if (!hasRows && symbolErrors.length > 0) {
+        job.failedSymbols = job.failedSymbols.filter((f) => f.symbol !== symbol);
+        job.failedSymbols.push({
+          symbol: symbolErrors[0].symbol === "*" ? symbol : symbolErrors[0].symbol,
+          message: symbolErrors[0].message,
+          retryable: symbolErrors[0].retryable,
+          stage: symbolErrors[0].stage,
+        });
+      } else if (hasRows) {
+        if (!job.completedSymbols.includes(symbol)) {
+          job.completedSymbols.push(symbol);
+        }
+        job.failedSymbols = job.failedSymbols.filter((f) => f.symbol !== symbol);
+        for (const err of symbolErrors) {
           job.failedSymbols.push({
             symbol,
             message: err.message,
@@ -104,14 +139,32 @@ export async function runHistoricalJob(
         }
       }
     }
+    await updateJob();
+  };
 
-    await updateJob({});
+  const workers = Array.from({ length: concurrency }, async () => {
+    while (batchIndex < batches.length) {
+      if (options.shouldStop?.()) {
+        job.stopped = true;
+        break;
+      }
+      const current = batchIndex;
+      batchIndex += 1;
+      if (current >= batches.length) break;
+      await processBatch(batches[current]);
+    }
+  });
+
+  await Promise.all(workers);
+
+  if (options.shouldStop?.()) {
+    job.stopped = true;
   }
 
   const stillPending = pendingSymbols(job);
   const retryable = retryableFailedSymbols(job);
   job.complete = stillPending.length === 0 && retryable.length === 0 && !job.stopped;
-  await updateJob({});
+  await updateJob();
   return job;
 }
 
