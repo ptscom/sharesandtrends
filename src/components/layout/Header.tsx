@@ -3,6 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { UpstoxApiKeysButton } from "@/components/upstox/UpstoxApiKeysButton";
 
 const links = [
   { href: "/", label: "Home" },
@@ -29,6 +30,8 @@ export function Header() {
             className="h-9 w-auto md:h-10"
           />
         </Link>
+        <div className="flex items-center gap-1">
+          <UpstoxApiKeysButton />
         <nav className="flex items-center gap-1">
           {links.map((link) => {
             const active =
@@ -46,6 +49,7 @@ export function Header() {
             );
           })}
         </nav>
+        </div>
       </div>
     </header>
   );

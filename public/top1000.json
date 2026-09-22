@@ -1,0 +1,26 @@
+{
+  "generatedAt": "2026-09-01",
+  "method": "Fixed liquidity-ranked NSE EQ universe (starter subset — replace with full list monthly)",
+  "symbols": [
+    "RELIANCE",
+    "TCS",
+    "INFY",
+    "HDFCBANK",
+    "ICICIBANK",
+    "SBIN",
+    "BHARTIARTL",
+    "ITC",
+    "LT",
+    "AXISBANK",
+    "M&M",
+    "M&MFIN",
+    "TATAMOTORS",
+    "TATASTEEL",
+    "WIPRO",
+    "HINDUNILVR",
+    "KOTAKBANK",
+    "ASIANPAINT",
+    "MARUTI",
+    "SUNPHARMA"
+  ]
+}
