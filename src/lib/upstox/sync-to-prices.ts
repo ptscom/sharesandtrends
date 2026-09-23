@@ -1,5 +1,6 @@
 import type { CurrentPriceRow, HistoricalPriceRow } from "@/lib/upstox/types";
 import type { OhlcvBar } from "@/lib/types";
+import { mergeHistoricalRows } from "@/lib/storage/upstox-historical";
 import { mergePriceBars } from "@/lib/storage/prices";
 
 export function historicalRowToOhlcvBar(row: HistoricalPriceRow): OhlcvBar | null {
@@ -64,6 +65,47 @@ export async function syncHistoricalRowsToPrices(
   return barCount;
 }
 
+export function currentRowsToHistorical(
+  rows: CurrentPriceRow[],
+  tradingDate: string,
+): HistoricalPriceRow[] {
+  const out: HistoricalPriceRow[] = [];
+  for (const row of rows) {
+    if (
+      row.open === null ||
+      row.high === null ||
+      row.low === null ||
+      row.close === null
+    ) {
+      continue;
+    }
+    out.push({
+      symbol: row.symbol,
+      date: tradingDate,
+      open: row.open,
+      high: row.high,
+      low: row.low,
+      close: row.close,
+      volume: row.volume,
+    });
+  }
+  return out;
+}
+
+/**
+ * Current-day snapshot → EOD archive + shared `prices` store.
+ * Same (symbol, date) is overwritten when a later historical download includes that day.
+ */
+export async function syncCurrentRowsToStores(
+  rows: CurrentPriceRow[],
+  tradingDate: string,
+): Promise<number> {
+  const historical = currentRowsToHistorical(rows, tradingDate);
+  if (historical.length === 0) return 0;
+  return mergeHistoricalRows(historical);
+}
+
+/** @deprecated Use syncCurrentRowsToStores */
 export async function syncCurrentRowsToPrices(
   rows: CurrentPriceRow[],
   tradingDate: string,

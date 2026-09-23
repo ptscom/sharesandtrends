@@ -30,7 +30,7 @@ import type {
   HistoricalPriceRow,
   UpstoxDataError,
 } from "@/lib/upstox/types";
-import { syncCurrentRowsToPrices } from "@/lib/upstox/sync-to-prices";
+import { syncCurrentRowsToStores } from "@/lib/upstox/sync-to-prices";
 import {
   countHistoricalStats,
   deleteHistoricalDatabase,
@@ -175,7 +175,9 @@ export function UpstoxDataManager() {
       setCurrentRows(data.rows);
       setCurrentErrors(data.errors);
       setCurrentTradingDate(tradingDate);
-      await syncCurrentRowsToPrices(data.rows, tradingDate);
+      await syncCurrentRowsToStores(data.rows, tradingDate);
+      await refreshHistoricalStore();
+      await loadHistoricalPage();
     } catch {
       setCurrentErrors([
         {
@@ -188,7 +190,7 @@ export function UpstoxDataManager() {
     } finally {
       setCurrentLoading(false);
     }
-  }, [currentLoading, resolvedSymbols]);
+  }, [currentLoading, resolvedSymbols, refreshHistoricalStore, loadHistoricalPage]);
 
   const startHistoricalJob = useCallback(async () => {
     if (histRunning || resolvedSymbols.length === 0) return;
@@ -372,8 +374,9 @@ export function UpstoxDataManager() {
             <h2 className="ui-section-title">Current Day (latest snapshot)</h2>
             <p className="ui-helper mt-2">
               Live OHLC from Upstox `live_ohlc` (not tick-by-tick). Trading date:{" "}
-              {currentTradingDate}. Successful fetches also update today&apos;s bar
-              in the backtest price database.
+              {currentTradingDate}. Fetches add a provisional bar for today into
+              EOD history and the backtest database; a later historical download
+              for that date overwrites it with settled EOD data.
             </p>
             <div className="mt-4 flex flex-wrap gap-3">
               <button

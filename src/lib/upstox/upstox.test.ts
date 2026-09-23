@@ -17,6 +17,7 @@ import { pendingSymbols, retryableFailedSymbols } from "@/lib/upstox/historical-
 import { mergeHistoricalRowsInMemory } from "@/lib/storage/upstox-historical";
 import {
   currentRowToOhlcvBar,
+  currentRowsToHistorical,
   historicalRowToOhlcvBar,
 } from "@/lib/upstox/sync-to-prices";
 import type { HistoricalJob } from "@/lib/upstox/types";
@@ -209,6 +210,24 @@ describe("sync to prices", () => {
         volume: 1,
       }),
     ).toBeNull();
+  });
+
+  it("maps current-day rows into historical shape", () => {
+    const rows = currentRowsToHistorical(
+      [
+        {
+          symbol: "TCS",
+          open: 1,
+          high: 2,
+          low: 1,
+          close: 2,
+          volume: 10,
+        },
+      ],
+      "2026-09-23",
+    );
+    expect(rows[0]?.date).toBe("2026-09-23");
+    expect(rows[0]?.symbol).toBe("TCS");
   });
 
   it("maps current-day snapshot to a daily bar", () => {
