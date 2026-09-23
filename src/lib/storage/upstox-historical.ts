@@ -26,6 +26,7 @@ export function mergeHistoricalRowsInMemory(
   );
 }
 
+/** Upsert by (symbol, date) only — never deletes other dates for that symbol. */
 export async function mergeHistoricalRows(rows: HistoricalPriceRow[]): Promise<number> {
   const db = getDb();
   const records: UpstoxHistoricalRowRecord[] = rows

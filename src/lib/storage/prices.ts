@@ -74,19 +74,24 @@ async function writeSymbolMeta(
   });
 }
 
+function sortBars(bars: OhlcvBar[]): OhlcvBar[] {
+  return [...bars].sort((a, b) => a.date.localeCompare(b.date));
+}
+
 export async function savePriceBars(
   symbol: string,
   bars: OhlcvBar[],
 ): Promise<void> {
   const database = getDb();
   const upper = symbol.toUpperCase();
+  const sorted = sortBars(bars);
   await database.prices.put({
     symbol: upper,
-    bars,
+    bars: sorted,
     updatedAt: new Date().toISOString(),
   });
-  await writeSymbolMeta(upper, bars);
-  writeCache(upper, bars);
+  await writeSymbolMeta(upper, sorted);
+  writeCache(upper, sorted);
 }
 
 export async function getPriceBars(symbol: string): Promise<OhlcvBar[]> {
@@ -306,6 +311,17 @@ export async function countBarsInRange(
   return bars.filter((b) => b.date >= fromDate && b.date <= toDate).length;
 }
 
+export function mergeOhlcvByDate(
+  existing: OhlcvBar[],
+  incoming: OhlcvBar[],
+): OhlcvBar[] {
+  const byDate = new Map<string, OhlcvBar>();
+  for (const bar of sortBars(existing)) byDate.set(bar.date, bar);
+  for (const bar of incoming) byDate.set(bar.date, bar);
+  return sortBars([...byDate.values()]);
+}
+
+/** Merge by trading date — never drops bars outside the incoming set. */
 export async function mergePriceBars(
   symbol: string,
   newBars: OhlcvBar[],
@@ -314,42 +330,7 @@ export async function mergePriceBars(
     return getPriceBars(symbol);
   }
 
-  const sortedNew = [...newBars].sort((a, b) => a.date.localeCompare(b.date));
-  const existing = await getPriceBars(symbol);
-
-  if (existing.length === 0) {
-    await savePriceBars(symbol, sortedNew);
-    return sortedNew;
-  }
-
-  const lastExisting = existing[existing.length - 1]!.date;
-  const firstNew = sortedNew[0]!.date;
-
-  if (firstNew > lastExisting) {
-    const merged = [...existing, ...sortedNew];
-    await savePriceBars(symbol, merged);
-    return merged;
-  }
-
-  if (sortedNew.every((bar) => bar.date >= lastExisting)) {
-    const merged = existing.slice(0, -1);
-    for (const bar of sortedNew) {
-      if (bar.date > (merged[merged.length - 1]?.date ?? "")) {
-        merged.push(bar);
-      } else {
-        merged[merged.length - 1] = bar;
-      }
-    }
-    await savePriceBars(symbol, merged);
-    return merged;
-  }
-
-  const byDate = new Map<string, OhlcvBar>();
-  for (const bar of existing) byDate.set(bar.date, bar);
-  for (const bar of sortedNew) byDate.set(bar.date, bar);
-  const merged = [...byDate.values()].sort((a, b) =>
-    a.date.localeCompare(b.date),
-  );
+  const merged = mergeOhlcvByDate(await getPriceBars(symbol), newBars);
   await savePriceBars(symbol, merged);
   return merged;
 }
