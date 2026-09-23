@@ -61,7 +61,13 @@ async function postUpstox<T>(
       accessTokens: accessTokens.length > 0 ? accessTokens : undefined,
     }),
   });
-  return res.json();
+  const data = await res.json();
+  return {
+    rows: Array.isArray(data.rows) ? data.rows : [],
+    errors: Array.isArray(data.errors) ? data.errors : [],
+    activeLanes: data.activeLanes,
+    requestCount: typeof data.requestCount === "number" ? data.requestCount : 0,
+  };
 }
 
 export function UpstoxDataManager() {

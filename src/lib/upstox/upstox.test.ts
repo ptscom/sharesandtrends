@@ -1,6 +1,12 @@
 import { describe, expect, it, beforeEach } from "vitest";
 import { buildInstrumentMap, setInstrumentMapForTests, clearInstrumentCache } from "@/lib/upstox/instruments";
-import { parseHistoricalCandle, parseLiveOhlc, parseSymbolList } from "@/lib/upstox/parse";
+import {
+  findOhlcQuoteEntry,
+  parseHistoricalCandle,
+  parseLiveOhlc,
+  parseSymbolList,
+  pickLiveOhlcFromQuoteEntry,
+} from "@/lib/upstox/parse";
 import { assignSymbolsToLanes, distributeRoundRobin } from "@/lib/upstox/distribute";
 import {
   getSharedLimiterForToken,
@@ -90,6 +96,29 @@ describe("candle parsing", () => {
     });
     expect(row.volume).toBe(0);
     expect(row.close).toBe(11);
+  });
+
+  it("resolves quote entries when response keys use colons", () => {
+    const key = "NSE_EQ|INE669E01016";
+    const data = {
+      "NSE_EQ:INE669E01016": {
+        instrument_token: "NSE_EQ|51834",
+        live_ohlc: { open: 1, high: 2, low: 1, close: 2, volume: 10 },
+      },
+    };
+    const entry = findOhlcQuoteEntry(data, key);
+    expect(pickLiveOhlcFromQuoteEntry(entry)?.close).toBe(2);
+  });
+
+  it("matches quote entries by instrument_token", () => {
+    const data = {
+      "NSE_FO:NIFTY2543021600PE": {
+        instrument_token: "NSE_EQ|INE669E01016",
+        live_ohlc: { open: 3, high: 4, low: 3, close: 4, volume: 5 },
+      },
+    };
+    const entry = findOhlcQuoteEntry(data, "NSE_EQ|INE669E01016");
+    expect(pickLiveOhlcFromQuoteEntry(entry)?.close).toBe(4);
   });
 });
 

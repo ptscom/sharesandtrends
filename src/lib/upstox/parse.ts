@@ -95,6 +95,60 @@ export function parseHistoricalCandle(
   }
 }
 
+/** Upstox quote payloads may use `|` or `:` in map keys and instrument_token. */
+export function normalizeUpstoxInstrumentKey(key: string): string {
+  return key.trim().replace(/:/g, "|");
+}
+
+export type OhlcQuoteEntry = {
+  live_ohlc?: Record<string, unknown>;
+  /** Legacy v2 OHLC field (still seen on some responses). */
+  ohlc?: Record<string, unknown>;
+  prev_ohlc?: Record<string, unknown>;
+  last_price?: unknown;
+  instrument_token?: string;
+};
+
+export function findOhlcQuoteEntry(
+  data: Record<string, OhlcQuoteEntry> | undefined,
+  instrumentKey: string,
+): OhlcQuoteEntry | undefined {
+  if (!data) return undefined;
+  const direct = data[instrumentKey];
+  if (direct) return direct;
+
+  const colonKey = instrumentKey.replace(/\|/g, ":");
+  if (colonKey !== instrumentKey && data[colonKey]) return data[colonKey];
+
+  const target = normalizeUpstoxInstrumentKey(instrumentKey);
+  for (const [key, entry] of Object.entries(data)) {
+    if (normalizeUpstoxInstrumentKey(key) === target) return entry;
+    const token = entry?.instrument_token;
+    if (token && normalizeUpstoxInstrumentKey(token) === target) return entry;
+  }
+  return undefined;
+}
+
+export function pickLiveOhlcFromQuoteEntry(
+  entry: OhlcQuoteEntry | undefined,
+): Record<string, unknown> | undefined {
+  if (!entry) return undefined;
+  const live = entry.live_ohlc;
+  if (live && typeof live === "object") return live;
+  const legacy = entry.ohlc;
+  if (legacy && typeof legacy === "object") return legacy;
+  const last = toNullableNumber(entry.last_price);
+  if (last === null) return undefined;
+  const prevVol = entry.prev_ohlc?.volume;
+  return {
+    open: last,
+    high: last,
+    low: last,
+    close: last,
+    volume: prevVol ?? 0,
+  };
+}
+
 export function parseLiveOhlc(
   symbol: string,
   live: Record<string, unknown> | undefined,

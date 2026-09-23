@@ -1,7 +1,14 @@
 import { assignSymbolsToLanes, laneForSymbol } from "@/lib/upstox/distribute";
 import { splitHistoricalChunks } from "@/lib/upstox/date-ranges";
 import { resolveInstruments } from "@/lib/upstox/instruments";
-import { normalizeSymbol, parseHistoricalCandle, parseLiveOhlc } from "@/lib/upstox/parse";
+import {
+  findOhlcQuoteEntry,
+  normalizeSymbol,
+  parseHistoricalCandle,
+  parseLiveOhlc,
+  pickLiveOhlcFromQuoteEntry,
+  type OhlcQuoteEntry,
+} from "@/lib/upstox/parse";
 import { upstoxFetch } from "@/lib/upstox/retry-fetch";
 import { RATE_LIMITS } from "@/lib/upstox/rate-limiter";
 import {
@@ -75,12 +82,46 @@ async function fetchCurrentBatch(
   }
 
   const payload = (await response.json()) as {
-    data?: Record<string, { live_ohlc?: Record<string, unknown> }>;
+    status?: string;
+    data?: Record<string, OhlcQuoteEntry>;
+    errors?: Array<{ message?: string }>;
   };
+
+  if (payload.status === "error") {
+    const message =
+      payload.errors?.[0]?.message ?? "Upstox OHLC quote request failed.";
+    for (const inst of instruments) {
+      errors.push({
+        symbol: inst.symbol,
+        stage: "quote",
+        message,
+        retryable: false,
+      });
+    }
+    return { rows, errors };
+  }
+
   const data = payload.data ?? {};
   for (const inst of instruments) {
-    const entry = data[inst.instrumentKey];
-    rows.push(parseLiveOhlc(inst.symbol, entry?.live_ohlc));
+    const entry = findOhlcQuoteEntry(data, inst.instrumentKey);
+    const live = pickLiveOhlcFromQuoteEntry(entry);
+    const row = parseLiveOhlc(inst.symbol, live);
+    rows.push(row);
+    if (
+      row.open === null &&
+      row.high === null &&
+      row.low === null &&
+      row.close === null
+    ) {
+      errors.push({
+        symbol: inst.symbol,
+        stage: "quote",
+        message: entry
+          ? "Quote returned no live_ohlc for this symbol."
+          : "Quote response missing instrument (check instrument_key).",
+        retryable: false,
+      });
+    }
   }
   return { rows, errors };
 }
