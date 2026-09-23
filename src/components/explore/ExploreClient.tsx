@@ -95,6 +95,7 @@ import {
   savePattern,
   saveScanRun,
 } from "@/lib/storage/patterns";
+import { ExplorationBackupPanel } from "@/components/explore/ExplorationBackupPanel";
 import {
   deleteExploration,
   listExplorations,
@@ -980,6 +981,10 @@ export function ExploreClient() {
                   setBuilderOpen(true);
                 }}
                 onEditBuilder={() => setBuilderOpen(true)}
+              />
+              <ExplorationBackupPanel
+                explorationCount={savedExplorations.length}
+                onRestored={() => void reloadSavedExplorations()}
               />
             </div>
           )}
