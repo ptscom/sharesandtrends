@@ -7,11 +7,13 @@ import {
   downloadTextFile,
   failuresToCsv,
 } from "@/lib/upstox/csv";
+import { todayYmdIst } from "@/lib/upstox/current-day-schedule";
 import {
   type HistoricalPreset,
   rangeFromPreset,
   todayYmd,
 } from "@/lib/upstox/date-ranges";
+import { useUpstoxCurrentDayAutoRefresh } from "@/components/upstox/useUpstoxCurrentDayAutoRefresh";
 import {
   downloadFilteredHistoricalCsv,
   downloadFullHistoricalCsv,
@@ -70,8 +72,12 @@ export function UpstoxDataManager() {
 
   const [currentRows, setCurrentRows] = useState<CurrentPriceRow[]>([]);
   const [currentErrors, setCurrentErrors] = useState<UpstoxDataError[]>([]);
-  const [currentTradingDate, setCurrentTradingDate] = useState(todayYmd());
+  const [currentTradingDate, setCurrentTradingDate] = useState(todayYmdIst());
   const [currentLoading, setCurrentLoading] = useState(false);
+  const [autoRefreshToday, setAutoRefreshToday] = useState(true);
+  const [lastCurrentFetchAt, setLastCurrentFetchAt] = useState<string | null>(
+    null,
+  );
   const [currentSearch, setCurrentSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(0);
 
@@ -162,35 +168,49 @@ export function UpstoxDataManager() {
     return parseSymbolList(manualSymbols);
   }, [symbolMode, manualSymbols, top1000]);
 
-  const fetchCurrent = useCallback(async () => {
-    if (currentLoading || resolvedSymbols.length === 0) return;
-    setCurrentLoading(true);
-    setCurrentErrors([]);
-    try {
-      const data = await postUpstox<CurrentPriceRow>({
-        mode: "current",
-        symbols: resolvedSymbols,
-      });
-      const tradingDate = todayYmd();
-      setCurrentRows(data.rows);
-      setCurrentErrors(data.errors);
-      setCurrentTradingDate(tradingDate);
-      await syncCurrentRowsToStores(data.rows, tradingDate);
-      await refreshHistoricalStore();
-      await loadHistoricalPage();
-    } catch {
-      setCurrentErrors([
-        {
-          symbol: "*",
-          stage: "quote",
-          message: "Failed to reach Upstox API route.",
-          retryable: true,
-        },
-      ]);
-    } finally {
-      setCurrentLoading(false);
-    }
-  }, [currentLoading, resolvedSymbols, refreshHistoricalStore, loadHistoricalPage]);
+  const fetchCurrent = useCallback(
+    async (options?: { background?: boolean }) => {
+      if (resolvedSymbols.length === 0) return;
+      if (currentLoading && !options?.background) return;
+      if (!options?.background) setCurrentLoading(true);
+      if (!options?.background) setCurrentErrors([]);
+      try {
+        const data = await postUpstox<CurrentPriceRow>({
+          mode: "current",
+          symbols: resolvedSymbols,
+        });
+        const tradingDate = todayYmdIst();
+        setCurrentRows(data.rows);
+        if (!options?.background) setCurrentErrors(data.errors);
+        else if (data.errors.length > 0) setCurrentErrors(data.errors);
+        setCurrentTradingDate(tradingDate);
+        await syncCurrentRowsToStores(data.rows, tradingDate);
+        setLastCurrentFetchAt(new Date().toISOString());
+        await refreshHistoricalStore();
+        await loadHistoricalPage();
+      } catch {
+        if (!options?.background) {
+          setCurrentErrors([
+            {
+              symbol: "*",
+              stage: "quote",
+              message: "Failed to reach Upstox API route.",
+              retryable: true,
+            },
+          ]);
+        }
+      } finally {
+        if (!options?.background) setCurrentLoading(false);
+      }
+    },
+    [currentLoading, resolvedSymbols, refreshHistoricalStore, loadHistoricalPage],
+  );
+
+  useUpstoxCurrentDayAutoRefresh({
+    enabled: autoRefreshToday,
+    symbolCount: resolvedSymbols.length,
+    onTick: () => fetchCurrent({ background: true }),
+  });
 
   const startHistoricalJob = useCallback(async () => {
     if (histRunning || resolvedSymbols.length === 0) return;
@@ -373,11 +393,31 @@ export function UpstoxDataManager() {
           <section className="ui-panel p-6">
             <h2 className="ui-section-title">Current Day (latest snapshot)</h2>
             <p className="ui-helper mt-2">
-              Live OHLC from Upstox `live_ohlc` (not tick-by-tick). Trading date:{" "}
-              {currentTradingDate}. Fetches add a provisional bar for today into
-              EOD history and the backtest database; a later historical download
-              for that date overwrites it with settled EOD data.
+              Live OHLC from Upstox `live_ohlc` (not tick-by-tick). Trading date
+              (IST): {currentTradingDate}. Each fetch writes today&apos;s bar to{" "}
+              <span className="font-mono">upstoxHistorical</span> and{" "}
+              <span className="font-mono">prices</span> in IndexedDB (not only this
+              screen). Historical EOD later overwrites the same date. API keys stay
+              in session storage only.
             </p>
+            <label className="mt-3 flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={autoRefreshToday}
+                onChange={(e) => setAutoRefreshToday(e.target.checked)}
+              />
+              Auto-refresh today every 30 min from 9:45 AM IST (weekdays, while
+              this page is open and visible)
+            </label>
+            {lastCurrentFetchAt && (
+              <p className="ui-helper mt-2">
+                Last current-day fetch:{" "}
+                {new Date(lastCurrentFetchAt).toLocaleString(undefined, {
+                  timeZone: "Asia/Kolkata",
+                })}{" "}
+                IST
+              </p>
+            )}
             <div className="mt-4 flex flex-wrap gap-3">
               <button
                 type="button"
