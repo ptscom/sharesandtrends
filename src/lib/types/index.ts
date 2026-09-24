@@ -55,9 +55,11 @@ export interface Expression {
 
 export interface BacktestConfig {
   entryOn: "close" | "next_open";
-  exitOn: "opposite_signal" | "fixed_hold";
+  /** Calendar days in trade before time-based exit */
   holdDays?: number;
   minTrades?: number;
+  /** @deprecated Backtests now use signal + time exit together */
+  exitOn?: "opposite_signal" | "fixed_hold";
 }
 
 export interface PatternDefinition {

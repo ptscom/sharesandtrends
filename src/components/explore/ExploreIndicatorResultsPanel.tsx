@@ -136,7 +136,7 @@ export function ExploreIndicatorResultsPanel({
                   <tr key={row.symbol}>
                     <td className="px-4 align-top">
                       <Link
-                        href={`/symbol/${row.symbol}`}
+                        href={`/symbol/${row.symbol}?explorationScanId=${scan.id}`}
                         className="font-mono text-sm font-semibold text-brand-text hover:underline"
                       >
                         {row.symbol}

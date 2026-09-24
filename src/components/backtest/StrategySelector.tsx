@@ -1,23 +1,23 @@
 "use client";
 
 import type { MouseEvent } from "react";
+import { ExploreCategoryTabs } from "@/components/explore/ExploreCategoryTabs";
+import {
+  explorationCategoryStyle,
+  type ExplorationCategoryId,
+} from "@/lib/explore/exploration-presets";
 import type { StrategySweepState } from "@/lib/engine/param-sweep";
 import { countParamCombos } from "@/lib/engine/param-sweep";
 import type { StrategyPreset } from "@/lib/patterns/strategies";
-import {
-  LIBRARY_FILTERS,
-  categoryStyle,
-  type LibraryFilterId,
-} from "@/lib/patterns/strategy-ui";
 
 interface StrategySelectorProps {
   presets: StrategyPreset[];
   selectedIds: string[];
   strategyConfigs: Record<string, StrategySweepState>;
   query: string;
-  categoryFilter: LibraryFilterId;
+  categoryFilter: ExplorationCategoryId;
   onQueryChange: (query: string) => void;
-  onCategoryChange: (filter: LibraryFilterId) => void;
+  onCategoryChange: (filter: ExplorationCategoryId) => void;
   onToggle: (id: string) => void;
   onOpenSettings: (id: string, e: MouseEvent) => void;
 }
@@ -33,15 +33,54 @@ export function StrategySelector({
   onToggle,
   onOpenSettings,
 }: StrategySelectorProps) {
+  const q = query.trim().toLowerCase();
+
+  const visiblePresets = presets.filter((preset) => {
+    if (categoryFilter === "custom") {
+      return preset.category === "Custom";
+    }
+    if (categoryFilter === "favorites") {
+      return false;
+    }
+    if (
+      categoryFilter !== "all" &&
+      categoryFilter !== "Candlesticks" &&
+      preset.category !== categoryFilter
+    ) {
+      return false;
+    }
+    if (categoryFilter === "Candlesticks") {
+      return false;
+    }
+    if (!q) return true;
+    return (
+      preset.pattern.name.toLowerCase().includes(q) ||
+      preset.category.toLowerCase().includes(q) ||
+      preset.id.toLowerCase().includes(q) ||
+      preset.entryLogic.toLowerCase().includes(q) ||
+      preset.defaultParams.toLowerCase().includes(q)
+    );
+  });
+
+  const showCategoryBadge =
+    categoryFilter === "all" ||
+    categoryFilter === "custom" ||
+    categoryFilter === "favorites";
+
   return (
     <section className="ui-panel p-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
+      <ExploreCategoryTabs
+        category={categoryFilter}
+        onChange={onCategoryChange}
+      />
+
+      <div className="mt-4 flex flex-wrap items-start justify-between gap-4">
         <div>
           <p className="ui-eyebrow">Step 2</p>
           <h2 className="ui-section-title mt-2">Select strategies</h2>
           <p className="ui-helper mt-1">
-            Choose strategies and use the settings icon to configure parameters
-            and sweeps.
+            Same catalog as indicator exploration. Configure entry, signal exit,
+            and time exit before running sweeps.
           </p>
         </div>
         <span className="ui-badge bg-brand-light text-brand-text">
@@ -49,78 +88,73 @@ export function StrategySelector({
         </span>
       </div>
 
-      <div className="mt-4 flex flex-col gap-3 sm:flex-row">
+      <div className="mt-4">
         <input
           value={query}
           onChange={(e) => onQueryChange(e.target.value)}
           placeholder="Search strategies…"
-          className="ui-input flex-1"
+          className="ui-input w-full"
         />
-        <select
-          value={categoryFilter}
-          onChange={(e) =>
-            onCategoryChange(e.target.value as LibraryFilterId)
-          }
-          className="ui-input w-full sm:w-48"
-        >
-          {LIBRARY_FILTERS.map((filter) => (
-            <option key={filter.id} value={filter.id}>
-              {filter.label}
-            </option>
-          ))}
-        </select>
       </div>
 
-      <div className="mt-4 grid gap-3 sm:grid-cols-2">
-        {presets.map((preset) => {
-          const style = categoryStyle(preset.category);
+      <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        {visiblePresets.map((preset) => {
+          const style = explorationCategoryStyle(preset.category);
           const checked = selectedIds.includes(preset.id);
           const comboCount = strategyConfigs[preset.id]
             ? countParamCombos(strategyConfigs[preset.id].vars)
             : 0;
+          const exitSummary = preset.pattern.exit
+            ? preset.exitLogic !== "Not configured"
+              ? preset.exitLogic
+              : "Signal exit configured"
+            : "Time exit only";
 
           return (
             <div
               key={preset.id}
-              className={`rounded-xl border p-4 transition ${
+              className={`rounded-xl border p-3 transition ${
                 checked
                   ? "border-brand bg-brand/5"
                   : "border-border hover:border-brand/40 hover:bg-bg"
               }`}
             >
-              <div className="flex items-start gap-3">
+              <div className="flex items-start gap-2.5">
                 <label className="mt-1 flex cursor-pointer items-center">
                   <input
                     type="checkbox"
                     checked={checked}
                     onChange={() => onToggle(preset.id)}
                     className="h-4 w-4 rounded border-border"
+                    aria-label={`${checked ? "Deselect" : "Select"} ${preset.pattern.name}`}
                   />
                 </label>
-                <span
-                  className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-lg ${style.bg}`}
-                >
-                  <span className={`h-2.5 w-2.5 rounded-full ${style.dot}`} />
-                </span>
                 <div className="min-w-0 flex-1">
-                  <span className="block font-medium text-ink">
-                    {preset.pattern.name}
-                  </span>
-                  <span className="mt-0.5 block text-xs text-muted line-clamp-2">
+                  <p className="font-medium text-ink">{preset.pattern.name}</p>
+                  <p className="mt-0.5 text-xs text-muted line-clamp-2">
                     {preset.entryLogic}
-                  </span>
+                  </p>
                   <div className="mt-2 flex flex-wrap items-center gap-2">
-                    <span
-                      className={`inline-block rounded-full px-2 py-0.5 text-[10px] font-medium ${style.bg} ${style.text}`}
-                    >
-                      {preset.category}
-                    </span>
-                    {checked && comboCount > 0 && (
-                      <span className="text-[10px] text-muted">
-                        {comboCount} combo{comboCount === 1 ? "" : "s"}
+                    {showCategoryBadge && (
+                      <span
+                        className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ${style.bg} ${style.text}`}
+                      >
+                        <span className={`h-1.5 w-1.5 rounded-full ${style.dot}`} />
+                        {preset.category}
                       </span>
                     )}
+                    <span className="text-[11px] text-muted">
+                      {preset.defaultParams}
+                    </span>
                   </div>
+                  <p className="mt-1 text-[11px] text-muted line-clamp-1">
+                    Exit: {exitSummary}
+                  </p>
+                  {checked && comboCount > 0 && (
+                    <p className="mt-1 text-[10px] text-muted">
+                      {comboCount} combo{comboCount === 1 ? "" : "s"}
+                    </p>
+                  )}
                 </div>
                 <button
                   type="button"
@@ -137,11 +171,15 @@ export function StrategySelector({
         })}
       </div>
 
-      {presets.length === 0 && (
+      {categoryFilter === "Candlesticks" ? (
+        <p className="py-8 text-center text-sm text-muted">
+          Candlestick strategies are not in the backtest catalog yet.
+        </p>
+      ) : visiblePresets.length === 0 ? (
         <p className="py-8 text-center text-sm text-muted">
           No strategies match your search.
         </p>
-      )}
+      ) : null}
     </section>
   );
 }

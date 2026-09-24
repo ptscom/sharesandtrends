@@ -1,28 +1,67 @@
 "use client";
 
+import type { BacktestRunSettings } from "@/lib/engine/backtest-run-settings";
 import type { TradeSettings } from "@/lib/engine/trade-settings";
 
 interface TradeSettingsPanelProps {
   settings: TradeSettings;
   onChange: (settings: TradeSettings) => void;
+  runSettings: BacktestRunSettings;
+  onRunSettingsChange: (settings: BacktestRunSettings) => void;
 }
 
 export function TradeSettingsPanel({
   settings,
   onChange,
+  runSettings,
+  onRunSettingsChange,
 }: TradeSettingsPanelProps) {
   const patch = (partial: Partial<TradeSettings>) => {
     onChange({ ...settings, ...partial });
   };
 
+  const patchRun = (partial: Partial<BacktestRunSettings>) => {
+    onRunSettingsChange({ ...runSettings, ...partial });
+  };
+
   return (
     <section className="ui-panel p-6">
       <p className="ui-eyebrow">Step 3</p>
-      <h2 className="ui-section-title mt-2">Trade settings</h2>
+      <h2 className="ui-section-title mt-2">Trade & backtest settings</h2>
       <p className="ui-helper mt-1">
         Optional exits that apply to every backtest run. When override is on,
         strategy exit signals are ignored and only these rules close trades.
       </p>
+
+      <div className="mt-6 rounded-xl border border-border-subtle bg-input/40 p-4">
+        <p className="text-sm font-medium text-ink">Backtest date range</p>
+        <p className="ui-helper mt-1">
+          Limit which daily bars are included in every run. Leave blank to use
+          all stored history per symbol.
+        </p>
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <label className="block">
+            <span className="ui-field-label">From</span>
+            <input
+              type="date"
+              value={runSettings.dateFrom ?? ""}
+              onChange={(e) =>
+                patchRun({ dateFrom: e.target.value || null })
+              }
+              className="ui-input mt-1"
+            />
+          </label>
+          <label className="block">
+            <span className="ui-field-label">To</span>
+            <input
+              type="date"
+              value={runSettings.dateTo ?? ""}
+              onChange={(e) => patchRun({ dateTo: e.target.value || null })}
+              className="ui-input mt-1"
+            />
+          </label>
+        </div>
+      </div>
 
       <label className="mt-6 flex items-start gap-3 rounded-xl border border-border-subtle bg-input/40 p-4">
         <input

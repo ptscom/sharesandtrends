@@ -1,4 +1,5 @@
 import { getImplementedPatternIds } from "@/lib/patterns/candle-catalog";
+import { getImplementedChartPatternIds } from "@/lib/patterns/chart-pattern-catalog";
 
 export interface IndicatorParamSchema {
   type: "int" | "float" | "enum";
@@ -229,6 +230,51 @@ export const INDICATOR_REGISTRY: IndicatorDefinition[] = [
     outputs: ["rolling_low"],
   },
   {
+    id: "rolling_range_pct",
+    name: "Prior Rolling Range %",
+    category: "price",
+    params: {
+      length: { type: "int", default: 10, min: 2, max: 300, label: "Period" },
+    },
+    outputs: ["rolling_range_pct"],
+  },
+  {
+    id: "dormant_price_break",
+    name: "Dormant Price Break",
+    category: "price",
+    params: {
+      lookback: { type: "int", default: 200, min: 2, max: 1000, label: "Min bars since last hit" },
+      source: {
+        type: "enum",
+        default: "high",
+        options: ["open", "high", "low", "close"],
+        label: "Price field",
+      },
+      minCross: { type: "float", default: 0.001, min: 0.0001, max: 1, label: "Min cross margin" },
+      direction: {
+        type: "enum",
+        default: "up",
+        options: ["up", "down"],
+        label: "Direction",
+      },
+    },
+    outputs: ["signal", "level"],
+  },
+  {
+    id: "daily_return_pct",
+    name: "Daily Return %",
+    category: "momentum",
+    params: {
+      source: {
+        type: "enum",
+        default: "close",
+        options: ["open", "high", "low", "close"],
+        label: "Price field",
+      },
+    },
+    outputs: ["daily_return_pct"],
+  },
+  {
     id: "momentum",
     name: "Price Momentum %",
     category: "momentum",
@@ -425,6 +471,15 @@ export const INDICATOR_REGISTRY: IndicatorDefinition[] = [
     outputs: ["lowest"],
   },
   {
+    id: "darvas_box",
+    name: "Darvas Box",
+    category: "price",
+    params: {
+      lookback: { type: "int", default: 20, min: 2, max: 300, label: "Lookback" },
+    },
+    outputs: ["box_top", "box_bottom", "box_top_prior", "box_bottom_prior"],
+  },
+  {
     id: "candle_pattern",
     name: "Candlestick Pattern",
     category: "pattern",
@@ -448,6 +503,27 @@ export const INDICATOR_REGISTRY: IndicatorDefinition[] = [
         min: 1,
         max: 6,
         label: "Shadow ratio",
+      },
+    },
+    outputs: ["signal"],
+  },
+  {
+    id: "chart_pattern",
+    name: "Chart Pattern",
+    category: "pattern",
+    params: {
+      pattern: {
+        type: "enum",
+        default: "bull_flag",
+        options: getImplementedChartPatternIds(),
+        label: "Pattern",
+      },
+      lookback: {
+        type: "int",
+        default: 60,
+        min: 15,
+        max: 300,
+        label: "Lookback",
       },
     },
     outputs: ["signal"],

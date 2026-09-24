@@ -31,6 +31,7 @@ import type { IndicatorDef, IndicatorSeries, OhlcvBar } from "@/lib/types";
 import { alignHigherTimeframe, barsToSource, resampleBars } from "./resample";
 import { getIndicatorDefinition } from "./registry";
 import { detectCandlePatternSeries } from "./candle-patterns";
+import { detectChartPatternSeries } from "./chart-patterns";
 
 function padStart(values: number[], total: number): (number | null)[] {
   const pad = total - values.length;
@@ -50,6 +51,152 @@ function priorRolling(
       ? Math.max(...slice.map((b) => b.high))
       : Math.min(...slice.map((b) => b.low));
   });
+}
+
+type OhlcField = "open" | "high" | "low" | "close";
+
+function barField(bar: OhlcvBar, field: OhlcField): number {
+  return bar[field];
+}
+
+function computeDormantPriceBreak(
+  bars: OhlcvBar[],
+  lookback: number,
+  source: OhlcField,
+  minCross: number,
+  direction: "up" | "down",
+): { signal: (number | null)[]; level: (number | null)[] } {
+  const field = bars.map((bar) => barField(bar, source));
+  const signal: (number | null)[] = [];
+  const level: (number | null)[] = [];
+
+  for (let i = 0; i < bars.length; i++) {
+    const current = field[i];
+    if (current == null || !Number.isFinite(current)) {
+      signal.push(null);
+      level.push(null);
+      continue;
+    }
+
+    if (i < lookback) {
+      signal.push(0);
+      level.push(null);
+      continue;
+    }
+
+    let matchedLevel: number | null = null;
+
+    for (let j = 0; j <= i - lookback; j++) {
+      const pricePoint = field[j];
+      if (pricePoint == null || !Number.isFinite(pricePoint)) continue;
+
+      if (direction === "up") {
+        if (current <= pricePoint + minCross) continue;
+
+        let dormant = true;
+        for (let k = j + 1; k < i; k++) {
+          if (field[k]! >= pricePoint) {
+            dormant = false;
+            break;
+          }
+        }
+        if (!dormant) continue;
+
+        if (matchedLevel === null || pricePoint > matchedLevel) {
+          matchedLevel = pricePoint;
+        }
+      } else {
+        if (current >= pricePoint - minCross) continue;
+
+        let dormant = true;
+        for (let k = j + 1; k < i; k++) {
+          if (field[k]! <= pricePoint) {
+            dormant = false;
+            break;
+          }
+        }
+        if (!dormant) continue;
+
+        if (matchedLevel === null || pricePoint < matchedLevel) {
+          matchedLevel = pricePoint;
+        }
+      }
+    }
+
+    if (matchedLevel !== null) {
+      signal.push(1);
+      level.push(matchedLevel);
+    } else {
+      signal.push(0);
+      level.push(null);
+    }
+  }
+
+  return { signal, level };
+}
+
+function priorRollingRangePct(
+  bars: OhlcvBar[],
+  period: number,
+): (number | null)[] {
+  return bars.map((_, i) => {
+    if (i < period) return null;
+    const slice = bars.slice(i - period, i);
+    const highestHigh = Math.max(...slice.map((b) => b.high));
+    const lowestLow = Math.min(...slice.map((b) => b.low));
+    if (lowestLow <= 0) return null;
+    return ((highestHigh - lowestLow) / lowestLow) * 100;
+  });
+}
+
+function computeDarvasBox(
+  bars: OhlcvBar[],
+  lookback: number,
+): {
+  top: (number | null)[];
+  bottom: (number | null)[];
+  topPrior: (number | null)[];
+  bottomPrior: (number | null)[];
+} {
+  const top: (number | null)[] = [];
+  const bottom: (number | null)[] = [];
+  const topPrior: (number | null)[] = [];
+  const bottomPrior: (number | null)[] = [];
+
+  let boxTop: number | null = null;
+  let boxBottom: number | null = null;
+
+  for (let i = 0; i < bars.length; i++) {
+    const bar = bars[i]!;
+    const priorTop = boxTop;
+    const priorBottom = boxBottom;
+
+    let priorRollingHigh: number | null = null;
+    if (i >= lookback) {
+      priorRollingHigh = Math.max(
+        ...bars.slice(i - lookback, i).map((b) => b.high),
+      );
+    }
+
+    if (priorRollingHigh !== null && bar.high > priorRollingHigh) {
+      boxTop = bar.high;
+      boxBottom = bar.low;
+    } else if (boxTop !== null) {
+      if (bar.high > boxTop) {
+        boxTop = bar.high;
+        boxBottom = bar.low;
+      } else {
+        boxBottom = Math.min(boxBottom ?? bar.low, bar.low);
+      }
+    }
+
+    top.push(boxTop);
+    bottom.push(boxBottom);
+    topPrior.push(priorTop);
+    bottomPrior.push(priorBottom);
+  }
+
+  return { top, bottom, topPrior, bottomPrior };
 }
 
 function computeOnBars(
@@ -294,12 +441,42 @@ function computeOnBars(
       result[def.alias] = priorRolling(bars, length, "low");
       break;
     }
+    case "rolling_range_pct": {
+      const length = Number(params.length ?? 10);
+      result[def.alias] = priorRollingRangePct(bars, length);
+      break;
+    }
+    case "dormant_price_break": {
+      const lookback = Number(params.lookback ?? 200);
+      const minCross = Number(params.minCross ?? 0.001);
+      const direction = String(params.direction ?? "up") === "down" ? "down" : "up";
+      const source = (params.source as OhlcField) ?? "high";
+      const dormant = computeDormantPriceBreak(
+        bars,
+        lookback,
+        source,
+        minCross,
+        direction,
+      );
+      result[def.alias] = dormant.signal;
+      result[`${def.alias}_level`] = dormant.level;
+      break;
+    }
     case "momentum": {
       const length = Number(params.length ?? 126);
       result[def.alias] = input.map((c, i) => {
         if (i < length) return null;
         const prev = input[i - length];
         return prev ? (c / prev - 1) * 100 : null;
+      });
+      break;
+    }
+    case "daily_return_pct": {
+      result[def.alias] = input.map((c, i) => {
+        if (i < 1) return null;
+        const prev = input[i - 1];
+        if (!prev || prev === 0) return null;
+        return ((c / prev - 1) * 100);
       });
       break;
     }
@@ -353,6 +530,12 @@ function computeOnBars(
         bodyRatioMax: bodyRatio,
         shadowRatioMin: shadowRatio,
       });
+      break;
+    }
+    case "chart_pattern": {
+      const pattern = String(params.pattern ?? "bull_flag");
+      const lookback = Number(params.lookback ?? 60);
+      result[def.alias] = detectChartPatternSeries(bars, pattern, { lookback });
       break;
     }
     case "wma": {
@@ -482,6 +665,16 @@ function computeOnBars(
       const length = Number(params.length ?? 20);
       const lowest = Lowest.calculate({ period: length, values: input });
       result[def.alias] = padStart(lowest, bars.length);
+      break;
+    }
+    case "darvas_box": {
+      const lookback = Number(params.lookback ?? 20);
+      const box = computeDarvasBox(bars, lookback);
+      result[`${def.alias}_box_top`] = box.top;
+      result[`${def.alias}_box_bottom`] = box.bottom;
+      result[`${def.alias}_box_top_prior`] = box.topPrior;
+      result[`${def.alias}_box_bottom_prior`] = box.bottomPrior;
+      result[def.alias] = box.top;
       break;
     }
     default:

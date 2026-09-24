@@ -14,6 +14,11 @@ import { StrategySettingsModal } from "@/components/backtest/StrategySettingsMod
 import { TradeSettingsPanel } from "@/components/backtest/TradeSettingsPanel";
 import { SymbolSelector } from "@/components/shared/SymbolSelector";
 import {
+  DEFAULT_BACKTEST_RUN_SETTINGS,
+  formatBacktestRunSettingsSummary,
+  type BacktestRunSettings,
+} from "@/lib/engine/backtest-run-settings";
+import {
   DEFAULT_TRADE_SETTINGS,
   formatTradeSettingsSummary,
   type TradeSettings,
@@ -28,8 +33,12 @@ import {
   type StrategySweepState,
 } from "@/lib/engine/param-sweep";
 import { getEffectivePreset } from "@/lib/patterns/preset-store";
-import { STRATEGY_PRESETS, type StrategyPreset } from "@/lib/patterns/strategies";
-import type { LibraryFilterId } from "@/lib/patterns/strategy-ui";
+import {
+  DEFAULT_STRATEGY_PRESET_ID,
+  STRATEGY_PRESETS,
+  type StrategyPreset,
+} from "@/lib/patterns/strategies";
+import type { ExplorationCategoryId } from "@/lib/explore/exploration-presets";
 import { listPatterns } from "@/lib/storage/patterns";
 import { getPriceBarsBatch, listSymbols } from "@/lib/storage/prices";
 import {
@@ -44,7 +53,9 @@ export function BacktestClient() {
   const [selectedSymbols, setSelectedSymbols] = useState<string[]>([]);
   const [useAllStored, setUseAllStored] = useState(false);
   const [symbolsInitialized, setSymbolsInitialized] = useState(false);
-  const [selectedIds, setSelectedIds] = useState<string[]>(["ema-cross"]);
+  const [selectedIds, setSelectedIds] = useState<string[]>([
+    DEFAULT_STRATEGY_PRESET_ID,
+  ]);
   const [settingsStrategyId, setSettingsStrategyId] = useState<string | null>(
     null,
   );
@@ -53,7 +64,8 @@ export function BacktestClient() {
   >({});
   const [storedSymbols, setStoredSymbols] = useState<string[]>([]);
   const [query, setQuery] = useState("");
-  const [categoryFilter, setCategoryFilter] = useState<LibraryFilterId>("all");
+  const [categoryFilter, setCategoryFilter] =
+    useState<ExplorationCategoryId>("all");
   const [running, setRunning] = useState(false);
   const [progress, setProgress] = useState({ done: 0, total: 0 });
   const [results, setResults] = useState<BacktestSweepRow[]>([]);
@@ -62,27 +74,14 @@ export function BacktestClient() {
   const [customPresets, setCustomPresets] = useState<StrategyPreset[]>([]);
   const [tradeSettings, setTradeSettings] =
     useState<TradeSettings>(DEFAULT_TRADE_SETTINGS);
+  const [runSettings, setRunSettings] = useState<BacktestRunSettings>(
+    DEFAULT_BACKTEST_RUN_SETTINGS,
+  );
 
   const allPresets = useMemo(
     () => [...STRATEGY_PRESETS, ...customPresets],
     [customPresets],
   );
-
-  const filteredPresets = useMemo(() => {
-    const q = query.trim().toLowerCase();
-    return allPresets.filter((preset) => {
-      if (categoryFilter !== "all" && preset.category !== categoryFilter) {
-        return false;
-      }
-      if (!q) return true;
-      return (
-        preset.pattern.name.toLowerCase().includes(q) ||
-        preset.category.toLowerCase().includes(q) ||
-        preset.id.toLowerCase().includes(q) ||
-        preset.entryLogic.toLowerCase().includes(q)
-      );
-    });
-  }, [allPresets, query, categoryFilter]);
 
   const selectedStrategies = useMemo(
     () =>
@@ -129,7 +128,7 @@ export function BacktestClient() {
         ? selectedStrategies[0]!.name
         : `${selectedStrategies.length} strategies`;
 
-  const tradeSummary = formatTradeSettingsSummary(tradeSettings);
+  const tradeSummary = `${formatBacktestRunSettingsSummary(runSettings)} · ${formatTradeSettingsSummary(tradeSettings)}`;
 
   useEffect(() => {
     void listSymbols().then((list) => {
@@ -240,6 +239,16 @@ export function BacktestClient() {
       setError(estimate.warnings[0]!);
       return;
     }
+    if (
+      runSettings.dateFrom &&
+      runSettings.dateTo &&
+      runSettings.dateFrom > runSettings.dateTo
+    ) {
+      setError("Backtest date range: From must be on or before To.");
+      setLabView("setup");
+      setSetupStep("trade");
+      return;
+    }
 
     setRunning(true);
     setProgress({ done: 0, total: estimate.total });
@@ -250,10 +259,13 @@ export function BacktestClient() {
       });
 
       const rows = await runParameterSweep({
-        strategies: selectedStrategies,
+        strategies: selectedStrategies.map((strategy) =>
+          createStrategySweepState(strategy.id, strategy.name, strategy.pattern),
+        ),
         symbols: universe,
         priceData,
         tradeSettings,
+        runSettings,
         onProgress: (done, total) => setProgress({ done, total }),
       });
 
@@ -271,7 +283,15 @@ export function BacktestClient() {
     } finally {
       setRunning(false);
     }
-  }, [selectedStrategies, selectedSymbols, useAllStored, storedSymbols, estimate, tradeSettings]);
+  }, [
+    selectedStrategies,
+    selectedSymbols,
+    useAllStored,
+    storedSymbols,
+    estimate,
+    tradeSettings,
+    runSettings,
+  ]);
 
   const goToSetup = (step: BacktestSetupStep) => {
     startTransition(() => {
@@ -330,7 +350,7 @@ export function BacktestClient() {
 
           {labView === "setup" && setupStep === "strategies" && (
             <StrategySelector
-              presets={filteredPresets}
+              presets={allPresets}
               selectedIds={selectedIds}
               strategyConfigs={strategyConfigs}
               query={query}
@@ -346,6 +366,8 @@ export function BacktestClient() {
             <TradeSettingsPanel
               settings={tradeSettings}
               onChange={setTradeSettings}
+              runSettings={runSettings}
+              onRunSettingsChange={setRunSettings}
             />
           )}
 
@@ -353,6 +375,7 @@ export function BacktestClient() {
             <ConsolidatedResultsPanel
               rows={results}
               completedAt={completedAt}
+              dateRangeSummary={formatBacktestRunSettingsSummary(runSettings)}
             />
           )}
         </main>

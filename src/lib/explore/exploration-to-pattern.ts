@@ -10,6 +10,7 @@ import type {
   PatternDefinition,
 } from "@/lib/types";
 import { CANDLE_PATTERN_CATALOG } from "@/lib/patterns/candle-catalog";
+import { CHART_PATTERN_CATALOG } from "@/lib/patterns/chart-pattern-catalog";
 import { getExplorationPreset } from "@/lib/explore/exploration-presets";
 import {
   createDefaultPriorContext,
@@ -428,6 +429,7 @@ export const INDICATOR_SHORT_NAMES: Record<string, string> = {
   mfi: "MFI",
   roc: "ROC",
   momentum: "Momentum",
+  daily_return_pct: "Daily Return %",
   zscore: "Z-Score",
   obv: "OBV",
   trix: "TRIX",
@@ -436,8 +438,11 @@ export const INDICATOR_SHORT_NAMES: Record<string, string> = {
   envelope: "Envelope",
   rolling_high: "Rolling High",
   rolling_low: "Rolling Low",
+  rolling_range_pct: "Rolling Range %",
+  dormant_price_break: "Dormant Price Break",
   volume_sma: "Vol SMA",
   candle_pattern: "Candle",
+  chart_pattern: "Chart",
   wma: "WMA",
   wema: "WEMA",
   stoch_rsi: "Stoch RSI",
@@ -471,6 +476,7 @@ const OSCILLATOR_TYPES = new Set([
   "adx",
   "roc",
   "momentum",
+  "daily_return_pct",
   "zscore",
   "awesome_oscillator",
   "force_index",
@@ -485,6 +491,7 @@ const OVERLAY_TYPES = new Set([
   "psar",
   "rolling_high",
   "rolling_low",
+  "rolling_range_pct",
   "volume_sma",
   "vwap",
   "highest",
@@ -502,7 +509,7 @@ export type IndicatorRole =
   | "other";
 
 export function getIndicatorRole(type: string): IndicatorRole {
-  if (type === "candle_pattern") return "pattern";
+  if (type === "candle_pattern" || type === "chart_pattern") return "pattern";
   if (OSCILLATOR_TYPES.has(type)) return "oscillator";
   if (OVERLAY_TYPES.has(type)) return "overlay";
   if (LINE_CROSS_TYPES.has(type)) return "line_cross";
@@ -518,6 +525,11 @@ export function formatIndicatorLabel(
   if (type === "candle_pattern") {
     const patternId = String(params.pattern ?? "doji");
     const meta = CANDLE_PATTERN_CATALOG.find((p) => p.id === patternId);
+    return meta?.name ?? patternId.replaceAll("_", " ");
+  }
+  if (type === "chart_pattern") {
+    const patternId = String(params.pattern ?? "bull_flag");
+    const meta = CHART_PATTERN_CATALOG.find((p) => p.id === patternId);
     return meta?.name ?? patternId.replaceAll("_", " ");
   }
   const short = INDICATOR_SHORT_NAMES[type] ?? type.toUpperCase();
@@ -579,7 +591,7 @@ export function groupedIndicatorsForPicker(): {
 }[] {
   const groups = new Map<string, { id: string; name: string }[]>();
   for (const item of INDICATOR_REGISTRY) {
-    if (item.id === "candle_pattern") continue;
+    if (item.id === "candle_pattern" || item.id === "chart_pattern") continue;
     const list = groups.get(item.category) ?? [];
     list.push({
       id: item.id,
@@ -622,6 +634,21 @@ export function groupedIndicatorsForPicker(): {
     });
   }
 
+  const chartItems = CHART_PATTERN_CATALOG.filter((p) => p.implemented).map(
+    (p) => ({
+      id: `chart:${p.id}`,
+      name: p.name,
+    }),
+  );
+
+  if (chartItems.length > 0) {
+    result.push({
+      category: "chart_pattern",
+      label: "Chart pattern",
+      items: chartItems,
+    });
+  }
+
   return result;
 }
 
@@ -629,6 +656,9 @@ export function operandPickerValue(operand: ExplorationOperand): string {
   if (operand.kind === "price") return `price:${operand.field}`;
   if (operand.kind === "indicator" && operand.indicatorType === "candle_pattern") {
     return `candle:${operand.params.pattern ?? "doji"}`;
+  }
+  if (operand.kind === "indicator" && operand.indicatorType === "chart_pattern") {
+    return `chart:${operand.params.pattern ?? "bull_flag"}`;
   }
   if (operand.kind === "indicator") return `ind:${operand.indicatorType}`;
   return "ind:rsi";
@@ -648,6 +678,17 @@ export function parseOperandPickerValue(value: string): ExplorationOperand {
       indicatorType: "candle_pattern",
       params: {
         ...defaultIndicatorParams("candle_pattern"),
+        pattern: patternId,
+      },
+    };
+  }
+  if (value.startsWith("chart:")) {
+    const patternId = value.replace("chart:", "");
+    return {
+      kind: "indicator",
+      indicatorType: "chart_pattern",
+      params: {
+        ...defaultIndicatorParams("chart_pattern"),
         pattern: patternId,
       },
     };
@@ -691,6 +732,7 @@ export function defaultRightForLeft(
       momentum: 0,
       zscore: 0,
       candle_pattern: 0.5,
+      chart_pattern: 0.5,
     };
     return {
       kind: "number",

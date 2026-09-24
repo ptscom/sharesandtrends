@@ -2,12 +2,36 @@
 
 import type { SweepVarConfig, StrategySweepState } from "@/lib/engine/param-sweep";
 import { countParamCombos } from "@/lib/engine/param-sweep";
+import type { OptimizationVarGroup } from "@/lib/patterns/optimization";
 
 interface StrategySweepPanelProps {
   config: StrategySweepState;
   onChange: (config: StrategySweepState) => void;
   hideTitle?: boolean;
 }
+
+const SECTION_ORDER: OptimizationVarGroup[] = [
+  "indicator",
+  "entry",
+  "signal_exit",
+  "time_exit",
+  "backtest",
+];
+
+const SECTION_LABELS: Record<OptimizationVarGroup, string> = {
+  indicator: "Entry parameters",
+  entry: "Entry parameters",
+  signal_exit: "Signal exit",
+  time_exit: "Time exit",
+  backtest: "Backtest settings",
+};
+
+const SECTION_HELP: Partial<Record<OptimizationVarGroup, string>> = {
+  signal_exit:
+    "Exits when the signal rule fires. Whichever comes first — signal exit or time exit — closes the trade.",
+  time_exit:
+    "Exits after the hold period. Whichever comes first — signal exit or time exit — closes the trade.",
+};
 
 export function StrategySweepPanel({
   config,
@@ -23,8 +47,27 @@ export function StrategySweepPanel({
     });
   };
 
+  const grouped = SECTION_ORDER.map((group) => ({
+    group,
+    items: config.vars.filter((v) => v.group === group),
+  })).filter((section) => section.items.length > 0);
+
+  const mergedEntry = [
+    ...config.vars.filter((v) => v.group === "indicator"),
+    ...config.vars.filter((v) => v.group === "entry"),
+  ];
+  const sections = [
+    ...(mergedEntry.length > 0
+      ? [{ group: "entry" as OptimizationVarGroup, items: mergedEntry }]
+      : []),
+    ...grouped.filter((section) => section.group !== "indicator" && section.group !== "entry"),
+  ];
+
+  const hasSignalExit = Boolean(config.pattern.exit);
+  const signalExitVars = config.vars.filter((v) => v.group === "signal_exit");
+
   return (
-    <div className="ui-nested-card space-y-4">
+    <div className="ui-nested-card space-y-6">
       {!hideTitle && (
         <div className="flex flex-wrap items-center justify-between gap-2">
           <h3 className="ui-card-title">{config.name}</h3>
@@ -42,11 +85,43 @@ export function StrategySweepPanel({
         </div>
       )}
 
-      <div className="space-y-3">
-        {config.vars.map((v) => (
-          <VarRow key={v.id} variable={v} onChange={(patch) => updateVar(v.id, patch)} />
-        ))}
-      </div>
+      {sections.map((section) => (
+        <section key={section.group}>
+          <p className="ui-field-label">{SECTION_LABELS[section.group]}</p>
+          {SECTION_HELP[section.group] && (
+            <p className="mt-1 text-xs text-muted">{SECTION_HELP[section.group]}</p>
+          )}
+          {section.group === "signal_exit" && !hasSignalExit && (
+            <p className="mt-2 rounded-lg border border-dashed border-border bg-bg px-3 py-2 text-sm text-muted">
+              No signal exit configured yet. Trades will exit on the time rule
+              until you add a signal exit in the strategy builder.
+            </p>
+          )}
+          <div className="mt-3 space-y-3">
+            {section.items.map((v) => (
+              <VarRow
+                key={v.id}
+                variable={v}
+                onChange={(patch) => updateVar(v.id, patch)}
+              />
+            ))}
+          </div>
+        </section>
+      ))}
+
+      {signalExitVars.length === 0 && !sections.some((s) => s.group === "signal_exit") && (
+        <section>
+          <p className="ui-field-label">Signal exit</p>
+          <p className="mt-1 text-xs text-muted">
+            Exits when the signal rule fires. Whichever comes first — signal exit
+            or time exit — closes the trade.
+          </p>
+          <p className="mt-2 rounded-lg border border-dashed border-border bg-bg px-3 py-2 text-sm text-muted">
+            No signal exit configured yet. Trades will exit on the time rule
+            until you add a signal exit in the strategy builder.
+          </p>
+        </section>
+      )}
     </div>
   );
 }
@@ -111,9 +186,7 @@ function VarRow({
                   type="number"
                   value={variable.min}
                   step={variable.step}
-                  onChange={(e) =>
-                    onChange({ min: Number(e.target.value) })
-                  }
+                  onChange={(e) => onChange({ min: Number(e.target.value) })}
                   className="ui-input mt-1"
                 />
               </label>
@@ -123,9 +196,7 @@ function VarRow({
                   type="number"
                   value={variable.max}
                   step={variable.step}
-                  onChange={(e) =>
-                    onChange({ max: Number(e.target.value) })
-                  }
+                  onChange={(e) => onChange({ max: Number(e.target.value) })}
                   className="ui-input mt-1"
                 />
               </label>
@@ -136,9 +207,7 @@ function VarRow({
                   value={variable.step}
                   min={variable.type === "int" ? 1 : 0.01}
                   step={variable.type === "int" ? 1 : 0.01}
-                  onChange={(e) =>
-                    onChange({ step: Number(e.target.value) })
-                  }
+                  onChange={(e) => onChange({ step: Number(e.target.value) })}
                   className="ui-input mt-1"
                 />
               </label>
@@ -153,9 +222,9 @@ function VarRow({
                 onChange={(e) =>
                   onChange({
                     value:
-                      variable.type === "int"
-                        ? Number.parseInt(e.target.value, 10)
-                        : Number(e.target.value),
+                      variable.type === "float"
+                        ? Number(e.target.value)
+                        : Number.parseInt(e.target.value, 10),
                   })
                 }
                 className="ui-input mt-1"
