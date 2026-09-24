@@ -3,10 +3,13 @@ import { buildInstrumentMap, setInstrumentMapForTests, clearInstrumentCache } fr
 import {
   findOhlcQuoteEntry,
   parseHistoricalCandle,
+  parseIntradayCandle,
   parseLiveOhlc,
   parseSymbolList,
   pickLiveOhlcFromQuoteEntry,
 } from "@/lib/upstox/parse";
+import { splitIntradayMinuteChunks } from "@/lib/upstox/date-ranges";
+import { mergeIntradayRowsInMemory } from "@/lib/storage/upstox-intraday";
 import { assignSymbolsToLanes, distributeRoundRobin } from "@/lib/upstox/distribute";
 import {
   getSharedLimiterForToken,
@@ -84,6 +87,21 @@ describe("candle parsing", () => {
   it("preserves zero volume", () => {
     const row = parseHistoricalCandle("TCS", ["2024-02-01", 1, 2, 1, 2, 0, 0]);
     expect(row?.volume).toBe(0);
+  });
+
+  it("parses intraday candle with timestamp", () => {
+    const row = parseIntradayCandle("TCS", 5, [
+      "2025-01-02T09:15:00+05:30",
+      100,
+      110,
+      99,
+      105,
+      5000,
+      0,
+    ]);
+    expect(row?.timestamp).toBe("2025-01-02T09:15:00+05:30");
+    expect(row?.intervalMinutes).toBe(5);
+    expect(row?.close).toBe(105);
   });
 
   it("parses live_ohlc", () => {
@@ -273,6 +291,48 @@ describe("sync to prices", () => {
     );
     expect(bar?.date).toBe("2026-09-22");
     expect(bar?.close).toBe(10.5);
+  });
+});
+
+describe("intraday date chunks", () => {
+  it("splits long ranges for 5-minute data", () => {
+    const chunks = splitIntradayMinuteChunks("2025-01-01", "2025-03-15", 5);
+    expect(chunks.length).toBeGreaterThan(1);
+    expect(chunks[0].fromDate).toBe("2025-01-01");
+    expect(chunks[chunks.length - 1].toDate).toBe("2025-03-15");
+  });
+});
+
+describe("intraday merge", () => {
+  it("merges by symbol timestamp and interval", () => {
+    const merged = mergeIntradayRowsInMemory(
+      [
+        {
+          symbol: "A",
+          intervalMinutes: 5,
+          timestamp: "2025-01-01T09:15:00+05:30",
+          open: 1,
+          high: 1,
+          low: 1,
+          close: 1,
+          volume: 1,
+        },
+      ],
+      [
+        {
+          symbol: "A",
+          intervalMinutes: 5,
+          timestamp: "2025-01-01T09:15:00+05:30",
+          open: 2,
+          high: 2,
+          low: 2,
+          close: 2,
+          volume: 2,
+        },
+      ],
+    );
+    expect(merged).toHaveLength(1);
+    expect(merged[0].close).toBe(2);
   });
 });
 

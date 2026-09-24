@@ -97,3 +97,71 @@ function parseYmd(ymd: string): Date {
 function formatYmd(date: Date): string {
   return date.toISOString().slice(0, 10);
 }
+
+export type IntradayPreset = "5d" | "1m" | "custom";
+
+export const INTRADAY_INTERVAL_OPTIONS = [1, 5, 15, 30] as const;
+
+/** Upstox V3 max calendar span per request for minute candles. */
+export function maxDaysPerIntradayRequest(intervalMinutes: number): number {
+  return intervalMinutes <= 15 ? 31 : 92;
+}
+
+export function rangeFromIntradayPreset(
+  preset: IntradayPreset,
+  customFrom?: string,
+  customTo?: string,
+): { fromDate: string; toDate: string; error?: string } {
+  const toDate = clampToToday(customTo ?? todayYmd());
+  if (preset === "custom") {
+    if (!customFrom || !customTo) {
+      return { fromDate: "", toDate: "", error: "Custom range requires from and to dates." };
+    }
+    if (!isValidYmd(customFrom) || !isValidYmd(customTo)) {
+      return { fromDate: "", toDate: "", error: "Dates must use YYYY-MM-DD." };
+    }
+    const fromDate = customFrom;
+    const to = clampToToday(customTo);
+    if (fromDate > to) {
+      return { fromDate: "", toDate: "", error: "From date must be on or before to date." };
+    }
+    return { fromDate, toDate: to };
+  }
+
+  const end = parseYmd(toDate);
+  const start = new Date(end);
+  if (preset === "5d") {
+    start.setUTCDate(start.getUTCDate() - 4);
+  } else if (preset === "1m") {
+    start.setUTCMonth(start.getUTCMonth() - 1);
+  }
+  const fromDate = formatYmd(start);
+  if (fromDate > toDate) {
+    return { fromDate: "", toDate: "", error: "Invalid date range." };
+  }
+  return { fromDate, toDate };
+}
+
+/** Split [from, to] into chunks within Upstox intraday minute limits. */
+export function splitIntradayMinuteChunks(
+  fromDate: string,
+  toDate: string,
+  intervalMinutes: number,
+): Array<{ fromDate: string; toDate: string }> {
+  const maxSpanDays = maxDaysPerIntradayRequest(intervalMinutes);
+  const chunks: Array<{ fromDate: string; toDate: string }> = [];
+  let cursorFrom = fromDate;
+  while (cursorFrom <= toDate) {
+    const start = parseYmd(cursorFrom);
+    const maxEnd = new Date(start);
+    maxEnd.setUTCDate(maxEnd.getUTCDate() + maxSpanDays - 1);
+    let chunkTo = formatYmd(maxEnd);
+    if (chunkTo > toDate) chunkTo = toDate;
+    chunks.push({ fromDate: cursorFrom, toDate: chunkTo });
+    if (chunkTo >= toDate) break;
+    const next = parseYmd(chunkTo);
+    next.setUTCDate(next.getUTCDate() + 1);
+    cursorFrom = formatYmd(next);
+  }
+  return chunks;
+}

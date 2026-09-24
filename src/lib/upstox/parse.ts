@@ -1,4 +1,8 @@
-import type { CurrentPriceRow, HistoricalPriceRow } from "@/lib/upstox/types";
+import type {
+  CurrentPriceRow,
+  HistoricalPriceRow,
+  IntradayPriceRow,
+} from "@/lib/upstox/types";
 
 export function normalizeSymbol(symbol: string): string {
   return symbol.trim().toUpperCase();
@@ -72,6 +76,18 @@ export type UpstoxCandleTuple = [
   unknown,
   unknown?,
 ];
+
+/** Normalize Upstox candle timestamp to a stable ISO string for storage keys. */
+export function normalizeCandleTimestamp(ts: string | number): string {
+  if (typeof ts === "string") {
+    if (ts.includes("T")) return ts;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(ts)) return `${ts}T00:00:00+05:30`;
+  }
+  let ms = typeof ts === "number" ? ts : Number(ts);
+  if (!Number.isFinite(ms)) throw new Error("Invalid candle timestamp");
+  if (ms < 1e12) ms *= 1000;
+  return new Date(ms).toISOString();
+}
 
 export function parseHistoricalCandle(
   symbol: string,
@@ -147,6 +163,30 @@ export function pickLiveOhlcFromQuoteEntry(
     close: last,
     volume: prevVol ?? 0,
   };
+}
+
+export function parseIntradayCandle(
+  symbol: string,
+  intervalMinutes: number,
+  candle: unknown,
+): IntradayPriceRow | null {
+  if (!Array.isArray(candle) || candle.length < 6) return null;
+  const [ts, o, h, l, c, v] = candle as UpstoxCandleTuple;
+  try {
+    const timestamp = normalizeCandleTimestamp(ts);
+    return {
+      symbol,
+      intervalMinutes,
+      timestamp,
+      open: toNullableNumber(o),
+      high: toNullableNumber(h),
+      low: toNullableNumber(l),
+      close: toNullableNumber(c),
+      volume: toNullableNumber(v),
+    };
+  } catch {
+    return null;
+  }
 }
 
 export function parseLiveOhlc(

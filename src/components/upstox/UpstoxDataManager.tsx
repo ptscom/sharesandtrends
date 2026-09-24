@@ -6,10 +6,14 @@ import {
   currentRowsToCsv,
   downloadTextFile,
   failuresToCsv,
+  intradayRowsToCsv,
 } from "@/lib/upstox/csv";
 import { todayYmdIst } from "@/lib/upstox/current-day-schedule";
 import {
   type HistoricalPreset,
+  INTRADAY_INTERVAL_OPTIONS,
+  type IntradayPreset,
+  rangeFromIntradayPreset,
   rangeFromPreset,
   todayYmd,
 } from "@/lib/upstox/date-ranges";
@@ -25,11 +29,19 @@ import {
   runHistoricalJob,
   type JobProgress,
 } from "@/lib/upstox/historical-job-runner";
+import {
+  collectIntradayJobErrors,
+  computeIntradayProgress,
+  createIntradayJob,
+  runIntradayJob,
+} from "@/lib/upstox/intraday-job-runner";
 import { parseSymbolList } from "@/lib/upstox/parse";
 import type {
   CurrentPriceRow,
   HistoricalJob,
   HistoricalPriceRow,
+  IntradayJob,
+  IntradayPriceRow,
   UpstoxDataError,
 } from "@/lib/upstox/types";
 import { syncCurrentRowsToStores } from "@/lib/upstox/sync-to-prices";
@@ -43,8 +55,17 @@ import {
   saveHistoricalJob,
   syncAllUpstoxHistoricalToPrices,
 } from "@/lib/storage/upstox-historical";
+import {
+  countIntradayStats,
+  deleteIntradayDatabase,
+  deleteIntradaySymbol,
+  getLatestIntradayJob,
+  listIncompleteIntradayJobs,
+  queryIntradayRows,
+  saveIntradayJob,
+} from "@/lib/storage/upstox-intraday";
 
-type Tab = "current" | "historical";
+type Tab = "current" | "historical" | "intraday";
 type SymbolMode = "manual" | "top1000";
 
 const PAGE_SIZE = 50;
@@ -103,7 +124,23 @@ export function UpstoxDataManager() {
   const [histErrors, setHistErrors] = useState<UpstoxDataError[]>([]);
   const [histRunning, setHistRunning] = useState(false);
   const stopRef = useRef(false);
+  const stopIntradayRef = useRef(false);
   const autoOpenedHistoricalRef = useRef(false);
+
+  const [intradayPageRows, setIntradayPageRows] = useState<IntradayPriceRow[]>([]);
+  const [intradayTotal, setIntradayTotal] = useState(0);
+  const [intradayLoading, setIntradayLoading] = useState(false);
+  const [intradayDbStats, setIntradayDbStats] = useState({ rowCount: 0, symbolCount: 0 });
+  const [intradayPreset, setIntradayPreset] = useState<IntradayPreset>("5d");
+  const [intradayFrom, setIntradayFrom] = useState("");
+  const [intradayTo, setIntradayTo] = useState(todayYmd());
+  const [intradayInterval, setIntradayInterval] = useState<number>(5);
+  const [intradaySearch, setIntradaySearch] = useState("");
+  const [intradayPage, setIntradayPage] = useState(0);
+  const [intradayJob, setIntradayJob] = useState<IntradayJob | null>(null);
+  const [intradayProgress, setIntradayProgress] = useState<JobProgress | null>(null);
+  const [intradayErrors, setIntradayErrors] = useState<UpstoxDataError[]>([]);
+  const [intradayRunning, setIntradayRunning] = useState(false);
 
   const loadHistoricalPage = useCallback(async () => {
     setHistoricalLoading(true);
@@ -130,6 +167,8 @@ export function UpstoxDataManager() {
     try {
       const stats = await countHistoricalStats();
       setDbStats(stats);
+      const intradayStats = await countIntradayStats();
+      setIntradayDbStats(intradayStats);
       if (stats.rowCount > 0 && !autoOpenedHistoricalRef.current) {
         autoOpenedHistoricalRef.current = true;
         setTab("historical");
@@ -141,6 +180,27 @@ export function UpstoxDataManager() {
     }
   }, []);
 
+  const loadIntradayPage = useCallback(async () => {
+    setIntradayLoading(true);
+    setStoreError(null);
+    try {
+      const { rows, total } = await queryIntradayRows({
+        page: intradayPage,
+        pageSize: PAGE_SIZE,
+        symbolQuery: intradaySearch,
+        intervalMinutes: intradayInterval,
+      });
+      setIntradayPageRows(rows);
+      setIntradayTotal(total);
+    } catch (e) {
+      setStoreError(e instanceof Error ? e.message : "Failed to read intraday data.");
+      setIntradayPageRows([]);
+      setIntradayTotal(0);
+    } finally {
+      setIntradayLoading(false);
+    }
+  }, [intradayPage, intradaySearch, intradayInterval]);
+
   useEffect(() => {
     void refreshHistoricalStore();
   }, [refreshHistoricalStore]);
@@ -149,6 +209,11 @@ export function UpstoxDataManager() {
     if (!storeReady) return;
     void loadHistoricalPage();
   }, [histPage, histSearch, storeReady, loadHistoricalPage]);
+
+  useEffect(() => {
+    if (!storeReady) return;
+    void loadIntradayPage();
+  }, [intradayPage, intradaySearch, intradayInterval, storeReady, loadIntradayPage]);
 
   useEffect(() => {
     void (async () => {
@@ -167,6 +232,16 @@ export function UpstoxDataManager() {
         if (Array.isArray(data.symbols)) setTop1000(data.symbols);
       })
       .catch(() => undefined);
+    void (async () => {
+      const incomplete = await listIncompleteIntradayJobs();
+      const job =
+        incomplete.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))[0] ??
+        (await getLatestIntradayJob());
+      if (!job) return;
+      setIntradayJob(job);
+      setIntradayProgress(computeIntradayProgress(job, 1));
+      setIntradayErrors(collectIntradayJobErrors(job));
+    })();
   }, []);
 
   const resolvedSymbols = useMemo(() => {
@@ -303,6 +378,97 @@ export function UpstoxDataManager() {
     stopRef.current = true;
   };
 
+  const startIntradayJob = useCallback(async () => {
+    if (intradayRunning || resolvedSymbols.length === 0) return;
+    const range = rangeFromIntradayPreset(
+      intradayPreset,
+      intradayPreset === "custom" ? intradayFrom : undefined,
+      intradayPreset === "custom" ? intradayTo : intradayTo,
+    );
+    if (range.error || !range.fromDate) {
+      window.alert(range.error ?? "Invalid date range");
+      return;
+    }
+
+    const job = createIntradayJob(
+      resolvedSymbols,
+      range.fromDate,
+      range.toDate,
+      intradayInterval,
+    );
+    await saveIntradayJob(job);
+    setIntradayJob(job);
+    setIntradayErrors([]);
+    setIntradayRunning(true);
+    stopIntradayRef.current = false;
+
+    const finished = await runIntradayJob(job, {
+      shouldStop: () => stopIntradayRef.current,
+      onProgress: (progress, updated) => {
+        setIntradayProgress(progress);
+        setIntradayJob({ ...updated });
+      },
+    });
+    setIntradayJob(finished);
+    setIntradayErrors(collectIntradayJobErrors(finished));
+    setIntradayRunning(false);
+    setIntradayPage(0);
+    await refreshHistoricalStore();
+    await loadIntradayPage();
+  }, [
+    intradayRunning,
+    resolvedSymbols,
+    intradayPreset,
+    intradayFrom,
+    intradayTo,
+    intradayInterval,
+    refreshHistoricalStore,
+    loadIntradayPage,
+  ]);
+
+  const resumeIntradayJob = useCallback(async () => {
+    if (!intradayJob || intradayRunning) return;
+    setIntradayRunning(true);
+    stopIntradayRef.current = false;
+    const finished = await runIntradayJob(intradayJob, {
+      shouldStop: () => stopIntradayRef.current,
+      onProgress: (progress, updated) => {
+        setIntradayProgress(progress);
+        setIntradayJob({ ...updated });
+      },
+    });
+    setIntradayJob(finished);
+    setIntradayErrors(collectIntradayJobErrors(finished));
+    setIntradayRunning(false);
+    await refreshHistoricalStore();
+    await loadIntradayPage();
+  }, [intradayJob, intradayRunning, refreshHistoricalStore, loadIntradayPage]);
+
+  const retryFailedIntraday = useCallback(async () => {
+    if (!intradayJob || intradayRunning) return;
+    const failed = intradayJob.failedSymbols.filter((f) => f.retryable).map((f) => f.symbol);
+    if (failed.length === 0) return;
+    setIntradayRunning(true);
+    stopIntradayRef.current = false;
+    const finished = await runIntradayJob(intradayJob, {
+      symbols: failed,
+      shouldStop: () => stopIntradayRef.current,
+      onProgress: (progress, updated) => {
+        setIntradayProgress(progress);
+        setIntradayJob({ ...updated });
+      },
+    });
+    setIntradayJob(finished);
+    setIntradayErrors(collectIntradayJobErrors(finished));
+    setIntradayRunning(false);
+    await refreshHistoricalStore();
+    await loadIntradayPage();
+  }, [intradayJob, intradayRunning, refreshHistoricalStore, loadIntradayPage]);
+
+  const stopIntraday = () => {
+    stopIntradayRef.current = true;
+  };
+
   const filteredCurrent = useMemo(() => {
     const q = currentSearch.trim().toUpperCase();
     const rows = q
@@ -319,6 +485,10 @@ export function UpstoxDataManager() {
     histProgress && histProgress.remaining > 0
       ? `~${Math.ceil(histProgress.remaining / Math.max(1, histProgress.activeLanes))} symbol batches remaining (estimate varies with throttling).`
       : null;
+  const intradayEstNote =
+    intradayProgress && intradayProgress.remaining > 0
+      ? `~${Math.ceil(intradayProgress.remaining / Math.max(1, intradayProgress.activeLanes))} symbol batches remaining (estimate varies with throttling).`
+      : null;
 
   return (
     <div className="space-y-6">
@@ -326,7 +496,7 @@ export function UpstoxDataManager() {
         <p className="text-sm">
           <span className="font-semibold">Stored EOD:</span>{" "}
           {storeReady
-            ? `${dbStats.rowCount.toLocaleString()} rows · ${dbStats.symbolCount} symbols`
+            ? `EOD ${dbStats.rowCount.toLocaleString()} rows · ${dbStats.symbolCount} symbols · Intraday ${intradayDbStats.rowCount.toLocaleString()} rows · ${intradayDbStats.symbolCount} symbols`
             : "Loading…"}
           {dbStats.rowCount > 0 && tab === "current" && (
             <span className="text-muted">
@@ -355,6 +525,13 @@ export function UpstoxDataManager() {
           onClick={() => setTab("historical")}
         >
           Upstox EOD Historical
+        </button>
+        <button
+          type="button"
+          className={`ui-btn-secondary${tab === "intraday" ? " ring-2 ring-brand" : ""}`}
+          onClick={() => setTab("intraday")}
+        >
+          Upstox Intraday Historical
         </button>
       </div>
 
@@ -685,6 +862,215 @@ export function UpstoxDataManager() {
           </section>
         </>
       )}
+
+      {tab === "intraday" && (
+        <>
+          <section className="ui-panel p-6">
+            <h2 className="ui-section-title">Upstox Intraday Historical</h2>
+            <p className="ui-helper mt-2">
+              Minute OHLC from Upstox V3{" "}
+              <span className="font-mono">/historical-candle/…/minutes/{"{interval}"}</span>.
+              Stored in IndexedDB (<span className="font-mono">upstoxIntradayHistorical</span>);
+              not merged into the daily backtest <span className="font-mono">prices</span> store.
+              Upstox limits: ≤15‑min bars ≈1 month per request; wider intervals ≈1 quarter.
+            </p>
+            <p className="ui-helper mt-2">
+              Database: {intradayDbStats.rowCount.toLocaleString()} bars across{" "}
+              {intradayDbStats.symbolCount} symbols.
+            </p>
+            <div className="mt-4 flex flex-wrap items-center gap-4">
+              <span className="ui-field-label">Bar interval</span>
+              {INTRADAY_INTERVAL_OPTIONS.map((m) => (
+                <label key={m} className="flex items-center gap-1 text-sm">
+                  <input
+                    type="radio"
+                    checked={intradayInterval === m}
+                    onChange={() => {
+                      setIntradayInterval(m);
+                      setIntradayPage(0);
+                    }}
+                  />
+                  {m} min
+                </label>
+              ))}
+            </div>
+            <div className="mt-4 flex flex-wrap gap-3">
+              {(["5d", "1m", "custom"] as IntradayPreset[]).map((p) => (
+                <label key={p} className="flex items-center gap-1 text-sm">
+                  <input
+                    type="radio"
+                    checked={intradayPreset === p}
+                    onChange={() => setIntradayPreset(p)}
+                  />
+                  {p === "5d" ? "Last 5 days" : p === "1m" ? "Last 1 month" : "Custom"}
+                </label>
+              ))}
+            </div>
+            {intradayPreset === "custom" && (
+              <div className="mt-4 flex flex-wrap gap-4">
+                <label>
+                  <span className="ui-field-label">From</span>
+                  <input
+                    type="date"
+                    className="ui-input mt-1"
+                    value={intradayFrom}
+                    onChange={(e) => setIntradayFrom(e.target.value)}
+                  />
+                </label>
+                <label>
+                  <span className="ui-field-label">To</span>
+                  <input
+                    type="date"
+                    className="ui-input mt-1"
+                    value={intradayTo}
+                    onChange={(e) => setIntradayTo(e.target.value)}
+                  />
+                </label>
+              </div>
+            )}
+            <div className="mt-4 flex flex-wrap gap-3">
+              <button
+                type="button"
+                className="ui-btn-primary"
+                disabled={intradayRunning || resolvedSymbols.length === 0}
+                onClick={() => void startIntradayJob()}
+              >
+                {intradayRunning ? "Running job…" : "Fetch intraday historical"}
+              </button>
+              <button
+                type="button"
+                className="ui-btn-secondary"
+                disabled={!intradayRunning}
+                onClick={stopIntraday}
+              >
+                Stop
+              </button>
+              <button
+                type="button"
+                className="ui-btn-secondary"
+                disabled={!intradayJob || intradayRunning || intradayJob.complete}
+                onClick={() => void resumeIntradayJob()}
+              >
+                Resume
+              </button>
+              <button
+                type="button"
+                className="ui-btn-secondary"
+                disabled={!intradayJob || intradayRunning}
+                onClick={() => void retryFailedIntraday()}
+              >
+                Retry failed symbols
+              </button>
+            </div>
+            {intradayProgress && (
+              <div className="mt-4 text-sm text-muted">
+                <p>
+                  Progress: {intradayProgress.percent}% — {intradayProgress.completed} /{" "}
+                  {intradayProgress.total} symbols ({intradayProgress.failed} failed,{" "}
+                  {intradayProgress.activeLanes} worker lane
+                  {intradayProgress.activeLanes === 1 ? "" : "s"})
+                </p>
+                {intradayEstNote && <p className="mt-1">{intradayEstNote}</p>}
+                {intradayProgress.stopped && (
+                  <p className="mt-1 text-muted">Job stopped by user.</p>
+                )}
+              </div>
+            )}
+            <div className="mt-4 flex flex-wrap gap-3">
+              <button
+                type="button"
+                className="ui-btn-secondary"
+                disabled={intradayPageRows.length === 0}
+                onClick={() =>
+                  downloadTextFile(
+                    `upstox-intraday-${intradayInterval}m-${todayYmd()}.csv`,
+                    intradayRowsToCsv(intradayPageRows),
+                  )
+                }
+              >
+                Download current page CSV
+              </button>
+              {intradayErrors.length > 0 && (
+                <button
+                  type="button"
+                  className="ui-btn-secondary"
+                  onClick={() =>
+                    downloadTextFile(
+                      `upstox-intraday-failures-${todayYmd()}.csv`,
+                      failuresToCsv(intradayErrors),
+                    )
+                  }
+                >
+                  Download failure report
+                </button>
+              )}
+              <button
+                type="button"
+                className="ui-btn-secondary"
+                onClick={() => {
+                  const sym = window.prompt("Delete intraday rows for symbol (e.g. RELIANCE)");
+                  if (!sym) return;
+                  void deleteIntradaySymbol(sym.trim().toUpperCase()).then(() => {
+                    void refreshHistoricalStore();
+                    void loadIntradayPage();
+                  });
+                }}
+              >
+                Delete selected symbol
+              </button>
+              <button
+                type="button"
+                className="ui-btn-secondary text-danger"
+                onClick={() => {
+                  if (
+                    window.confirm(
+                      "Delete the entire Upstox intraday historical database in this browser?",
+                    )
+                  ) {
+                    void deleteIntradayDatabase().then(() => {
+                      void refreshHistoricalStore();
+                      void loadIntradayPage();
+                    });
+                    setIntradayJob(null);
+                    setIntradayProgress(null);
+                  }
+                }}
+              >
+                Delete intraday database
+              </button>
+            </div>
+            <label className="mt-4 block">
+              <span className="ui-field-label">Search symbol</span>
+              <input
+                className="ui-input mt-1 max-w-xs"
+                value={intradaySearch}
+                onChange={(e) => {
+                  setIntradaySearch(e.target.value);
+                  setIntradayPage(0);
+                }}
+              />
+            </label>
+            <PriceTable
+              mode="intraday"
+              rows={intradayPageRows}
+              emptyLabel={
+                intradayLoading
+                  ? "Loading stored bars…"
+                  : intradayDbStats.rowCount > 0
+                    ? "No bars match this search or interval."
+                    : "No stored intraday bars yet."
+              }
+            />
+            <Pagination
+              page={intradayPage}
+              total={intradayTotal}
+              pageSize={PAGE_SIZE}
+              onChange={setIntradayPage}
+            />
+            <ErrorsPanel errors={intradayErrors} />
+          </section>
+        </>
+      )}
     </div>
   );
 }
@@ -732,8 +1118,8 @@ function PriceTable({
   rows,
   emptyLabel,
 }: {
-  mode: "current" | "historical";
-  rows: (CurrentPriceRow | HistoricalPriceRow)[];
+  mode: "current" | "historical" | "intraday";
+  rows: (CurrentPriceRow | HistoricalPriceRow | IntradayPriceRow)[];
   emptyLabel: string;
 }) {
   if (rows.length === 0) {
@@ -746,6 +1132,7 @@ function PriceTable({
           <tr>
             <th className="py-2">Symbol</th>
             {mode === "historical" && <th className="py-2">Date</th>}
+            {mode === "intraday" && <th className="py-2">Timestamp</th>}
             <th className="py-2">Open</th>
             <th className="py-2">High</th>
             <th className="py-2">Low</th>
@@ -755,10 +1142,21 @@ function PriceTable({
         </thead>
         <tbody>
           {rows.map((row) => (
-            <tr key={mode === "historical" ? `${row.symbol}-${(row as HistoricalPriceRow).date}` : row.symbol}>
+            <tr
+              key={
+                mode === "historical"
+                  ? `${row.symbol}-${(row as HistoricalPriceRow).date}`
+                  : mode === "intraday"
+                    ? `${row.symbol}-${(row as IntradayPriceRow).timestamp}`
+                    : row.symbol
+              }
+            >
               <td className="font-mono font-semibold">{row.symbol}</td>
               {mode === "historical" && (
                 <td className="font-mono">{(row as HistoricalPriceRow).date}</td>
+              )}
+              {mode === "intraday" && (
+                <td className="font-mono text-xs">{(row as IntradayPriceRow).timestamp}</td>
               )}
               <td>{row.open ?? "—"}</td>
               <td>{row.high ?? "—"}</td>

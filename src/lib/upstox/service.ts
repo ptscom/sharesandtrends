@@ -1,10 +1,11 @@
 import { assignSymbolsToLanes, laneForSymbol } from "@/lib/upstox/distribute";
-import { splitHistoricalChunks } from "@/lib/upstox/date-ranges";
+import { splitHistoricalChunks, splitIntradayMinuteChunks } from "@/lib/upstox/date-ranges";
 import { resolveInstruments } from "@/lib/upstox/instruments";
 import {
   findOhlcQuoteEntry,
   normalizeSymbol,
   parseHistoricalCandle,
+  parseIntradayCandle,
   parseLiveOhlc,
   pickLiveOhlcFromQuoteEntry,
   type OhlcQuoteEntry,
@@ -19,6 +20,7 @@ import {
 import type {
   CurrentPriceRow,
   HistoricalPriceRow,
+  IntradayPriceRow,
   UpstoxDataError,
   UpstoxDataRequest,
   UpstoxDataResponse,
@@ -285,6 +287,198 @@ async function fetchHistoricalForSymbol(
   return { rows: [...byKey.values()].sort((a, b) => a.date.localeCompare(b.date)) };
 }
 
+async function fetchIntradayHistoricalForSymbol(
+  lane: TokenLane,
+  symbol: string,
+  instrumentKey: string,
+  fromDate: string,
+  toDate: string,
+  intervalMinutes: number,
+  requestCount: { value: number },
+): Promise<{ rows: IntradayPriceRow[]; error?: UpstoxDataError }> {
+  const chunks = splitIntradayMinuteChunks(fromDate, toDate, intervalMinutes);
+  const rows: IntradayPriceRow[] = [];
+
+  for (const chunk of chunks) {
+    const pathKey = encodeURIComponent(instrumentKey);
+    const url = `https://api.upstox.com/v3/historical-candle/${pathKey}/minutes/${intervalMinutes}/${chunk.toDate}/${chunk.fromDate}`;
+
+    requestCount.value += 1;
+    const { response } = await upstoxFetch(
+      url,
+      { method: "GET", token: lane.token },
+      { limiter: lane.limiter },
+    );
+
+    if (response.status === 401 || response.status === 403) {
+      lane.markInvalid(authErrorMessage(response.status));
+      return {
+        rows,
+        error: {
+          symbol,
+          stage: "intraday",
+          message: authErrorMessage(response.status),
+          retryable: false,
+        },
+      };
+    }
+
+    if (!response.ok) {
+      const retryable = response.status === 429 || response.status >= 500;
+      return {
+        rows,
+        error: {
+          symbol,
+          stage: "intraday",
+          message: `Intraday historical request failed (${response.status}).`,
+          retryable,
+        },
+      };
+    }
+
+    const payload = (await response.json()) as {
+      data?: { candles?: unknown[] };
+    };
+    const candles = payload.data?.candles ?? [];
+    for (const candle of candles) {
+      const row = parseIntradayCandle(symbol, intervalMinutes, candle);
+      if (row) rows.push(row);
+    }
+  }
+
+  const byKey = new Map<string, IntradayPriceRow>();
+  for (const row of rows) {
+    byKey.set(`${row.symbol}|${row.intervalMinutes}|${row.timestamp}`, row);
+  }
+  return {
+    rows: [...byKey.values()].sort((a, b) => a.timestamp.localeCompare(b.timestamp)),
+  };
+}
+
+export async function fetchIntradayHistorical(
+  symbols: string[],
+  fromDate: string,
+  toDate: string,
+  intervalMinutes: number,
+  tokens: string[],
+): Promise<UpstoxDataResponse<IntradayPriceRow>> {
+  const lanes = createTokenLanes(tokens);
+  const requestCount = { value: 0 };
+  const errors: UpstoxDataError[] = [];
+  const rows: IntradayPriceRow[] = [];
+
+  if (lanes.length === 0) {
+    return {
+      rows: [],
+      errors: [
+        {
+          symbol: "*",
+          stage: "validation",
+          message: "No Upstox access token configured.",
+          retryable: false,
+        },
+      ],
+      fetchedAt: new Date().toISOString(),
+      requestCount: 0,
+      activeLanes: 0,
+    };
+  }
+
+  if (intervalMinutes < 1 || intervalMinutes > 300) {
+    return {
+      rows: [],
+      errors: [
+        {
+          symbol: "*",
+          stage: "validation",
+          message: "intervalMinutes must be between 1 and 300.",
+          retryable: false,
+        },
+      ],
+      fetchedAt: new Date().toISOString(),
+      requestCount: 0,
+      activeLanes: 0,
+    };
+  }
+
+  const primary = lanes[0];
+  const { resolved, errors: instrumentErrors } = await resolveInstruments(
+    symbols,
+    primary.token,
+    { allowSearchFallback: symbols.length <= 5 },
+  );
+  for (const err of instrumentErrors) {
+    errors.push({
+      symbol: err.symbol,
+      stage: "instrument",
+      message: err.message,
+      retryable: false,
+    });
+  }
+
+  const assignment = assignSymbolsToLanes(symbols.map(normalizeSymbol), lanes.length);
+
+  const tasks = [...resolved.entries()].map(([symbol, inst]) => async () => {
+    let lane = laneForSymbol(lanes, symbol, assignment);
+    if (!lane) {
+      errors.push({
+        symbol,
+        stage: "intraday",
+        message: "No valid Upstox token lane available.",
+        retryable: false,
+      });
+      return;
+    }
+    let result = await fetchIntradayHistoricalForSymbol(
+      lane,
+      symbol,
+      inst.instrumentKey,
+      fromDate,
+      toDate,
+      intervalMinutes,
+      requestCount,
+    );
+    if (result.error && !result.error.retryable && lane.invalid) {
+      lane = laneForSymbol(lanes, symbol, assignment, true);
+      if (lane) {
+        result = await fetchIntradayHistoricalForSymbol(
+          lane,
+          symbol,
+          inst.instrumentKey,
+          fromDate,
+          toDate,
+          intervalMinutes,
+          requestCount,
+        );
+      }
+    }
+    if (result.error) {
+      errors.push(result.error);
+    }
+    rows.push(...result.rows);
+  });
+
+  const laneCount = Math.max(1, lanes.length);
+  const concurrency = Math.min(32, laneCount * RATE_LIMITS.maxHistoricalInFlight);
+  let index = 0;
+  const workers = Array.from({ length: concurrency }, async () => {
+    while (index < tasks.length) {
+      const current = index;
+      index += 1;
+      await tasks[current]();
+    }
+  });
+  await Promise.all(workers);
+
+  return {
+    rows,
+    errors,
+    fetchedAt: new Date().toISOString(),
+    requestCount: requestCount.value,
+    activeLanes: activeLanes(lanes).length,
+  };
+}
+
 export async function fetchHistoricalEod(
   symbols: string[],
   fromDate: string,
@@ -392,7 +586,9 @@ export async function fetchHistoricalEod(
 export async function handleUpstoxDataRequest(
   body: UpstoxDataRequest,
   tokens: string[],
-): Promise<UpstoxDataResponse<CurrentPriceRow | HistoricalPriceRow>> {
+): Promise<
+  UpstoxDataResponse<CurrentPriceRow | HistoricalPriceRow | IntradayPriceRow>
+> {
   if (!body.symbols?.length) {
     return {
       rows: [],
@@ -429,6 +625,16 @@ export async function handleUpstoxDataRequest(
       fetchedAt: new Date().toISOString(),
       requestCount: 0,
     };
+  }
+
+  if (body.mode === "intraday") {
+    return fetchIntradayHistorical(
+      symbols,
+      body.fromDate,
+      body.toDate,
+      body.intervalMinutes,
+      tokens,
+    );
   }
 
   return fetchHistoricalEod(symbols, body.fromDate, body.toDate, tokens);

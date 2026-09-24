@@ -11,8 +11,8 @@ function validateBody(raw: unknown): { ok: true; body: UpstoxDataRequest } | { o
   }
   const body = raw as Record<string, unknown>;
   const mode = body.mode;
-  if (mode !== "current" && mode !== "historical") {
-    return { ok: false, message: "mode must be current or historical." };
+  if (mode !== "current" && mode !== "historical" && mode !== "intraday") {
+    return { ok: false, message: "mode must be current, historical, or intraday." };
   }
   if (!Array.isArray(body.symbols)) {
     return { ok: false, message: "symbols must be an array." };
@@ -46,6 +46,31 @@ function validateBody(raw: unknown): { ok: true; body: UpstoxDataRequest } | { o
   const clampedTo = clampToToday(toDate);
   if (fromDate > clampedTo) {
     return { ok: false, message: "fromDate must be on or before toDate." };
+  }
+
+  if (mode === "intraday") {
+    const intervalMinutes =
+      typeof body.intervalMinutes === "number"
+        ? body.intervalMinutes
+        : Number(body.intervalMinutes);
+    if (!Number.isFinite(intervalMinutes) || intervalMinutes < 1 || intervalMinutes > 300) {
+      return {
+        ok: false,
+        message: "intervalMinutes must be a number from 1 to 300.",
+      };
+    }
+    return {
+      ok: true,
+      body: {
+        mode: "intraday",
+        symbols,
+        fromDate,
+        toDate: clampedTo,
+        intervalMinutes: Math.floor(intervalMinutes),
+        accessToken,
+        accessTokens,
+      },
+    };
   }
 
   return {

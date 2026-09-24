@@ -1,4 +1,9 @@
-import type { CurrentPriceRow, HistoricalPriceRow, UpstoxDataError } from "@/lib/upstox/types";
+import type {
+  CurrentPriceRow,
+  HistoricalPriceRow,
+  IntradayPriceRow,
+  UpstoxDataError,
+} from "@/lib/upstox/types";
 
 function escapeCsv(value: string | number | null): string {
   if (value === null) return "";
@@ -50,6 +55,28 @@ export function historicalRowsToCsv(rows: HistoricalPriceRow[]): string {
     [
       escapeCsv(r.symbol),
       escapeCsv(r.date),
+      escapeCsv(r.open),
+      escapeCsv(r.high),
+      escapeCsv(r.low),
+      escapeCsv(r.close),
+      escapeCsv(r.volume),
+    ].join(","),
+  );
+  return [header, ...lines].join("\n");
+}
+
+export function intradayRowsToCsv(rows: IntradayPriceRow[]): string {
+  const header = "symbol,interval_minutes,timestamp,open,high,low,close,volume";
+  const sorted = [...rows].sort((a, b) =>
+    a.symbol === b.symbol
+      ? a.timestamp.localeCompare(b.timestamp)
+      : a.symbol.localeCompare(b.symbol),
+  );
+  const lines = sorted.map((r) =>
+    [
+      escapeCsv(r.symbol),
+      escapeCsv(r.intervalMinutes),
+      escapeCsv(r.timestamp),
       escapeCsv(r.open),
       escapeCsv(r.high),
       escapeCsv(r.low),
